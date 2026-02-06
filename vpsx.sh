@@ -104,7 +104,8 @@ main() {
                 continue
                 ;;
             10)
-                setup_shortcut
+                shortcut_menu
+                continue
                 ;;
             11)
                 node_tools_menu
