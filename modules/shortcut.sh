@@ -57,6 +57,27 @@ function auto_set_default_shortcut() {
     set_script_alias "k" "true"
 }
 
+# 获取当前已配置的快捷键
+function get_current_shortcuts() {
+    local script_path
+    script_path=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/vpsx.sh
+    
+    local current_shell=$(basename "$SHELL")
+    local rc_file=""
+    [ "$current_shell" == "zsh" ] && rc_file="$HOME/.zshrc" || rc_file="$HOME/.bashrc"
+    
+    if [ -f "$rc_file" ]; then
+        local shortcuts=$(grep "alias .*='bash $script_path'" "$rc_file" | cut -d' ' -f2 | cut -d'=' -f1)
+        if [ -n "$shortcuts" ]; then
+            echo -e "${YELLOW}$(echo $shortcuts | tr '\n' ' ')${NC}"
+        else
+            echo -e "${RED}未配置${NC}"
+        fi
+    else
+        echo -e "${RED}未找到配置文件${NC}"
+    fi
+}
+
 # 快捷键管理菜单
 function shortcut_menu() {
     while true; do
@@ -64,7 +85,8 @@ function shortcut_menu() {
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}          快捷键启动脚本管理${NC}"
         echo -e "${CYAN}=========================================${NC}"
-        echo ""
+        echo -e "当前启动键: $(get_current_shortcuts)"
+        echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e "  ${GREEN}1)${NC} 一键配置 ${YELLOW}K${NC} 为启动脚本命令"
         echo -e "  ${GREEN}2)${NC} 自定义快捷启动键"
         echo -e "${CYAN}-----------------------------------------${NC}"
