@@ -24,7 +24,7 @@
 在您的 VPS 上运行以下命令即可启动：
 
 ```bash
-wget -P /root -N --no-check-certificate https://raw.githubusercontent.com/chengege666/vps/main/vps.sh && chmod +x /root/vps.sh && /root/vps.sh
+wget -P /root -N --no-check-certificate https://raw.githubusercontent.com/chengege666/vpsx/main/vpsx.sh && chmod +x /root/vpsx.sh && /root/vpsx.sh
 ```
 
 > **提示**: 启动后，建议选择选项 `10` 配置快捷键 `k`，之后只需在终端输入 `k` 即可随时进入面板。
