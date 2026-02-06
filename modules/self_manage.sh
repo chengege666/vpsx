@@ -88,7 +88,7 @@ function update_script() {
         fi
     fi
  
-    wget -O "$FIXED_PATH.tmp" "https://raw.githubusercontent.com/chengege666/vps/main/vpsx.sh"
+    wget -O "$FIXED_PATH.tmp" "https://raw.githubusercontent.com/chengege666/vpsx/main/vpsx.sh"
     if [ $? -eq 0 ]; then
         mv "$FIXED_PATH.tmp" "$FIXED_PATH"
         chmod +x "$FIXED_PATH"
