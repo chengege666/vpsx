@@ -1,23 +1,35 @@
 #!/bin/bash
 
+# 获取脚本所在目录的绝对路径
+BASE_PATH=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+# 检查依赖目录是否存在
+if [ ! -d "${BASE_PATH}/modules" ] || [ ! -d "${BASE_PATH}/utils" ]; then
+    echo -e "\033[31m错误: 找不到 modules 或 utils 目录。\033[0m"
+    echo -e "\033[33m请确保您下载了完整的项目文件夹，而不仅仅是 vpsx.sh 文件。\033[0m"
+    echo -e "建议使用以下命令重新安装："
+    echo -e "\033[32mgit clone https://github.com/chengege666/vpsx.git /root/vpsx\033[0m"
+    exit 1
+fi
+
 # 导入颜色定义
-source ./utils/color.sh
+source "${BASE_PATH}/utils/color.sh"
 # 导入通用函数
-source ./utils/common.sh
+source "${BASE_PATH}/utils/common.sh"
 
 # 导入功能模块
-source ./modules/sys_info.sh
-source ./modules/sys_update.sh
-source ./modules/base_tools.sh
-source ./modules/sys_cleanup.sh
-source ./modules/bbr.sh
-source ./modules/docker.sh
-source ./modules/sys_tools.sh
-source ./modules/vps_test.sh
-source ./modules/shortcut.sh
-source ./modules/proxy_tools.sh
-source ./modules/app_center.sh
-source ./modules/self_manage.sh
+source "${BASE_PATH}/modules/sys_info.sh"
+source "${BASE_PATH}/modules/sys_update.sh"
+source "${BASE_PATH}/modules/base_tools.sh"
+source "${BASE_PATH}/modules/sys_cleanup.sh"
+source "${BASE_PATH}/modules/bbr.sh"
+source "${BASE_PATH}/modules/docker.sh"
+source "${BASE_PATH}/modules/sys_tools.sh"
+source "${BASE_PATH}/modules/vps_test.sh"
+source "${BASE_PATH}/modules/shortcut.sh"
+source "${BASE_PATH}/modules/proxy_tools.sh"
+source "${BASE_PATH}/modules/app_center.sh"
+source "${BASE_PATH}/modules/self_manage.sh"
 
 # 主菜单函数
 show_menu() {
