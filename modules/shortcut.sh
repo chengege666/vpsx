@@ -28,18 +28,19 @@ function set_script_alias() {
         rc_file="$HOME/.bashrc"
     fi
 
-    # 检查是否已经存在该别名且路径一致
-    if grep -q "alias ${alias_name}='bash $script_path'" "$rc_file"; then
-        [ "$silent" != "true" ] && echo -e "${GREEN}快捷键 ${YELLOW}${alias_name}${GREEN} 已配置且路径正确。${NC}"
+    # 检查是否已经存在该别名且是唯一的指向
+    local existing_count=$(grep -c "alias .*='bash $script_path'" "$rc_file" 2>/dev/null || echo 0)
+    if [ "$existing_count" -eq 1 ] && grep -q "alias ${alias_name}='bash $script_path'" "$rc_file"; then
+        [ "$silent" != "true" ] && echo -e "${GREEN}快捷键 ${YELLOW}${alias_name}${GREEN} 已配置且是唯一的。${NC}"
         return 0
     fi
 
-    [ "$silent" != "true" ] && echo -e "正在配置快捷键 ${YELLOW}${alias_name}${NC} ..."
+    [ "$silent" != "true" ] && echo -e "正在清理旧的快捷键并配置新键 ${YELLOW}${alias_name}${NC} ..."
 
-    # 如果存在但路径不一致，则删除旧的
-    if grep -q "alias ${alias_name}=" "$rc_file"; then
-        sed -i "/alias ${alias_name}=/d" "$rc_file"
-    fi
+    # 删除所有指向该脚本的旧别名
+    sed -i "/alias .*='bash $script_path'/d" "$rc_file"
+    # 同时清理掉同名但指向不同地方的别名
+    sed -i "/alias ${alias_name}=/d" "$rc_file"
 
     # 添加别名
     echo "alias ${alias_name}='bash $script_path'" >> "$rc_file"
