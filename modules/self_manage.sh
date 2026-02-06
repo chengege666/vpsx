@@ -91,7 +91,19 @@ function update_script() {
             sleep 2
             exec bash "$main_script"
         else
-            echo -e "${RED}Git 更新失败，请检查网络连接或手动 git pull。${NC}"
+            echo -e "${YELLOW}检测到本地修改冲突，尝试通过 git reset 强制更新...${NC}"
+            git fetch --all
+            git reset --hard origin/main
+            if [ $? -eq 0 ]; then
+                chmod +x "$main_script"
+                echo -e "${GREEN}脚本强制更新成功！${NC}"
+                echo -e "${BLUE}正在重新启动脚本...${NC}"
+                sleep 2
+                exec bash "$main_script"
+            else
+                echo -e "${RED}Git 更新失败，请检查网络连接或手动 git pull。${NC}"
+                echo -e "${YELLOW}提示：您可以尝试手动执行: cd $script_dir && git fetch --all && git reset --hard origin/main${NC}"
+            fi
         fi
     else
         echo -e "${YELLOW}未检测到 Git 仓库，正在尝试通过 wget 更新主脚本...${NC}"
