@@ -55,12 +55,13 @@ function shortcut_menu() {
         echo ""
         echo -e "  ${GREEN}1)${NC} 一键配置 ${YELLOW}K${NC} 为启动脚本命令"
         echo -e "  ${GREEN}2)${NC} 自定义快捷启动键"
-        echo -e "  ${RED}3)${NC} 返回上级菜单"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e "  ${RED}0)${NC} 返回上级菜单"
         echo ""
         echo -e "${CYAN}=========================================${NC}"
         echo ""
         
-        read -p "请选择操作 (1-3): " choice
+        read -p "请选择操作 (0-2): " choice
         
         case $choice in
             1)
@@ -76,7 +77,7 @@ function shortcut_menu() {
                 fi
                 read -p "按任意键继续..."
                 ;;
-            3)
+            0)
                 return 0
                 ;;
             *)
