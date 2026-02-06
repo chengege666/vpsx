@@ -58,6 +58,26 @@ function auto_set_default_shortcut() {
     set_script_alias "k" "true"
 }
 
+# 清除所有快捷启动键
+function clear_all_shortcuts() {
+    local script_path
+    script_path=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/vpsx.sh
+    
+    local current_shell=$(basename "$SHELL")
+    local rc_file=""
+    [ "$current_shell" == "zsh" ] && rc_file="$HOME/.zshrc" || rc_file="$HOME/.bashrc"
+    
+    if [ -f "$rc_file" ]; then
+        echo -e "正在清除所有指向该脚本的快捷键..."
+        # 匹配任何指向该脚本路径的 alias 并删除
+        sed -i "/alias .*='bash $script_path'/d" "$rc_file"
+        echo -e "${GREEN}清除完成！${NC}"
+        echo -e "${BLUE}提示：变更将在下次连接或执行 'source $rc_file' 后生效。${NC}"
+    else
+        echo -e "${RED}错误：未找到配置文件${NC}"
+    fi
+}
+
 # 获取当前已配置的快捷键
 function get_current_shortcuts() {
     local script_path
@@ -90,13 +110,14 @@ function shortcut_menu() {
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e "  ${GREEN}1)${NC} 一键配置 ${YELLOW}K${NC} 为启动脚本命令"
         echo -e "  ${GREEN}2)${NC} 自定义快捷启动键"
+        echo -e "  ${YELLOW}3)${NC} 清除所有快捷启动键"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e "  ${RED}0)${NC} 返回上级菜单"
         echo ""
         echo -e "${CYAN}=========================================${NC}"
         echo ""
         
-        read -p "请选择操作 (0-2): " choice
+        read -p "请选择操作 (0-3): " choice
         
         case $choice in
             1)
@@ -110,6 +131,10 @@ function shortcut_menu() {
                 else
                     echo -e "${RED}错误：快捷键名称不能为空！${NC}"
                 fi
+                read -p "按任意键继续..."
+                ;;
+            3)
+                clear_all_shortcuts
                 read -p "按任意键继续..."
                 ;;
             0)
