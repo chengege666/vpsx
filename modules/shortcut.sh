@@ -37,10 +37,10 @@ function set_script_alias() {
 
     [ "$silent" != "true" ] && echo -e "正在清理旧的快捷键并配置新键 ${YELLOW}${alias_name}${NC} ..."
 
-    # 删除所有指向该脚本的旧别名
-    sed -i "/alias .*='bash $script_path'/d" "$rc_file"
+    # 删除所有指向该脚本的旧别名 (使用 # 作为 sed 分隔符以处理路径中的斜杠)
+    sed -i "\|alias .*='bash $script_path'|d" "$rc_file"
     # 同时清理掉同名但指向不同地方的别名
-    sed -i "/alias ${alias_name}=/d" "$rc_file"
+    sed -i "\|alias ${alias_name}=|d" "$rc_file"
 
     # 添加别名
     echo "alias ${alias_name}='bash $script_path'" >> "$rc_file"
@@ -69,8 +69,8 @@ function clear_all_shortcuts() {
     
     if [ -f "$rc_file" ]; then
         echo -e "正在清除所有指向该脚本的快捷键..."
-        # 匹配任何指向该脚本路径的 alias 并删除
-        sed -i "/alias .*='bash $script_path'/d" "$rc_file"
+        # 匹配任何指向该脚本路径的 alias 并删除 (使用 | 作为 sed 分隔符)
+        sed -i "\|alias .*='bash $script_path'|d" "$rc_file"
         echo -e "${GREEN}清除完成！${NC}"
         echo -e "${BLUE}提示：变更将在下次连接或执行 'source $rc_file' 后生效。${NC}"
     else
