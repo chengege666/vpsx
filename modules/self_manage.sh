@@ -120,6 +120,4 @@ function update_script() {
             rm -f "$main_script.tmp"
         fi
     fi
-    
-    read -p "按任意键返回主菜单..."
 }

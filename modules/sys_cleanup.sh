@@ -11,7 +11,6 @@ function system_cleanup() {
     read -p "是否继续执行系统清理？(y/n): " confirm
     if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then 
         echo -e "${YELLOW}已取消系统清理操作${NC}"
-        read -p "按回车键返回主菜单..."
         return
     fi
 
@@ -155,7 +154,6 @@ function system_cleanup() {
     else
         echo -e "${RED}不支持的系统类型！${NC}"
         echo -e "${YELLOW}仅支持 Debian/Ubuntu 和 CentOS/RHEL 系统。${NC}"
-        read -p "按回车键返回主菜单..."
         return
     fi
     
@@ -183,5 +181,4 @@ function system_cleanup() {
     echo -e "${CYAN}"
     echo "=========================================="
     echo -e "${NC}"
-    read -p "按回车键返回主菜单..."
 }

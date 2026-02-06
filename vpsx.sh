@@ -82,30 +82,37 @@ main() {
                 ;;
             4)
                 basic_tools_menu
+                continue
                 ;;
             5)
                 bbr_menu
+                continue
                 ;;
             6)
                 docker_menu
+                continue
                 ;;
             7)
                 sys_tools_menu
+                continue
                 ;;
             8)
                 reboot_system
                 ;;
             9)
                 vps_test_menu
+                continue
                 ;;
             10)
                 setup_shortcut
                 ;;
             11)
                 node_tools_menu
+                continue
                 ;;
             12)
                 app_center_menu
+                continue
                 ;;
             000)
                 update_script
@@ -119,6 +126,7 @@ main() {
             *)
                 echo -e "${RED}输入错误，请输入正确的数字选项！${NC}"
                 sleep 2
+                continue
                 ;;
         esac
         echo -e "${YELLOW}按任意键返回主菜单...${NC}"

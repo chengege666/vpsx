@@ -715,7 +715,6 @@ function reboot_system() {
         reboot
     else
         echo -e "${GREEN}已取消重启操作。${NC}"
-        read -p "按任意键继续..."
     fi
 }
 

@@ -53,5 +53,4 @@ function setup_shortcut() {
     echo -e "现在你可以在任何地方输入 ${YELLOW}k${NC} 来启动此脚本了。"
     echo -e "${BLUE}提示：如果 'k' 没有立即生效，请尝试重新连接 SSH 或执行 'source $RC_FILE'${NC}"
     echo ""
-    read -p "按任意键继续..."
 }
