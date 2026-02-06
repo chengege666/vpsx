@@ -62,43 +62,64 @@ function update_script() {
     echo -e "${GREEN}            脚本更新${NC}"
     echo -e "${CYAN}=========================================${NC}"
     echo ""
-    echo -e "${BLUE}正在从 GitHub 获取最新脚本...${NC}"
     
-    # 自动获取当前主脚本路径，如果没有则使用默认路径
-    local FIXED_PATH
-    if [ -f "$HOME/vpsx.sh" ]; then
-        FIXED_PATH="$HOME/vpsx.sh"
-    elif [ -f "/root/vpsx.sh" ]; then
-        FIXED_PATH="/root/vpsx.sh"
-    else
-        FIXED_PATH="/root/vpsx.sh"
-    fi
-     
-    # 检查 wget 是否安装
-    if ! command -v wget >/dev/null 2>&1; then
-        echo -e "${YELLOW}未检测到 wget，正在尝试安装...${NC}"
-        if command -v apt >/dev/null 2>&1; then
-            apt update && apt install -y wget
-        elif command -v yum >/dev/null 2>&1; then
-            yum install -y wget
+    # 获取脚本根目录
+    local script_dir
+    script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")"/.. && pwd)
+    local main_script="$script_dir/vpsx.sh"
+    
+    echo -e "${BLUE}当前脚本目录: ${YELLOW}$script_dir${NC}"
+    
+    if [ -d "$script_dir/.git" ]; then
+        echo -e "${BLUE}检测到 Git 仓库，正在尝试 git pull 更新...${NC}"
+        cd "$script_dir" || return
+        
+        # 检查 git 是否安装
+        if ! command -v git >/dev/null 2>&1; then
+            echo -e "${YELLOW}未检测到 git，正在尝试安装...${NC}"
+            if command -v apt >/dev/null 2>&1; then
+                apt update && apt install -y git
+            elif command -v yum >/dev/null 2>&1; then
+                yum install -y git
+            fi
+        fi
+        
+        if git pull; then
+            chmod +x "$main_script"
+            echo -e "${GREEN}脚本通过 Git 更新成功！${NC}"
+            echo -e "${BLUE}正在重新启动脚本...${NC}"
+            sleep 2
+            exec bash "$main_script"
         else
-            echo -e "${RED}无法安装 wget，请手动安装后重试。${NC}"
-            read -p "按任意键返回主菜单..."
-            return
+            echo -e "${RED}Git 更新失败，请检查网络连接或手动 git pull。${NC}"
+        fi
+    else
+        echo -e "${YELLOW}未检测到 Git 仓库，正在尝试通过 wget 更新主脚本...${NC}"
+        
+        # 检查 wget 是否安装
+        if ! command -v wget >/dev/null 2>&1; then
+            echo -e "${YELLOW}未检测到 wget，正在尝试安装...${NC}"
+            if command -v apt >/dev/null 2>&1; then
+                apt update && apt install -y wget
+            elif command -v yum >/dev/null 2>&1; then
+                yum install -y wget
+            fi
+        fi
+
+        wget -O "$main_script.tmp" "https://raw.githubusercontent.com/chengege666/vpsx/main/vpsx.sh"
+        if [ $? -eq 0 ]; then
+            mv "$main_script.tmp" "$main_script"
+            chmod +x "$main_script"
+            echo -e "${GREEN}主脚本更新成功！${NC}"
+            echo -e "${YELLOW}注意：由于不是通过 Git 安装，其他模块文件未被更新。${NC}"
+            echo -e "${BLUE}正在重新启动脚本...${NC}"
+            sleep 2
+            exec bash "$main_script"
+        else
+            echo -e "${RED}脚本更新失败，请检查网络连接。${NC}"
+            rm -f "$main_script.tmp"
         fi
     fi
- 
-    wget -O "$FIXED_PATH.tmp" "https://raw.githubusercontent.com/chengege666/vpsx/main/vpsx.sh"
-    if [ $? -eq 0 ]; then
-        mv "$FIXED_PATH.tmp" "$FIXED_PATH"
-        chmod +x "$FIXED_PATH"
-        echo -e "${GREEN}脚本更新成功！${NC}"
-        echo -e "${BLUE}正在重新启动脚本...${NC}"
-        sleep 2
-        exec bash "$FIXED_PATH"
-    else
-        echo -e "${RED}脚本更新失败，请检查网络连接。${NC}"
-        rm -f "$FIXED_PATH.tmp"
-        read -p "按任意键返回主菜单..."
-    fi
+    
+    read -p "按任意键返回主菜单..."
 }
