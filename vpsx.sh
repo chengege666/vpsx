@@ -67,6 +67,9 @@ exit_script() {
 
 # 循环处理用户输入
 main() {
+    # 启动时自动配置默认快捷键 k
+    auto_set_default_shortcut
+    
     while true; do
         show_menu
         read -p "请输入选项: " choice

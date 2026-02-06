@@ -6,18 +6,16 @@
 function set_script_alias() {
     local alias_name=$1
     local script_path
+    local silent=$2  # 是否静默模式
     
     # 获取当前脚本的绝对路径
     script_path=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/vpsx.sh
     
     if [ ! -f "$script_path" ]; then
-        echo -e "${RED}错误: 未能找到主脚本 vpsx.sh${NC}"
-        echo -e "${YELLOW}检测到的路径为: $script_path${NC}"
+        [ "$silent" != "true" ] && echo -e "${RED}错误: 未能找到主脚本 vpsx.sh${NC}"
         return 1
     fi
 
-    echo -e "正在配置快捷键 ${YELLOW}${alias_name}${NC} ..."
-    
     # 检查当前 Shell
     local current_shell=$(basename "$SHELL")
     local rc_file=""
@@ -30,19 +28,33 @@ function set_script_alias() {
         rc_file="$HOME/.bashrc"
     fi
 
-    # 检查是否已经存在该别名
+    # 检查是否已经存在该别名且路径一致
+    if grep -q "alias ${alias_name}='bash $script_path'" "$rc_file"; then
+        [ "$silent" != "true" ] && echo -e "${GREEN}快捷键 ${YELLOW}${alias_name}${GREEN} 已配置且路径正确。${NC}"
+        return 0
+    fi
+
+    [ "$silent" != "true" ] && echo -e "正在配置快捷键 ${YELLOW}${alias_name}${NC} ..."
+
+    # 如果存在但路径不一致，则删除旧的
     if grep -q "alias ${alias_name}=" "$rc_file"; then
-        echo -e "${YELLOW}快捷键 '${alias_name}' 已存在，正在更新...${NC}"
         sed -i "/alias ${alias_name}=/d" "$rc_file"
     fi
 
     # 添加别名
     echo "alias ${alias_name}='bash $script_path'" >> "$rc_file"
     
-    echo -e "${GREEN}配置成功！${NC}"
-    echo -e "现在你可以在任何地方输入 ${YELLOW}${alias_name}${NC} 来启动此脚本了。"
-    echo -e "${BLUE}提示：如果没有立即生效，请尝试重新连接 SSH 或执行 'source $rc_file'${NC}"
+    if [ "$silent" != "true" ]; then
+        echo -e "${GREEN}配置成功！${NC}"
+        echo -e "现在你可以在任何地方输入 ${YELLOW}${alias_name}${NC} 来启动此脚本了。"
+        echo -e "${BLUE}提示：如果没有立即生效，请尝试重新连接 SSH 或执行 'source $rc_file'${NC}"
+    fi
     return 0
+}
+
+# 自动配置默认快捷键 k
+function auto_set_default_shortcut() {
+    set_script_alias "k" "true"
 }
 
 # 快捷键管理菜单
