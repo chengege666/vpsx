@@ -10,11 +10,14 @@ function setup_shortcut() {
     echo -e "${CYAN}=========================================${NC}"
     
     # 获取当前脚本的绝对路径
-    # 假设主脚本是当前工作目录下的 vpsx.sh
-    SCRIPT_PATH="$(pwd)/vpsx.sh"
+    # 通过当前模块文件的位置推算主脚本 vpsx.sh 的位置
+    local script_dir
+    script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+    SCRIPT_PATH="${script_dir}/vpsx.sh"
     
     if [ ! -f "$SCRIPT_PATH" ]; then
-        echo -e "${RED}错误: 未能找到主脚本 vpsx.sh，当前路径: $(pwd)${NC}"
+        echo -e "${RED}错误: 未能找到主脚本 vpsx.sh${NC}"
+        echo -e "${YELLOW}检测到的路径为: $SCRIPT_PATH${NC}"
         read -p "按任意键继续..."
         return
     fi
