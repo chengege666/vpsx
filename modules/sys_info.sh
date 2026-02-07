@@ -70,9 +70,9 @@ function system_info_query() {
         echo -e "虚拟内存：${SKYBLUE}未启用${NC}"
     fi
     
-    DISK_TOTAL=$(df -h --total | grep total | awk '{print $2}')
-    DISK_USED=$(df -h --total | grep total | awk '{print $3}')
-    DISK_USAGE_PERCENT=$(df -h --total | grep total | awk '{print $5}')
+    DISK_TOTAL=$(df -h / | awk 'NR==2 {print $2}')
+    DISK_USED=$(df -h / | awk 'NR==2 {print $3}')
+    DISK_USAGE_PERCENT=$(df -h / | awk 'NR==2 {print $5}')
     echo -e "硬盘占用：${SKYBLUE}$DISK_USED / $DISK_TOTAL ($DISK_USAGE_PERCENT)${NC}"
     echo ""
 
