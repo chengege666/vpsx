@@ -125,10 +125,16 @@ function system_info_query() {
         
         echo -e "${GREEN}运营商：${NC}${SKYBLUE}$ISP${NC}"
         echo -e "${GREEN}IPV4地址：${NC}${SKYBLUE}$IPV4${NC}"
+        
+        # 尝试获取 IPV6
+        IPV6=$(curl -6 -s --connect-timeout 3 ifconfig.me || curl -6 -s --connect-timeout 3 http://ipv6.icanhazip.com)
+        [ -n "$IPV6" ] && echo -e "${GREEN}IPV6地址：${NC}${SKYBLUE}$IPV6${NC}"
+        
         echo -e "${GREEN}地理位置:${NC} ${SKYBLUE}$CITY, $REGION, $COUNTRY${NC}"
     else
         echo -e "${GREEN}运营商：${NC}${SKYBLUE}无法获取${NC}"
-        echo -e "${GREEN}IPV4地址：${NC}${SKYBLUE}$(curl -s --connect-timeout 3 ifconfig.me || echo "无法获取")${NC}"
+        echo -e "${GREEN}IPV4地址：${NC}${SKYBLUE}$(curl -4 -s --connect-timeout 3 ifconfig.me || echo "无法获取")${NC}"
+        echo -e "${GREEN}IPV6地址：${NC}${SKYBLUE}$(curl -6 -s --connect-timeout 3 ifconfig.me || echo "未分配/无法获取")${NC}"
         echo -e "${GREEN}地理位置:${NC} ${SKYBLUE}无法获取${NC}"
     fi
     

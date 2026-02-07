@@ -1035,9 +1035,12 @@ function install_pansou_docker_run() {
     
     echo "正在拉取镜像并启动容器..."
     if docker run -d --name pansou -p ${host_port}:80 ghcr.io/fish2018/pansou-web; then
+        local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
+        local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
+        
         echo -e "${GREEN}✅ PanSou 安装成功！${NC}"
-        local server_ip=$(curl -s ifconfig.me)
-        echo -e "访问地址：${YELLOW}http://${server_ip}:${host_port}${NC}"
+        [ -n "$public_ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${public_ipv4}:${host_port}${NC}"
+        [ -n "$public_ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${public_ipv6}]:${host_port}${NC}"
     else
         echo -e "${RED}❌ 安装失败，请检查错误信息。${NC}"
     fi
@@ -1105,9 +1108,12 @@ EOF
     # 启动服务
     echo "正在启动 PanSou 服务..."
     if $compose_cmd up -d; then
+        local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
+        local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
+        
         echo -e "${GREEN}✅ PanSou 安装成功！${NC}"
-        local server_ip=$(curl -s ifconfig.me)
-        echo -e "访问地址：${YELLOW}http://${server_ip}:${host_port}${NC}"
+        [ -n "$public_ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${public_ipv4}:${host_port}${NC}"
+        [ -n "$public_ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${public_ipv6}]:${host_port}${NC}"
         echo -e "数据目录：${pansou_dir}/data"
     else
         echo -e "${RED}❌ 启动失败，请检查错误信息。${NC}"
@@ -1249,10 +1255,13 @@ function change_pansou_port() {
     fi
     
     if docker ps --format '{{.Names}}' | grep -q "^pansou$"; then
+        local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
+        local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
+        
         echo -e "${GREEN}✅ 端口修改成功！${NC}"
         echo -e "安装方式: ${method}"
-        local server_ip=$(curl -s ifconfig.me)
-        echo -e "新访问地址: ${YELLOW}http://${server_ip}:${new_port}${NC}"
+        [ -n "$public_ipv4" ] && echo -e "新 IPv4 访问地址: ${YELLOW}http://${public_ipv4}:${new_port}${NC}"
+        [ -n "$public_ipv6" ] && echo -e "新 IPv6 访问地址: ${YELLOW}http://[${public_ipv6}]:${new_port}${NC}"
     else
         echo -e "${RED}❌ 端口修改失败，请检查错误信息。${NC}"
     fi
