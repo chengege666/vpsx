@@ -111,6 +111,9 @@ function system_info_query() {
     TCP_CONGESTION=$(sysctl net.ipv4.tcp_congestion_control | awk '{print $3}')
     echo -e "网络算法：${SKYBLUE}$TCP_CONGESTION${NC}"
     
+    DEFAULT_QDISC=$(sysctl net.core.default_qdisc | awk '{print $3}')
+    echo -e "队列规则：${SKYBLUE}${DEFAULT_QDISC:-无法获取}${NC}"
+    
     # 公网IP及地理位置 (ipinfo.io 一次请求获取多个信息)
     IP_INFO=$(curl -s --connect-timeout 5 ipinfo.io/json)
     if [ -n "$IP_INFO" ]; then
