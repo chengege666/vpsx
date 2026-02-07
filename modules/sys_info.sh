@@ -9,7 +9,7 @@ function system_info_query() {
 
     # 1. 基础信息
     echo -e "${YELLOW}[ 基础信息 ]${NC}"
-    echo -e "主机名: ${SKYBLUE}$(hostname)${NC}"
+    echo -e "${GREEN}主机名:${NC} ${SKYBLUE}$(hostname)${NC}"
     
     # 系统版本
     if [ -f /etc/os-release ]; then
@@ -18,21 +18,21 @@ function system_info_query() {
     else
         OS_NAME=$(cat /etc/issue | head -n1 | awk '{print $1,$2,$3}')
     fi
-    echo -e "系统版本：${SKYBLUE}$OS_NAME${NC}"
-    echo -e "Linux版本：${SKYBLUE}$(uname -sr)${NC}"
-    echo -e "系统时间：${SKYBLUE}$(date '+%Y-%m-%d %H:%M:%S')${NC}"
-    echo -e "运行时长：${SKYBLUE}$(uptime -p | sed 's/up //')${NC}"
+    echo -e "${GREEN}系统版本：${NC}${SKYBLUE}$OS_NAME${NC}"
+    echo -e "${GREEN}Linux版本：${NC}${SKYBLUE}$(uname -sr)${NC}"
+    echo -e "${GREEN}系统时间：${NC}${SKYBLUE}$(date '+%Y-%m-%d %H:%M:%S')${NC}"
+    echo -e "${GREEN}运行时长：${NC}${SKYBLUE}$(uptime -p | sed 's/up //')${NC}"
     echo ""
 
     # 2. CPU信息
     echo -e "${YELLOW}[ CPU信息 ]${NC}"
-    echo -e "CPU架构: ${SKYBLUE}$(uname -m)${NC}"
+    echo -e "${GREEN}CPU架构:${NC} ${SKYBLUE}$(uname -m)${NC}"
     
     CPU_MODEL=$(lscpu | grep 'Model name' | awk -F': ' '{print $2}' | sed 's/^[ \t]*//')
     [ -z "$CPU_MODEL" ] && CPU_MODEL=$(grep -m1 'model name' /proc/cpuinfo | awk -F': ' '{print $2}')
-    echo -e "CPU型号: ${SKYBLUE}$CPU_MODEL${NC}"
+    echo -e "${GREEN}CPU型号:${NC} ${SKYBLUE}$CPU_MODEL${NC}"
     
-    echo -e "CPU核心数：${SKYBLUE}$(nproc)${NC}"
+    echo -e "${GREEN}CPU核心数：${NC}${SKYBLUE}$(nproc)${NC}"
     
     CPU_FREQ=$(lscpu | grep -E "MHz" | head -n1 | awk -F: '{print $2}' | sed 's/[[:space:]]//g')
     if [ -n "$CPU_FREQ" ]; then
@@ -45,13 +45,13 @@ function system_info_query() {
             CPU_FREQ="无法获取"
         fi
     fi
-    echo -e "CPU频率：${SKYBLUE}$CPU_FREQ${NC}"
+    echo -e "${GREEN}CPU频率：${NC}${SKYBLUE}$CPU_FREQ${NC}"
     
     CPU_USAGE=$(top -bn1 | grep "Cpu(s)" | awk '{printf "%.1f%%", $2 + $4}')
-    echo -e "CPU占用: ${SKYBLUE}$CPU_USAGE${NC}"
+    echo -e "${GREEN}CPU占用:${NC} ${SKYBLUE}$CPU_USAGE${NC}"
     
     LOAD_AVG=$(uptime | awk -F'load average:' '{print $2}' | sed 's/^[ \t]*//')
-    echo -e "系统负载：${SKYBLUE}$LOAD_AVG${NC}"
+    echo -e "${GREEN}系统负载：${NC}${SKYBLUE}$LOAD_AVG${NC}"
     echo ""
 
     # 3. 内存与磁盘
@@ -59,21 +59,21 @@ function system_info_query() {
     MEM_TOTAL=$(free -h | grep Mem | awk '{print $2}')
     MEM_USED=$(free -h | grep Mem | awk '{print $3}')
     MEM_USAGE_PERCENT=$(free | grep Mem | awk '{printf "%.1f%%", $3/$2*100}')
-    echo -e "物理内存：${SKYBLUE}$MEM_USED / $MEM_TOTAL ($MEM_USAGE_PERCENT)${NC}"
+    echo -e "${GREEN}物理内存：${NC}${SKYBLUE}$MEM_USED / $MEM_TOTAL ($MEM_USAGE_PERCENT)${NC}"
     
     SWAP_TOTAL=$(free -h | grep Swap | awk '{print $2}')
     SWAP_USED=$(free -h | grep Swap | awk '{print $3}')
     if [ "$SWAP_TOTAL" != "0B" ] && [ "$SWAP_TOTAL" != "0" ] && [ -n "$SWAP_TOTAL" ]; then
         SWAP_USAGE_PERCENT=$(free | grep Swap | awk '{printf "%.1f%%", $3/$2*100}')
-        echo -e "虚拟内存：${SKYBLUE}$SWAP_USED / $SWAP_TOTAL ($SWAP_USAGE_PERCENT)${NC}"
+        echo -e "${GREEN}虚拟内存：${NC}${SKYBLUE}$SWAP_USED / $SWAP_TOTAL ($SWAP_USAGE_PERCENT)${NC}"
     else
-        echo -e "虚拟内存：${SKYBLUE}未启用${NC}"
+        echo -e "${GREEN}虚拟内存：${NC}${SKYBLUE}未启用${NC}"
     fi
     
     DISK_TOTAL=$(df -h / | awk 'NR==2 {print $2}')
     DISK_USED=$(df -h / | awk 'NR==2 {print $3}')
     DISK_USAGE_PERCENT=$(df -h / | awk 'NR==2 {print $5}')
-    echo -e "硬盘占用：${SKYBLUE}$DISK_USED / $DISK_TOTAL ($DISK_USAGE_PERCENT)${NC}"
+    echo -e "${GREEN}硬盘占用：${NC}${SKYBLUE}$DISK_USED / $DISK_TOTAL ($DISK_USAGE_PERCENT)${NC}"
     echo ""
 
     # 4. 网络信息
@@ -82,7 +82,7 @@ function system_info_query() {
     # TCP | UDP 连接数
     TCP_CONN=$(ss -ant | grep ESTAB | wc -l)
     UDP_CONN=$(ss -au | wc -l)
-    echo -e "TCP | UDP连接数: ${SKYBLUE}TCP: $TCP_CONN | UDP: $UDP_CONN${NC}"
+    echo -e "${GREEN}TCP | UDP连接数:${NC} ${SKYBLUE}TCP: $TCP_CONN | UDP: $UDP_CONN${NC}"
     
     # 获取默认网卡流量
     NET_INTERFACE=$(ip route | grep default | awk '{print $5}' | head -1)
@@ -101,18 +101,18 @@ function system_info_query() {
             }'
         }
         
-        echo -e "总接收: ${SKYBLUE}$(format_bytes $RX_BYTES)${NC}"
-        echo -e "总发送: ${SKYBLUE}$(format_bytes $TX_BYTES)${NC}"
+        echo -e "${GREEN}总接收:${NC} ${SKYBLUE}$(format_bytes $RX_BYTES)${NC}"
+        echo -e "${GREEN}总发送:${NC} ${SKYBLUE}$(format_bytes $TX_BYTES)${NC}"
     else
-        echo -e "总接收: ${SKYBLUE}无法获取${NC}"
-        echo -e "总发送: ${SKYBLUE}无法获取${NC}"
+        echo -e "${GREEN}总接收:${NC} ${SKYBLUE}无法获取${NC}"
+        echo -e "${GREEN}总发送:${NC} ${SKYBLUE}无法获取${NC}"
     fi
     
     TCP_CONGESTION=$(sysctl net.ipv4.tcp_congestion_control | awk '{print $3}')
-    echo -e "网络算法：${SKYBLUE}$TCP_CONGESTION${NC}"
+    echo -e "${GREEN}网络算法：${NC}${SKYBLUE}$TCP_CONGESTION${NC}"
     
     DEFAULT_QDISC=$(sysctl net.core.default_qdisc | awk '{print $3}')
-    echo -e "队列规则：${SKYBLUE}${DEFAULT_QDISC:-无法获取}${NC}"
+    echo -e "${GREEN}队列规则：${NC}${SKYBLUE}${DEFAULT_QDISC:-无法获取}${NC}"
     
     # 公网IP及地理位置 (ipinfo.io 一次请求获取多个信息)
     IP_INFO=$(curl -s --connect-timeout 5 ipinfo.io/json)
@@ -123,17 +123,17 @@ function system_info_query() {
         REGION=$(echo "$IP_INFO" | grep '"region"' | cut -d'"' -f4)
         COUNTRY=$(echo "$IP_INFO" | grep '"country"' | cut -d'"' -f4)
         
-        echo -e "运营商：${SKYBLUE}$ISP${NC}"
-        echo -e "IPV4地址：${SKYBLUE}$IPV4${NC}"
-        echo -e "地理位置: ${SKYBLUE}$CITY, $REGION, $COUNTRY${NC}"
+        echo -e "${GREEN}运营商：${NC}${SKYBLUE}$ISP${NC}"
+        echo -e "${GREEN}IPV4地址：${NC}${SKYBLUE}$IPV4${NC}"
+        echo -e "${GREEN}地理位置:${NC} ${SKYBLUE}$CITY, $REGION, $COUNTRY${NC}"
     else
-        echo -e "运营商：${SKYBLUE}无法获取${NC}"
-        echo -e "IPV4地址：${SKYBLUE}$(curl -s --connect-timeout 3 ifconfig.me || echo "无法获取")${NC}"
-        echo -e "地理位置: ${SKYBLUE}无法获取${NC}"
+        echo -e "${GREEN}运营商：${NC}${SKYBLUE}无法获取${NC}"
+        echo -e "${GREEN}IPV4地址：${NC}${SKYBLUE}$(curl -s --connect-timeout 3 ifconfig.me || echo "无法获取")${NC}"
+        echo -e "${GREEN}地理位置:${NC} ${SKYBLUE}无法获取${NC}"
     fi
     
     DNS_ADDR=$(grep -E '^nameserver' /etc/resolv.conf | awk '{print $2}' | tr '\n' ' ')
-    echo -e "DNS地址: ${SKYBLUE}${DNS_ADDR:-无法获取}${NC}"
+    echo -e "${GREEN}DNS地址:${NC} ${SKYBLUE}${DNS_ADDR:-无法获取}${NC}"
     
     echo ""
     echo -e "${CYAN}==============================================${NC}"
