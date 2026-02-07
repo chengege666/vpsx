@@ -778,10 +778,18 @@ function deploy_komari_panel() {
     host_port=${host_port:-8083}
 
     # 验证端口占用
-    if netstat -tuln | grep -q ":${host_port} "; then
-        echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
-        read -p "按回车键继续..."
-        return
+    if command -v netstat &> /dev/null; then
+        if netstat -tuln | grep -q ":${host_port} "; then
+            echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
+            read -p "按回车键继续..."
+            return
+        fi
+    elif command -v ss &> /dev/null; then
+        if ss -tuln | grep -q ":${host_port} "; then
+            echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
+            read -p "按回车键继续..."
+            return
+        fi
     fi
 
     echo -e "${BLUE}正在创建并运行 Komari 容器 (端口: ${host_port})...${NC}"
@@ -790,7 +798,7 @@ function deploy_komari_panel() {
     docker run -d \
         --name komari \
         --restart always \
-        -p ${host_port}:8083 \
+        -p ${host_port}:25774 \
         -v /home/docker/komari:/app/data \
         ghcr.io/komari-monitor/komari:latest
 
@@ -950,8 +958,8 @@ function access_komari_web() {
     fi
     
     # 获取映射端口
-    local host_port=$(docker inspect komari --format='{{(index (index .NetworkSettings.Ports "8083/tcp") 0).HostPort}}' 2>/dev/null)
-    host_port=${host_port:-8083}
+    local host_port=$(docker inspect komari --format='{{(index (index .NetworkSettings.Ports "25774/tcp") 0).HostPort}}' 2>/dev/null)
+    host_port=${host_port:-25774}
     
     local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
     local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
