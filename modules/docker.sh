@@ -129,8 +129,46 @@ function install_update_docker_env() {
     if systemctl is-active --quiet docker; then
         echo -e "${GREEN}Docker 及 Docker Compose 环境已准备就绪。${NC}"
     else
-        echo -e "${RED}Docker 环境配置存在异常，请检查服务状态。${NC}"
+        echo -e "${RED}Docker 环境配置存在异常，服务未正常启动。${NC}"
+        echo -e "${YELLOW}提示: 如果报错涉及 'iptables' 或 'nft', 请尝试运行菜单中的 'Docker 启动故障修复'。${NC}"
     fi
+    read -p "按任意键继续..."
+}
+
+# 修复 Docker 启动时的 iptables/nft 冲突问题
+function fix_docker_iptables() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}         Docker 启动故障修复 (iptables)${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${YELLOW}检测到系统可能存在 iptables-nft 兼容性问题。${NC}"
+    echo -e "该修复将尝试把系统 iptables 切换为 legacy 模式以兼容 Docker。"
+    echo ""
+    
+    if ! command -v update-alternatives >/dev/null 2>&1; then
+        echo -e "${RED}错误: 系统缺少 update-alternatives 工具，无法自动修复。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在执行修复...${NC}"
+    
+    # 尝试切换
+    sudo update-alternatives --set iptables /usr/sbin/iptables-legacy >/dev/null 2>&1
+    sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy >/dev/null 2>&1
+    sudo update-alternatives --set arptables /usr/sbin/arptables-legacy >/dev/null 2>&1
+    sudo update-alternatives --set ebtables /usr/sbin/ebtables-legacy >/dev/null 2>&1
+    
+    echo -e "${BLUE}正在重启 Docker 服务...${NC}"
+    sudo systemctl restart docker
+    
+    if systemctl is-active --quiet docker; then
+        echo -e "${GREEN}修复成功！Docker 服务已正常运行。${NC}"
+    else
+        echo -e "${RED}修复失败。Docker 仍无法启动。${NC}"
+        echo -e "${YELLOW}建议手动检查日志: journalctl -u docker -n 50${NC}"
+    fi
+    echo -e "${CYAN}=========================================${NC}"
     read -p "按任意键继续..."
 }
 
@@ -1163,6 +1201,7 @@ function docker_menu() {
         echo -e " ${GREEN}7.${NC}  清理无用的docker容器和镜像网络数据卷"
         echo -e " ${GREEN}8.${NC}  更换Docker源"
         echo -e " ${GREEN}9.${NC}  编辑daemon.json文件"
+        echo -e " ${GREEN}10.${NC} ${YELLOW}Docker 启动故障修复 (iptables)${NC}"
         echo -e " ${GREEN}11.${NC} 开启Docker-ipv6访问"
         echo -e " ${GREEN}12.${NC} 关闭Docker-ipv6访问"
         echo -e " ${GREEN}19.${NC} 备份/迁移/还原Docker环境"
@@ -1199,6 +1238,9 @@ function docker_menu() {
                 ;;
             9)
                 edit_daemon_json
+                ;;
+            10)
+                fix_docker_iptables
                 ;;
             11)
                 enable_docker_ipv6
