@@ -1457,12 +1457,13 @@ EOF
 
             docker compose up -d
             if [ $? -eq 0 ]; then
-                local public_ip=$(curl -s --connect-timeout 5 ifconfig.me || curl -s --connect-timeout 5 icanhazip.com)
-                [ -z "$public_ip" ] && public_ip="你的IP"
+                local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
+                local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
                 
                 echo -e "${GREEN}Nginx Proxy Manager 安装成功！${NC}"
                 echo -e "${CYAN}默认登录信息：${NC}"
-                echo -e "访问地址: ${YELLOW}http://${public_ip}:81${NC}"
+                [ -n "$public_ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${public_ipv4}:81${NC}"
+                [ -n "$public_ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${public_ipv6}]:81${NC}"
                 echo -e "用户名: ${GREEN}admin@example.com${NC}"
                 echo -e "密码: ${GREEN}changeme${NC}"
                 echo -e "${RED}请尽快登录面板修改默认密码和邮箱！${NC}"
@@ -1591,11 +1592,12 @@ function view_npm_login_info() {
     echo -e "${CYAN}=========================================${NC}"
 
     if [ -d "/opt/npm" ]; then
-        local public_ip=$(curl -s --connect-timeout 5 ifconfig.me || curl -s --connect-timeout 5 icanhazip.com)
-        [ -z "$public_ip" ] && public_ip="你的IP"
+        local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
+        local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
         
         echo -e "${GREEN}Nginx Proxy Manager 面板登录信息：${NC}"
-        echo -e "访问地址: ${YELLOW}http://${public_ip}:81${NC}"
+        [ -n "$public_ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${public_ipv4}:81${NC}"
+        [ -n "$public_ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${public_ipv6}]:81${NC}"
         echo -e "用户名: ${GREEN}admin@example.com${NC}"
         echo -e "密码: ${GREEN}changeme${NC}"
         echo -e "${RED}请注意：如果已修改过默认端口或密码，请使用您修改后的信息登录。${NC}"
