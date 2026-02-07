@@ -34,8 +34,17 @@ function system_info_query() {
     
     echo -e "CPU核心数：${SKYBLUE}$(nproc)${NC}"
     
-    CPU_FREQ=$(lscpu | grep 'CPU MHz' | awk '{printf "%.2f GHz", $3/1000}')
-    [ -z "$CPU_FREQ" ] && CPU_FREQ=$(grep -m1 'cpu MHz' /proc/cpuinfo | awk '{printf "%.2f GHz", $3/1000}')
+    CPU_FREQ=$(lscpu | grep -E "MHz" | head -n1 | awk -F: '{print $2}' | sed 's/[[:space:]]//g')
+    if [ -n "$CPU_FREQ" ]; then
+        CPU_FREQ=$(awk "BEGIN {printf \"%.2f GHz\", $CPU_FREQ/1000}")
+    else
+        CPU_FREQ=$(grep -m1 'cpu MHz' /proc/cpuinfo | awk -F: '{print $2}' | sed 's/[[:space:]]//g')
+        if [ -n "$CPU_FREQ" ]; then
+            CPU_FREQ=$(awk "BEGIN {printf \"%.2f GHz\", $CPU_FREQ/1000}")
+        else
+            CPU_FREQ="无法获取"
+        fi
+    fi
     echo -e "CPU频率：${SKYBLUE}$CPU_FREQ${NC}"
     
     CPU_USAGE=$(top -bn1 | grep "Cpu(s)" | awk '{printf "%.1f%%", $2 + $4}')
@@ -83,12 +92,13 @@ function system_info_query() {
         
         function format_bytes() {
             local b=$1
-            if [ -z "$b" ]; then echo "0 B"; return; fi
-            if [ $b -lt 1024 ]; then echo "${b} B"
-            elif [ $b -lt 1048576 ]; then echo "$(echo "scale=2; $b/1024" | bc) KB"
-            elif [ $b -lt 1073741824 ]; then echo "$(echo "scale=2; $b/1048576" | bc) MB"
-            else echo "$(echo "scale=2; $b/1073741824" | bc) GB"
-            fi
+            if [ -z "$b" ] || [ "$b" -eq 0 ] 2>/dev/null; then echo "0 B"; return; fi
+            awk -v bytes="$b" 'BEGIN {
+                if (bytes < 1024) printf "%d B", bytes
+                else if (bytes < 1048576) printf "%.2f KB", bytes/1024
+                else if (bytes < 1073741824) printf "%.2f MB", bytes/1048576
+                else printf "%.2f GB", bytes/1073741824
+            }'
         }
         
         echo -e "总接收: ${SKYBLUE}$(format_bytes $RX_BYTES)${NC}"
@@ -126,6 +136,4 @@ function system_info_query() {
     echo -e "${CYAN}==============================================${NC}"
     echo -e "${GREEN}           报告生成时间: $(date '+%Y-%m-%d %H:%M:%S')${NC}"
     echo -e "${CYAN}==============================================${NC}"
-    
-    read -p "按回车键返回..."
 }
