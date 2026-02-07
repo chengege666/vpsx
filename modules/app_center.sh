@@ -809,6 +809,16 @@ function deploy_komari_panel() {
         echo -e "${GREEN}Komari 监控面板部署成功！${NC}"
         [ -n "$public_ipv4" ] && echo -e "IPv4 访问地址: ${CYAN}http://${public_ipv4}:${host_port}${NC}"
         [ -n "$public_ipv6" ] && echo -e "IPv6 访问地址: ${CYAN}http://[${public_ipv6}]:${host_port}${NC}"
+        
+        # 尝试从日志中获取默认密码
+        sleep 2 # 等待容器启动并生成密码
+        local log_pwd=$(docker logs komari 2>&1 | grep "Password:" | awk -F 'Password: ' '{print $2}' | awk '{print $1}')
+        echo -e "默认账号: ${GREEN}admin${NC}"
+        if [ -n "$log_pwd" ]; then
+            echo -e "默认密码: ${GREEN}${log_pwd}${NC}"
+        else
+            echo -e "默认密码: ${YELLOW}请运行 'docker logs komari' 查看日志中的初始密码${NC}"
+        fi
     else
         echo -e "${RED}Komari 部署失败，请检查 Docker 日志。${NC}"
     fi
@@ -968,8 +978,14 @@ function access_komari_web() {
     [ -n "$public_ipv4" ] && echo -e "IPv4 地址: ${YELLOW}http://${public_ipv4}:${host_port}${NC}"
     [ -n "$public_ipv6" ] && echo -e "IPv6 地址: ${YELLOW}http://[${public_ipv6}]:${host_port}${NC}"
     echo ""
+    # 尝试从日志中获取默认密码
+    local log_pwd=$(docker logs komari 2>&1 | grep "Password:" | awk -F 'Password: ' '{print $2}' | awk '{print $1}')
     echo -e "默认账号: ${GREEN}admin${NC}"
-    echo -e "默认密码: ${GREEN}1212156${NC}"
+    if [ -n "$log_pwd" ]; then
+        echo -e "默认密码: ${GREEN}${log_pwd}${NC}"
+    else
+        echo -e "默认密码: ${YELLOW}请运行 'docker logs komari' 查看日志中的初始密码${NC}"
+    fi
     echo -e "${CYAN}=========================================${NC}"
     read -p "按回车键返回..."
 }
