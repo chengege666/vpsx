@@ -139,34 +139,51 @@ function install_update_docker_env() {
 function fix_docker_iptables() {
     clear
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}         Docker 启动故障修复 (iptables)${NC}"
+    echo -e "${GREEN}         Docker 启动故障深度修复${NC}"
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "${YELLOW}检测到系统可能存在 iptables-nft 兼容性问题。${NC}"
-    echo -e "该修复将尝试把系统 iptables 切换为 legacy 模式以兼容 Docker。"
+    echo -e "${YELLOW}正在执行深度诊断与修复...${NC}"
     echo ""
     
-    if ! command -v update-alternatives >/dev/null 2>&1; then
-        echo -e "${RED}错误: 系统缺少 update-alternatives 工具，无法自动修复。${NC}"
-        read -p "按任意键继续..."
-        return
-    fi
+    # 1. 加载必要的内核模块
+    echo -e "${BLUE}[1/3] 正在加载内核模块 (overlay, br_netfilter)...${NC}"
+    sudo modprobe overlay
+    sudo modprobe br_netfilter
+    
+    # 永久写入模块配置
+    cat <<EOF | sudo tee /etc/modules-load.d/docker.conf > /dev/null
+overlay
+br_netfilter
+EOF
 
-    echo -e "${BLUE}正在执行修复...${NC}"
+    # 2. 优化系统网络参数
+    echo -e "${BLUE}[2/3] 正在优化内核网络参数...${NC}"
+    cat <<EOF | sudo tee /etc/sysctl.d/docker.conf > /dev/null
+net.bridge.bridge-nf-call-iptables  = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward                 = 1
+EOF
+    sudo sysctl --system >/dev/null 2>&1
+
+    # 3. 强制切换 iptables 模式
+    echo -e "${BLUE}[3/3] 正在强制切换 iptables 至 legacy 模式...${NC}"
+    if command -v update-alternatives >/dev/null 2>&1; then
+        sudo update-alternatives --set iptables /usr/sbin/iptables-legacy >/dev/null 2>&1
+        sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy >/dev/null 2>&1
+    else
+        echo -e "${YELLOW}警告: 找不到 update-alternatives，尝试手动软链接...${NC}"
+        sudo ln -sf /usr/sbin/iptables-legacy /usr/sbin/iptables
+        sudo ln -sf /usr/sbin/ip6tables-legacy /usr/sbin/ip6tables
+    fi
     
-    # 尝试切换
-    sudo update-alternatives --set iptables /usr/sbin/iptables-legacy >/dev/null 2>&1
-    sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy >/dev/null 2>&1
-    sudo update-alternatives --set arptables /usr/sbin/arptables-legacy >/dev/null 2>&1
-    sudo update-alternatives --set ebtables /usr/sbin/ebtables-legacy >/dev/null 2>&1
-    
-    echo -e "${BLUE}正在重启 Docker 服务...${NC}"
+    echo -e "${BLUE}正在清理残留规则并重启 Docker...${NC}"
+    sudo systemctl stop docker >/dev/null 2>&1
     sudo systemctl restart docker
     
     if systemctl is-active --quiet docker; then
         echo -e "${GREEN}修复成功！Docker 服务已正常运行。${NC}"
     else
         echo -e "${RED}修复失败。Docker 仍无法启动。${NC}"
-        echo -e "${YELLOW}建议手动检查日志: journalctl -u docker -n 50${NC}"
+        echo -e "${YELLOW}最后尝试: 请检查是否安装了过期的防火墙插件，或尝试重启服务器。${NC}"
     fi
     echo -e "${CYAN}=========================================${NC}"
     read -p "按任意键继续..."
