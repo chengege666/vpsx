@@ -981,10 +981,11 @@ function pansou_management() {
         echo "7.  查看实时日志"
         echo "8.  查看容器状态"
         echo "9.  卸载 PanSou 网盘"
+        echo "10. 查询访问 Web 界面"
         echo "0.  返回上一级菜单"
         echo ""
         echo "=========================================="
-        read -p "请输入你的选择 [0-9]: " choice
+        read -p "请输入你的选择 [0-10]: " choice
         
         case $choice in
             1) install_pansou_docker_run ;;
@@ -996,6 +997,7 @@ function pansou_management() {
             7) view_pansou_logs ;;
             8) view_pansou_status ;;
             9) uninstall_pansou ;;
+            10) access_pansou_web ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
@@ -1312,6 +1314,34 @@ function view_pansou_status() {
     else
         echo -e "${RED}❌ PanSou 容器不存在。${NC}"
     fi
+}
+
+function access_pansou_web() {
+    clear
+    echo -e "${CYAN}==========================================${NC}"
+    echo -e "${GREEN}         查询 PanSou Web 访问地址${NC}"
+    echo -e "${CYAN}==========================================${NC}"
+    
+    if ! docker ps -a --format '{{.Names}}' | grep -q "^pansou$"; then
+        echo -e "${RED}❌ PanSou 容器不存在，请先安装。${NC}"
+        return
+    fi
+    
+    # 获取映射端口
+    local host_port=$(docker inspect pansou --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}' 2>/dev/null)
+    
+    if [ -z "$host_port" ]; then
+        echo -e "${YELLOW}⚠️  未能获取到端口映射信息，请确认容器是否正常运行。${NC}"
+        return
+    fi
+    
+    local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
+    local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
+    
+    echo -e "您的 PanSou 网盘访问地址为："
+    [ -n "$public_ipv4" ] && echo -e "IPv4 地址: ${YELLOW}http://${public_ipv4}:${host_port}${NC}"
+    [ -n "$public_ipv6" ] && echo -e "IPv6 地址: ${YELLOW}http://[${public_ipv6}]:${host_port}${NC}"
+    echo ""
 }
 
 function uninstall_pansou() {
