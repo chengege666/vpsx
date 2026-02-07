@@ -784,8 +784,12 @@ function deploy_komari_panel() {
         ghcr.io/komari-monitor/komari:latest
 
     if [ $? -eq 0 ]; then
+        local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
+        local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
+        
         echo -e "${GREEN}Komari 监控面板部署成功！${NC}"
-        echo -e "访问地址: ${CYAN}http://$(curl -s ifconfig.me):8083${NC}"
+        [ -n "$public_ipv4" ] && echo -e "IPv4 访问地址: ${CYAN}http://${public_ipv4}:8083${NC}"
+        [ -n "$public_ipv6" ] && echo -e "IPv6 访问地址: ${CYAN}http://[${public_ipv6}]:8083${NC}"
     else
         echo -e "${RED}Komari 部署失败，请检查 Docker 日志。${NC}"
     fi
@@ -929,9 +933,12 @@ function access_komari_web() {
     echo -e "${GREEN}          访问 Komari Web 界面${NC}"
     echo -e "${CYAN}=========================================${NC}"
     
-    local ip=$(curl -s ifconfig.me)
+    local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
+    local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
+    
     echo -e "您的 Komari 面板访问地址为："
-    echo -e "${YELLOW}http://${ip}:8083${NC}"
+    [ -n "$public_ipv4" ] && echo -e "IPv4 地址: ${YELLOW}http://${public_ipv4}:8083${NC}"
+    [ -n "$public_ipv6" ] && echo -e "IPv6 地址: ${YELLOW}http://[${public_ipv6}]:8083${NC}"
     echo ""
     echo -e "默认账号: ${GREEN}admin${NC}"
     echo -e "默认密码: ${GREEN}1212156${NC}"
