@@ -4,222 +4,125 @@
 function system_info_full() {
     clear
     echo -e "${CYAN}==============================================${NC}"
-    echo -e "${GREEN}               系统信息查询${NC}"
+    echo -e "${GREEN}               系统综合信息查询${NC}"
     echo -e "${CYAN}==============================================${NC}"
-    echo ""
+
+    # 1. 基础信息
+    echo -e "${YELLOW}[ 基础信息 ]${NC}"
+    echo -e "主机名: ${SKYBLUE}$(hostname)${NC}"
     
-    # 1. 主机名
-    echo -e "${YELLOW}--- 主机信息 ---${NC}"
-    echo "主机名: $(hostname)"
-    echo "系统时间: $(date '+%Y-%m-%d %H:%M:%S')"
-    echo "运行时长: $(uptime -p | sed 's/up //')"
-    echo ""
-    
-    # 2. 系统版本信息
-    echo -e "${YELLOW}--- 操作系统信息 ---${NC}"
-    OS_NAME="无法获取"
-    OS_VERSION="无法获取"
-    
+    # 系统版本
     if [ -f /etc/os-release ]; then
         source /etc/os-release
-        OS_NAME="$NAME"
-        OS_VERSION="$VERSION"
-    elif [ -f /etc/redhat-release ]; then
-        OS_NAME=$(cat /etc/redhat-release)
-        OS_VERSION=""
-    elif [ -f /etc/centos-release ]; then
-        OS_NAME=$(cat /etc/centos-release)
-        OS_VERSION=""
+        OS_NAME="$PRETTY_NAME"
+    else
+        OS_NAME=$(cat /etc/issue | head -n1 | awk '{print $1,$2,$3}')
     fi
-    
-    echo "系统版本: $OS_NAME $OS_VERSION"
-    echo "Linux内核: $(uname -r)"
+    echo -e "系统版本：${SKYBLUE}$OS_NAME${NC}"
+    echo -e "Linux版本：${SKYBLUE}$(uname -sr)${NC}"
+    echo -e "系统时间：${SKYBLUE}$(date '+%Y-%m-%d %H:%M:%S')${NC}"
+    echo -e "运行时长：${SKYBLUE}$(uptime -p | sed 's/up //')${NC}"
     echo ""
-    
-    # 3. CPU信息
-    echo -e "${YELLOW}--- CPU信息 ---${NC}"
-    CPU_ARCH=$(uname -m)
-    echo "CPU架构: $CPU_ARCH"
+
+    # 2. CPU信息
+    echo -e "${YELLOW}[ CPU信息 ]${NC}"
+    echo -e "CPU架构: ${SKYBLUE}$(uname -m)${NC}"
     
     CPU_MODEL=$(lscpu | grep 'Model name' | awk -F': ' '{print $2}' | sed 's/^[ \t]*//')
-    if [ -z "$CPU_MODEL" ]; then
-        CPU_MODEL=$(grep -m1 'model name' /proc/cpuinfo | awk -F': ' '{print $2}')
-    fi
-    echo "CPU型号: $CPU_MODEL"
+    [ -z "$CPU_MODEL" ] && CPU_MODEL=$(grep -m1 'model name' /proc/cpuinfo | awk -F': ' '{print $2}')
+    echo -e "CPU型号: ${SKYBLUE}$CPU_MODEL${NC}"
     
-    CPU_CORES=$(nproc)
-    echo "CPU核心数: $CPU_CORES"
+    echo -e "CPU核心数：${SKYBLUE}$(nproc)${NC}"
     
     CPU_FREQ=$(lscpu | grep 'CPU MHz' | awk '{printf "%.2f GHz", $3/1000}')
-    if [ -z "$CPU_FREQ" ]; then
-        CPU_FREQ=$(grep -m1 'cpu MHz' /proc/cpuinfo | awk '{printf "%.2f GHz", $3/1000}')
-    fi
-    echo "CPU频率: $CPU_FREQ"
+    [ -z "$CPU_FREQ" ] && CPU_FREQ=$(grep -m1 'cpu MHz' /proc/cpuinfo | awk '{printf "%.2f GHz", $3/1000}')
+    echo -e "CPU频率：${SKYBLUE}$CPU_FREQ${NC}"
     
-    # 使用top获取CPU使用率
     CPU_USAGE=$(top -bn1 | grep "Cpu(s)" | awk '{printf "%.1f%%", $2 + $4}')
-    echo "CPU占用: $CPU_USAGE"
+    echo -e "CPU占用: ${SKYBLUE}$CPU_USAGE${NC}"
     
     LOAD_AVG=$(uptime | awk -F'load average:' '{print $2}' | sed 's/^[ \t]*//')
-    echo "系统负载: $LOAD_AVG"
+    echo -e "系统负载：${SKYBLUE}$LOAD_AVG${NC}"
     echo ""
-    
-    # 4. 内存信息
-    echo -e "${YELLOW}--- 内存信息 ---${NC}"
+
+    # 3. 内存与磁盘
+    echo -e "${YELLOW}[ 存储信息 ]${NC}"
     MEM_TOTAL=$(free -h | grep Mem | awk '{print $2}')
     MEM_USED=$(free -h | grep Mem | awk '{print $3}')
-    MEM_FREE=$(free -h | grep Mem | awk '{print $4}')
     MEM_USAGE_PERCENT=$(free | grep Mem | awk '{printf "%.1f%%", $3/$2*100}')
-    
-    echo "物理内存: $MEM_USED/$MEM_TOTAL ($MEM_USAGE_PERCENT)"
-    echo "可用内存: $MEM_FREE"
+    echo -e "物理内存：${SKYBLUE}$MEM_USED / $MEM_TOTAL ($MEM_USAGE_PERCENT)${NC}"
     
     SWAP_TOTAL=$(free -h | grep Swap | awk '{print $2}')
     SWAP_USED=$(free -h | grep Swap | awk '{print $3}')
-    SWAP_FREE=$(free -h | grep Swap | awk '{print $4}')
-    if [ "$SWAP_TOTAL" != "0B" ] && [ "$SWAP_TOTAL" != "0" ]; then
+    if [ "$SWAP_TOTAL" != "0B" ] && [ "$SWAP_TOTAL" != "0" ] && [ -n "$SWAP_TOTAL" ]; then
         SWAP_USAGE_PERCENT=$(free | grep Swap | awk '{printf "%.1f%%", $3/$2*100}')
-        echo "虚拟内存: $SWAP_USED/$SWAP_TOTAL ($SWAP_USAGE_PERCENT)"
+        echo -e "虚拟内存：${SKYBLUE}$SWAP_USED / $SWAP_TOTAL ($SWAP_USAGE_PERCENT)${NC}"
     else
-        echo "虚拟内存: 未启用"
+        echo -e "虚拟内存：${SKYBLUE}未启用${NC}"
     fi
-    echo ""
     
-    # 5. 磁盘信息
-    echo -e "${YELLOW}--- 磁盘信息 ---${NC}"
-    DISK_USAGE=$(df -h / | awk 'NR==2 {printf "%s/%s (%.1f%%)", $3, $2, $5}')
-    echo "根分区占用: $DISK_USAGE"
-    
-    # 总磁盘使用情况
     DISK_TOTAL=$(df -h --total | grep total | awk '{print $2}')
     DISK_USED=$(df -h --total | grep total | awk '{print $3}')
     DISK_USAGE_PERCENT=$(df -h --total | grep total | awk '{print $5}')
-    echo "总硬盘占用: $DISK_USED/$DISK_TOTAL ($DISK_USAGE_PERCENT)"
+    echo -e "硬盘占用：${SKYBLUE}$DISK_USED / $DISK_TOTAL ($DISK_USAGE_PERCENT)${NC}"
     echo ""
+
+    # 4. 网络信息
+    echo -e "${YELLOW}[ 网络信息 ]${NC}"
     
-    # 6. 网络连接信息
-    echo -e "${YELLOW}--- 网络连接 ---${NC}"
-    TCP_CONNECTIONS=$(ss -t | grep -v State | wc -l)
-    UDP_CONNECTIONS=$(ss -u | grep -v State | wc -l)
-    echo "TCP连接数: $TCP_CONNECTIONS"
-    echo "UDP连接数: $UDP_CONNECTIONS"
-    echo ""
+    # TCP | UDP 连接数
+    TCP_CONN=$(ss -ant | grep ESTAB | wc -l)
+    UDP_CONN=$(ss -au | wc -l)
+    echo -e "TCP | UDP连接数: ${SKYBLUE}TCP: $TCP_CONN | UDP: $UDP_CONN${NC}"
     
-    # 7. 网络流量信息
-    echo -e "${YELLOW}--- 网络流量 ---${NC}"
-    # 获取网络接口
+    # 获取默认网卡流量
     NET_INTERFACE=$(ip route | grep default | awk '{print $5}' | head -1)
     if [ -n "$NET_INTERFACE" ]; then
-        # 获取总接收和发送流量
         RX_BYTES=$(cat /sys/class/net/$NET_INTERFACE/statistics/rx_bytes 2>/dev/null)
         TX_BYTES=$(cat /sys/class/net/$NET_INTERFACE/statistics/tx_bytes 2>/dev/null)
         
-        if [ -n "$RX_BYTES" ] && [ -n "$TX_BYTES" ]; then
-            # 转换为易读格式
-            RX_READABLE=$(echo $RX_BYTES | awk '
-                function human(x) {
-                    if (x<1000) {return x" B"}
-                    else if (x<1000*1000) {return x/1000" KB"}
-                    else if (x<1000*1000*1000) {return x/(1000*1000)" MB"}
-                    else {return x/(1000*1000*1000)" GB"}
-                }
-                {print human($1)}')
-            
-            TX_READABLE=$(echo $TX_BYTES | awk '
-                function human(x) {
-                    if (x<1000) {return x" B"}
-                    else if (x<1000*1000) {return x/1000" KB"}
-                    else if (x<1000*1000*1000) {return x/(1000*1000)" MB"}
-                    else {return x/(1000*1000*1000)" GB"}
-                }
-                {print human($1)}')
-            
-            echo "总接收流量: $RX_READABLE"
-            echo "总发送流量: $TX_READABLE"
-        else
-            echo "总接收流量: 无法获取"
-            echo "总发送流量: 无法获取"
-        fi
-    else
-        echo "总接收流量: 无法获取"
-        echo "总发送流量: 无法获取"
-    fi
-    echo ""
-    
-    # 8. 网络算法信息
-    echo -e "${YELLOW}--- 网络配置 ---${NC}"
-    TCP_CONGESTION=$(sysctl net.ipv4.tcp_congestion_control 2>/dev/null | awk '{print $3}')
-    echo "TCP拥塞控制算法: ${TCP_CONGESTION:-默认}"
-    
-    # 检查是否启用了BBR
-    if [ "$TCP_CONGESTION" = "bbr" ]; then
-        echo "BBR状态: 已启用"
-    else
-        echo "BBR状态: 未启用"
-    fi
-    
-    DEFAULT_QDISC=$(sysctl net.core.default_qdisc 2>/dev/null | awk '{print $3}')
-    echo "队列规则: ${DEFAULT_QDISC:-fq_codel}"
-    echo ""
-    
-    # 9. IP地址和DNS信息
-    echo -e "${YELLOW}--- 网络地址 ---${NC}"
-    
-    # 获取公网IP
-    PUBLIC_IP=$(curl -s --connect-timeout 3 ifconfig.me || curl -s --connect-timeout 3 ipinfo.io/ip || echo "无法获取")
-    echo "公网IP地址: $PUBLIC_IP"
-    
-    # 获取内网IP
-    LOCAL_IP=$(hostname -I | awk '{print $1}')
-    echo "内网IP地址: $LOCAL_IP"
-    
-    # 获取DNS服务器
-    if [ -f /etc/resolv.conf ]; then
-        DNS_SERVERS=$(grep -E '^nameserver' /etc/resolv.conf | awk '{print $2}' | tr '\n' ' ')
-        echo "DNS服务器: $DNS_SERVERS"
-    else
-        echo "DNS服务器: 无法获取"
-    fi
-    echo ""
-    
-    # 10. 地理位置信息（需要网络）
-    echo -e "${YELLOW}--- 地理位置 ---${NC}"
-    if [ "$PUBLIC_IP" != "无法获取" ] && [[ ! "$PUBLIC_IP" =~ ^(10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.) ]]; then
-        LOCATION_INFO=$(curl -s --connect-timeout 3 "ipinfo.io/$PUBLIC_IP/json" 2>/dev/null)
-        if [ -n "$LOCATION_INFO" ]; then
-            COUNTRY=$(echo "$LOCATION_INFO" | grep '"country"' | cut -d'"' -f4)
-            CITY=$(echo "$LOCATION_INFO" | grep '"city"' | cut -d'"' -f4)
-            ORG=$(echo "$LOCATION_INFO" | grep '"org"' | cut -d'"' -f4)
-            
-            echo "地理位置: ${CITY:-未知}, ${COUNTRY:-未知}"
-            if [ -n "$ORG" ]; then
-                echo "运营商: $ORG"
-            else
-                echo "运营商: 未知"
+        function format_bytes() {
+            local b=$1
+            if [ -z "$b" ]; then echo "0 B"; return; fi
+            if [ $b -lt 1024 ]; then echo "${b} B"
+            elif [ $b -lt 1048576 ]; then echo "$(echo "scale=2; $b/1024" | bc) KB"
+            elif [ $b -lt 1073741824 ]; then echo "$(echo "scale=2; $b/1048576" | bc) MB"
+            else echo "$(echo "scale=2; $b/1073741824" | bc) GB"
             fi
-        else
-            echo "地理位置: 查询失败"
-            echo "运营商: 未知"
-        fi
+        }
+        
+        echo -e "总接收: ${SKYBLUE}$(format_bytes $RX_BYTES)${NC}"
+        echo -e "总发送: ${SKYBLUE}$(format_bytes $TX_BYTES)${NC}"
     else
-        echo "地理位置: 内网地址或无法获取"
-        echo "运营商: 未知"
+        echo -e "总接收: ${SKYBLUE}无法获取${NC}"
+        echo -e "总发送: ${SKYBLUE}无法获取${NC}"
     fi
+    
+    TCP_CONGESTION=$(sysctl net.ipv4.tcp_congestion_control | awk '{print $3}')
+    echo -e "网络算法：${SKYBLUE}$TCP_CONGESTION${NC}"
+    
+    # 公网IP及地理位置 (ipinfo.io 一次请求获取多个信息)
+    IP_INFO=$(curl -s --connect-timeout 5 ipinfo.io/json)
+    if [ -n "$IP_INFO" ]; then
+        IPV4=$(echo "$IP_INFO" | grep '"ip"' | cut -d'"' -f4)
+        ISP=$(echo "$IP_INFO" | grep '"org"' | cut -d'"' -f4)
+        CITY=$(echo "$IP_INFO" | grep '"city"' | cut -d'"' -f4)
+        REGION=$(echo "$IP_INFO" | grep '"region"' | cut -d'"' -f4)
+        COUNTRY=$(echo "$IP_INFO" | grep '"country"' | cut -d'"' -f4)
+        
+        echo -e "运营商：${SKYBLUE}$ISP${NC}"
+        echo -e "IPV4地址：${SKYBLUE}$IPV4${NC}"
+        echo -e "地理位置: ${SKYBLUE}$CITY, $REGION, $COUNTRY${NC}"
+    else
+        echo -e "运营商：${SKYBLUE}无法获取${NC}"
+        echo -e "IPV4地址：${SKYBLUE}$(curl -s --connect-timeout 3 ifconfig.me || echo "无法获取")${NC}"
+        echo -e "地理位置: ${SKYBLUE}无法获取${NC}"
+    fi
+    
+    DNS_ADDR=$(grep -E '^nameserver' /etc/resolv.conf | awk '{print $2}' | tr '\n' ' ')
+    echo -e "DNS地址: ${SKYBLUE}${DNS_ADDR:-无法获取}${NC}"
+    
     echo ""
-    
-    # 11. 系统性能指标
-    echo -e "${YELLOW}--- 系统性能 ---${NC}"
-    echo "当前用户: $(whoami)"
-    echo "登录用户数: $(who | wc -l)"
-    echo "进程总数: $(ps -ef | wc -l)"
-    
-    # 显示系统负载详情
-    echo "系统负载详情:"
-    echo "  最近1分钟: $(uptime | awk -F'load average:' '{print $2}' | awk -F',' '{print $1}')"
-    echo "  最近5分钟: $(uptime | awk -F'load average:' '{print $2}' | awk -F',' '{print $2}')"
-    echo "  最近15分钟: $(uptime | awk -F'load average:' '{print $2}' | awk -F',' '{print $3}')"
-    echo ""
-    
     echo -e "${CYAN}==============================================${NC}"
     echo -e "${GREEN}           报告生成时间: $(date '+%Y-%m-%d %H:%M:%S')${NC}"
     echo -e "${CYAN}==============================================${NC}"
