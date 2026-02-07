@@ -773,13 +773,24 @@ function deploy_komari_panel() {
     echo -e "${BLUE}正在拉取最新镜像 ghcr.io/komari-monitor/komari:latest...${NC}"
     docker pull ghcr.io/komari-monitor/komari:latest
 
-    echo -e "${BLUE}正在创建并运行 Komari 容器...${NC}"
+    # 获取宿主机端口
+    read -p "请输入宿主机映射端口 (默认 8083): " host_port
+    host_port=${host_port:-8083}
+
+    # 验证端口占用
+    if netstat -tuln | grep -q ":${host_port} "; then
+        echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在创建并运行 Komari 容器 (端口: ${host_port})...${NC}"
     mkdir -p /home/docker/komari
     
     docker run -d \
         --name komari \
         --restart always \
-        -p 8083:8083 \
+        -p ${host_port}:8083 \
         -v /home/docker/komari:/app/data \
         ghcr.io/komari-monitor/komari:latest
 
@@ -788,8 +799,8 @@ function deploy_komari_panel() {
         local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
         
         echo -e "${GREEN}Komari 监控面板部署成功！${NC}"
-        [ -n "$public_ipv4" ] && echo -e "IPv4 访问地址: ${CYAN}http://${public_ipv4}:8083${NC}"
-        [ -n "$public_ipv6" ] && echo -e "IPv6 访问地址: ${CYAN}http://[${public_ipv6}]:8083${NC}"
+        [ -n "$public_ipv4" ] && echo -e "IPv4 访问地址: ${CYAN}http://${public_ipv4}:${host_port}${NC}"
+        [ -n "$public_ipv6" ] && echo -e "IPv6 访问地址: ${CYAN}http://[${public_ipv6}]:${host_port}${NC}"
     else
         echo -e "${RED}Komari 部署失败，请检查 Docker 日志。${NC}"
     fi
@@ -933,12 +944,21 @@ function access_komari_web() {
     echo -e "${GREEN}          访问 Komari Web 界面${NC}"
     echo -e "${CYAN}=========================================${NC}"
     
+    if ! docker ps -a --format '{{.Names}}' | grep -q "^komari$"; then
+        echo -e "${RED}❌ Komari 容器不存在，请先部署。${NC}"
+        return
+    fi
+    
+    # 获取映射端口
+    local host_port=$(docker inspect komari --format='{{(index (index .NetworkSettings.Ports "8083/tcp") 0).HostPort}}' 2>/dev/null)
+    host_port=${host_port:-8083}
+    
     local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
     local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
     
     echo -e "您的 Komari 面板访问地址为："
-    [ -n "$public_ipv4" ] && echo -e "IPv4 地址: ${YELLOW}http://${public_ipv4}:8083${NC}"
-    [ -n "$public_ipv6" ] && echo -e "IPv6 地址: ${YELLOW}http://[${public_ipv6}]:8083${NC}"
+    [ -n "$public_ipv4" ] && echo -e "IPv4 地址: ${YELLOW}http://${public_ipv4}:${host_port}${NC}"
+    [ -n "$public_ipv6" ] && echo -e "IPv6 地址: ${YELLOW}http://[${public_ipv6}]:${host_port}${NC}"
     echo ""
     echo -e "默认账号: ${GREEN}admin${NC}"
     echo -e "默认密码: ${GREEN}1212156${NC}"
