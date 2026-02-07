@@ -45,9 +45,21 @@ function install_update_docker_env() {
             1)
                 echo -e "${BLUE}开始更新 Docker...${NC}"
                 curl -fsSL https://get.docker.com -o get-docker.sh
-                sudo sh get-docker.sh
-                rm get-docker.sh
-                echo -e "${GREEN}Docker 更新完成。${NC}"
+                if sudo sh get-docker.sh; then
+                    rm get-docker.sh
+                    sudo systemctl start docker
+                    if systemctl is-active --quiet docker; then
+                        echo -e "${GREEN}Docker 更新并启动成功。${NC}"
+                    else
+                        echo -e "${RED}Docker 更新成功，但服务启动失败。${NC}"
+                        echo -e "${YELLOW}请尝试运行: systemctl status docker 查看原因。${NC}"
+                    fi
+                else
+                    rm get-docker.sh
+                    echo -e "${RED}Docker 更新失败，请检查网络或系统日志。${NC}"
+                    read -p "按任意键继续..."
+                    return
+                fi
                 ;;
             0)
                 return
@@ -67,14 +79,29 @@ function install_update_docker_env() {
             1)
                 echo -e "${BLUE}开始安装 Docker...${NC}"
                 curl -fsSL https://get.docker.com -o get-docker.sh
-                sudo sh get-docker.sh
-                rm get-docker.sh
-                
-                sudo systemctl start docker
-                sudo systemctl enable docker
-                sudo usermod -aG docker $USER
-                
-                echo -e "${GREEN}Docker 安装完成。${NC}"
+                if sudo sh get-docker.sh; then
+                    rm get-docker.sh
+                    
+                    echo -e "${BLUE}正在启动 Docker 服务...${NC}"
+                    sudo systemctl start docker
+                    sudo systemctl enable docker
+                    
+                    if systemctl is-active --quiet docker; then
+                        sudo usermod -aG docker $USER
+                        echo -e "${GREEN}Docker 安装并启动成功。${NC}"
+                    else
+                        echo -e "${RED}Docker 安装脚本执行成功，但服务启动失败。${NC}"
+                        echo -e "${YELLOW}常见原因: 内核版本过低、缺少依赖或存储驱动问题。${NC}"
+                        echo -e "${YELLOW}请运行: journalctl -u docker -n 20 查看错误日志。${NC}"
+                        read -p "按任意键继续..."
+                        return
+                    fi
+                else
+                    rm get-docker.sh
+                    echo -e "${RED}Docker 安装失败，请检查网络或系统日志。${NC}"
+                    read -p "按任意键继续..."
+                    return
+                fi
                 ;;
             0)
                 return
@@ -99,7 +126,11 @@ function install_update_docker_env() {
         echo -e "${GREEN}Docker Compose 已安装。${NC}"
     fi
 
-    echo -e "${GREEN}Docker 及 Docker Compose 环境已准备就绪。${NC}"
+    if systemctl is-active --quiet docker; then
+        echo -e "${GREEN}Docker 及 Docker Compose 环境已准备就绪。${NC}"
+    else
+        echo -e "${RED}Docker 环境配置存在异常，请检查服务状态。${NC}"
+    fi
     read -p "按任意键继续..."
 }
 
