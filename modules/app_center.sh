@@ -709,7 +709,7 @@ function komari_management() {
         echo -e "• Docker 镜像: ${BLUE}ghcr.io/komari-monitor/komari:latest${NC}"
         echo -e "• 容器端口: ${BLUE}8083${NC}"
         echo -e "• 数据目录: ${BLUE}/home/docker/komari${NC}"
-        echo -e "• 默认账号: ${BLUE}admin / 1212156${NC} (建议首次登录后修改)"
+        echo -e "• 默认账号: ${BLUE}admin / Z7aiE5jN8co7${NC} (建议首次登录后修改)"
         echo ""
         echo -e " ${GREEN}1.${NC} 安装 Docker 环境 (如未安装)"
         echo -e " ${GREEN}2.${NC} 部署 Komari 监控面板"
