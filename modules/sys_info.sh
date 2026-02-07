@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # 系统信息查询功能 - 完整版本
-function system_info_full() {
+function system_info_query() {
     clear
     echo -e "${CYAN}==============================================${NC}"
-    echo -e "${GREEN}               系统综合信息查询${NC}"
+    echo -e "${GREEN}               系统信息查询${NC}"
     echo -e "${CYAN}==============================================${NC}"
 
     # 1. 基础信息
