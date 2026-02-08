@@ -659,9 +659,11 @@ function docker_image_management() {
         echo "========================================="
         echo "        Docker 镜像管理"
         echo "========================================="
+        echo "1. 列出镜像"
         echo "2. 拉取镜像"
         echo "3. 删除镜像"
         echo "4. 清理悬空镜像"
+        echo "5. 清空所有镜像"
         echo "0. 返回主菜单"
         echo "========================================="
         read -p "请选择操作: " choice
@@ -671,6 +673,7 @@ function docker_image_management() {
             2) pull_docker_image ;;
             3) remove_docker_image ;;
             4) clean_dangling_images ;;
+            5) remove_all_images ;;
             0) break ;;
             *) echo "无效选择，请重新输入。" ; read -p "按任意键继续..." ;;
         esac
@@ -745,6 +748,35 @@ function clean_dangling_images() {
         echo "悬空镜像已成功清理。"
     else
         echo "清理悬空镜像失败。"
+    fi
+    echo "========================================="
+    read -p "按任意键继续..."
+}
+
+function remove_all_images() {
+    clear
+    echo "========================================="
+    echo "        清空所有 Docker 镜像"
+    echo "========================================="
+    docker images -a
+    echo "-----------------------------------------"
+    read -p "确定要删除本地所有镜像吗？该操作不可撤销！(y/N): " confirm_remove
+    if [[ "$confirm_remove" =~ ^[Yy]$ ]]; then
+        local image_ids=$(docker images -q)
+        if [ -z "$image_ids" ]; then
+            echo "本地没有可删除的镜像。"
+        else
+            echo "正在清空所有镜像..."
+            docker rmi $image_ids 2>/dev/null
+            if [ $? -eq 0 ]; then
+                echo "所有镜像已成功清空。"
+            else
+                echo "部分镜像清空失败，可能是有容器正在使用这些镜像。"
+                echo "请先停止并删除相关容器后再尝试。"
+            fi
+        fi
+    else
+        echo "已取消清空操作。"
     fi
     echo "========================================="
     read -p "按任意键继续..."
