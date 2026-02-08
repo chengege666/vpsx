@@ -259,10 +259,10 @@ function github_proxy_management() {
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}             GitHub 加速站管理${NC}"
         
-        if docker ps -a --format '{{.Names}}' | grep -q "^gh-proxy-py$"; then
+        if docker ps -a --format '{{.Names}}' | grep -q "^github-proxy$"; then
             echo -e "          状态: ${GREEN}已安装${NC}"
             # 获取映射端口
-            local host_port=$(docker inspect gh-proxy-py --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}' 2>/dev/null)
+            local host_port=$(docker inspect github-proxy --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}' 2>/dev/null)
             local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
             local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
             local local_ip=$(hostname -I | awk '{print $1}')
@@ -291,7 +291,7 @@ function github_proxy_management() {
             2) update_github_proxy ;;
             3) uninstall_github_proxy ;;
             4) manage_github_proxy_container ;;
-            5) docker logs --tail 50 gh-proxy-py; read -p "按回车键继续..." ;;
+            5) docker logs --tail 50 github-proxy; read -p "按回车键继续..." ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
@@ -304,17 +304,17 @@ function install_github_proxy() {
     echo -e "${GREEN}          安装 GitHub 加速站${NC}"
     echo -e "${CYAN}=========================================${NC}"
 
-    if docker ps -a --format '{{.Names}}' | grep -q "^gh-proxy-py$"; then
+    if docker ps -a --format '{{.Names}}' | grep -q "^github-proxy$"; then
         echo -e "${YELLOW}检测到 GitHub 加速站已安装。${NC}"
         read -p "是否重新安装？(y/N): " reinstall
         [[ ! "$reinstall" =~ ^[yY]$ ]] && return
-        docker stop gh-proxy-py &>/dev/null
-        docker rm gh-proxy-py &>/dev/null
+        docker stop github-proxy &>/dev/null
+        docker rm github-proxy &>/dev/null
     fi
 
     # 获取宿主机端口
-    read -p "请输入宿主机映射端口 (默认 80): " host_port
-    host_port=${host_port:-80}
+    read -p "请输入宿主机映射端口 (默认 7210): " host_port
+    host_port=${host_port:-7210}
 
     # 验证端口占用
     if command -v ss &> /dev/null; then
@@ -325,12 +325,20 @@ function install_github_proxy() {
         fi
     fi
 
+    echo -e "${BLUE}正在准备数据目录...${NC}"
+    mkdir -p /opt/ghproxy/log/run
+    mkdir -p /opt/ghproxy/log/caddy
+    mkdir -p /opt/ghproxy/config
+
     echo -e "${BLUE}正在拉取镜像并创建容器...${NC}"
     docker run -d \
-        --name="gh-proxy-py" \
+        --name="github-proxy" \
         --restart=always \
-        -p ${host_port}:80 \
-        hunsh/gh-proxy-py:latest
+        -p ${host_port}:8080 \
+        -v /opt/ghproxy/log/run:/data/ghproxy/log \
+        -v /opt/ghproxy/log/caddy:/data/caddy/log \
+        -v /opt/ghproxy/config:/data/ghproxy/config \
+        wjqserver/ghproxy
 
     if [ $? -eq 0 ]; then
         local local_ip=$(hostname -I | awk '{print $1}')
@@ -348,27 +356,30 @@ function update_github_proxy() {
     echo -e "${GREEN}          更新 GitHub 加速站${NC}"
     echo -e "${CYAN}=========================================${NC}"
 
-    if ! docker ps -a --format '{{.Names}}' | grep -q "^gh-proxy-py$"; then
+    if ! docker ps -a --format '{{.Names}}' | grep -q "^github-proxy$"; then
         echo -e "${RED}未检测到 GitHub 加速站，请先安装。${NC}"
         read -p "按回车键继续..."
         return
     fi
 
     # 获取当前映射端口
-    local old_port=$(docker inspect gh-proxy-py --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}' 2>/dev/null)
+    local old_port=$(docker inspect github-proxy --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}' 2>/dev/null)
     
     echo -e "${BLUE}正在拉取最新镜像...${NC}"
-    docker pull hunsh/gh-proxy-py:latest
+    docker pull wjqserver/ghproxy
     
     echo -e "${BLUE}正在重启容器...${NC}"
-    docker stop gh-proxy-py &>/dev/null
-    docker rm gh-proxy-py &>/dev/null
+    docker stop github-proxy &>/dev/null
+    docker rm github-proxy &>/dev/null
     
     docker run -d \
-        --name="gh-proxy-py" \
+        --name="github-proxy" \
         --restart=always \
-        -p ${old_port}:80 \
-        hunsh/gh-proxy-py:latest
+        -p ${old_port}:8080 \
+        -v /opt/ghproxy/log/run:/data/ghproxy/log \
+        -v /opt/ghproxy/log/caddy:/data/caddy/log \
+        -v /opt/ghproxy/config:/data/ghproxy/config \
+        wjqserver/ghproxy
 
     echo -e "${GREEN}更新完成！${NC}"
     read -p "按回车键继续..."
@@ -382,8 +393,8 @@ function uninstall_github_proxy() {
 
     read -p "确定要卸载 GitHub 加速站吗？(y/N): " confirm
     if [[ "$confirm" =~ ^[yY]$ ]]; then
-        docker stop gh-proxy-py &>/dev/null
-        docker rm gh-proxy-py &>/dev/null
+        docker stop github-proxy &>/dev/null
+        docker rm github-proxy &>/dev/null
         echo -e "${GREEN}卸载完成。${NC}"
     else
         echo "操作已取消。"
@@ -397,7 +408,7 @@ function manage_github_proxy_container() {
     echo -e "${GREEN}         GitHub 加速站生命周期管理${NC}"
     echo -e "${CYAN}=========================================${NC}"
 
-    if ! docker ps -a --format '{{.Names}}' | grep -q "^gh-proxy-py$"; then
+    if ! docker ps -a --format '{{.Names}}' | grep -q "^github-proxy$"; then
         echo -e "${RED}未检测到容器，请先安装。${NC}"
         read -p "按回车键继续..."
         return
@@ -409,9 +420,9 @@ function manage_github_proxy_container() {
     echo -e " 0. 返回"
     read -p "请选择: " op
     case $op in
-        1) docker start gh-proxy-py ;;
-        2) docker stop gh-proxy-py ;;
-        3) docker restart gh-proxy-py ;;
+        1) docker start github-proxy ;;
+        2) docker stop github-proxy ;;
+        3) docker restart github-proxy ;;
     esac
 }
 
