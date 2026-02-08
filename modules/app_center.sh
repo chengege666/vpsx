@@ -4,17 +4,32 @@
 
 # 获取访问 IP (优先公网 IPv4 -> 内网 IPv4, 优先公网 IPv6 -> 内网 IPv6)
 function get_access_ips() {
+    local ipv4=""
+    local ipv6=""
+
     # 1. 获取 IPv4
-    local ipv4=$(curl -4 -s --connect-timeout 2 ifconfig.me 2>/dev/null || curl -4 -s --connect-timeout 2 ipv4.icanhazip.com 2>/dev/null)
+    # 优先公网 IPv4
+    ipv4=$(curl -4 -s --connect-timeout 2 ifconfig.me 2>/dev/null || curl -4 -s --connect-timeout 2 ipv4.icanhazip.com 2>/dev/null)
+    # 严格校验 IPv4 格式，防止混入 IPv6
+    if [[ ! "$ipv4" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        ipv4=""
+    fi
+
+    # 若公网获取失败，则获取内网 IPv4
     if [ -z "$ipv4" ]; then
-        # 确保只匹配 IPv4 地址
         ipv4=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
     fi
     
     # 2. 获取 IPv6
-    local ipv6=$(curl -6 -s --connect-timeout 2 ifconfig.me 2>/dev/null || curl -6 -s --connect-timeout 2 ipv6.icanhazip.com 2>/dev/null)
+    # 优先公网 IPv6
+    ipv6=$(curl -6 -s --connect-timeout 2 ifconfig.me 2>/dev/null || curl -6 -s --connect-timeout 2 ipv6.icanhazip.com 2>/dev/null)
+    # 校验 IPv6 格式 (简单检查是否包含冒号)
+    if [[ ! "$ipv6" =~ : ]]; then
+        ipv6=""
+    fi
+
+    # 若公网获取失败，则获取内网 IPv6 (全球单播地址 2000::/3)
     if [ -z "$ipv6" ]; then
-        # 获取全球单播地址 (2000::/3)
         ipv6=$(ip -6 addr show 2>/dev/null | grep -E 'inet6 [23]' | awk '{print $2}' | cut -d/ -f1 | head -n1)
     fi
     
@@ -1165,10 +1180,7 @@ function access_komari_web() {
     local host_port=$(docker inspect komari --format='{{(index (index .NetworkSettings.Ports "25774/tcp") 0).HostPort}}' 2>/dev/null)
     host_port=${host_port:-25774}
     
-    local ipv4=$(curl -4 -s --connect-timeout 2 ifconfig.me 2>/dev/null || curl -4 -s --connect-timeout 2 ipv4.icanhazip.com 2>/dev/null)
-    [ -z "$ipv4" ] && ipv4=$(hostname -I 2>/dev/null | awk '{print $1}')
-    local ipv6=$(curl -6 -s --connect-timeout 2 ifconfig.me 2>/dev/null || curl -6 -s --connect-timeout 2 ipv6.icanhazip.com 2>/dev/null)
-    [ -z "$ipv6" ] && ipv6=$(ip -6 addr show 2>/dev/null | grep -E 'inet6 [23]' | awk '{print $2}' | cut -d/ -f1 | head -n1)
+    IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
     
     echo -e "您的 Komari 面板访问地址为："
     [ -n "$ipv4" ] && echo -e "IPv4 地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
@@ -1739,10 +1751,7 @@ EOF
 
             docker compose up -d
             if [ $? -eq 0 ]; then
-                local ipv4=$(curl -4 -s --connect-timeout 2 ifconfig.me 2>/dev/null || curl -4 -s --connect-timeout 2 ipv4.icanhazip.com 2>/dev/null)
-                [ -z "$ipv4" ] && ipv4=$(hostname -I 2>/dev/null | awk '{print $1}')
-                local ipv6=$(curl -6 -s --connect-timeout 2 ifconfig.me 2>/dev/null || curl -6 -s --connect-timeout 2 ipv6.icanhazip.com 2>/dev/null)
-                [ -z "$ipv6" ] && ipv6=$(ip -6 addr show 2>/dev/null | grep -E 'inet6 [23]' | awk '{print $2}' | cut -d/ -f1 | head -n1)
+                IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
                 
                 echo -e "${GREEN}Nginx Proxy Manager 安装成功！${NC}"
                 echo -e "${CYAN}默认登录信息：${NC}"
@@ -1921,48 +1930,7 @@ function adguard_home_management() {
                 
                 echo -e "${GREEN}安装完成，访问地址：${NC}"
                 
-                # 获取IPv4地址（优先内网，没有则尝试公网）
-                local ipv4_address=""
-                
-                # 1. 尝试获取内网IPv4
-                local_ips=$(hostname -I 2>/dev/null | awk '{print $1}')
-                if [ -z "$local_ips" ]; then
-                    local_ips=$(ip addr show 2>/dev/null | grep -E "inet (192\.168|10\.|172\.)" | awk '{print $2}' | cut -d/ -f1 | head -1)
-                fi
-                
-                if [ -n "$local_ips" ]; then
-                    ipv4_address="$local_ips"
-                else
-                    # 2. 尝试获取公网IPv4（确保是真正的IPv4）
-                    local ipv4_candidates=(
-                        "$(curl -4 -s --connect-timeout 3 ifconfig.me 2>/dev/null)"
-                        "$(curl -4 -s --connect-timeout 3 ipv4.icanhazip.com 2>/dev/null)"
-                        "$(curl -4 -s --connect-timeout 3 api.ipify.org 2>/dev/null)"
-                    )
-                    
-                    for candidate in "${ipv4_candidates[@]}"; do
-                        # 验证是否为有效的IPv4地址（不是IPv6）
-                        if [[ -n "$candidate" && "$candidate" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-                            ipv4_address="$candidate"
-                            break
-                        fi
-                    done
-                fi
-                
-                # 获取IPv6地址
-                local ipv6_address=""
-                local ipv6_candidates=(
-                    "$(curl -6 -s --connect-timeout 3 ifconfig.me 2>/dev/null)"
-                    "$(curl -6 -s --connect-timeout 3 ipv6.icanhazip.com 2>/dev/null)"
-                    "$(curl -6 -s --connect-timeout 3 api6.ipify.org 2>/dev/null)"
-                )
-                
-                for candidate in "${ipv6_candidates[@]}"; do
-                    if [[ -n "$candidate" && "$candidate" =~ : ]]; then
-                        ipv6_address="$candidate"
-                        break
-                    fi
-                done
+                IFS='|' read -r ipv4_address ipv6_address <<< "$(get_access_ips)"
                 
                 # 显示管理地址
                 if [ -n "$ipv4_address" ]; then
@@ -2030,29 +1998,10 @@ function adguard_home_management() {
                     
                     echo -e "\n${YELLOW}管理地址：${NC}"
                     
-                    # 获取IPv4地址（优先内网）
-                    local ipv4_address=""
-                    local_ips=$(hostname -I 2>/dev/null | awk '{print $1}')
-                    if [ -z "$local_ips" ]; then
-                        local_ips=$(ip addr show 2>/dev/null | grep -E "inet (192\.168|10\.|172\.)" | awk '{print $2}' | cut -d/ -f1 | head -1)
-                    fi
+                    IFS='|' read -r ipv4_address ipv6_address <<< "$(get_access_ips)"
                     
-                    if [ -n "$local_ips" ]; then
-                        ipv4_address="$local_ips"
-                        echo -e "• ${GREEN}http://${ipv4_address}:3000${NC}"
-                    else
-                        # 尝试获取公网IPv4
-                        public_ipv4=$(curl -4 -s --connect-timeout 3 ifconfig.me 2>/dev/null)
-                        if [[ -n "$public_ipv4" && "$public_ipv4" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-                            echo -e "• ${GREEN}http://${public_ipv4}:3000${NC}"
-                        fi
-                    fi
-                    
-                    # 获取IPv6地址
-                    public_ipv6=$(curl -6 -s --connect-timeout 3 ifconfig.me 2>/dev/null)
-                    if [ -n "$public_ipv6" ]; then
-                        echo -e "• ${GREEN}http://[${public_ipv6}]:3000${NC}"
-                    fi
+                    [ -n "$ipv4_address" ] && echo -e "• ${GREEN}http://${ipv4_address}:3000${NC}"
+                    [ -n "$ipv6_address" ] && echo -e "• ${GREEN}http://[${ipv6_address}]:3000${NC}"
                     
                     echo ""
                     echo "安装目录: /opt/AdGuardHome"
