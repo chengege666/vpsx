@@ -177,7 +177,7 @@ EOF
     
     echo -e "${BLUE}正在清理残留规则并重启 Docker...${NC}"
     systemctl stop docker >/dev/null 2>&1
-    systemctl restart docker
+  systemctl restart docker
     
     if systemctl is-active --quiet docker; then
         echo -e "${GREEN}修复成功！Docker 服务已正常运行。${NC}"
@@ -981,9 +981,9 @@ function edit_daemon_json() {
 
     if [ ! -f "$DAEMON_FILE" ]; then
         echo "daemon.json 文件不存在，正在创建..."
-        sudo mkdir -p $(dirname "$DAEMON_FILE")
-        sudo touch "$DAEMON_FILE"
-        echo "{}" | sudo tee "$DAEMON_FILE" > /dev/null
+        mkdir -p $(dirname "$DAEMON_FILE")
+        touch "$DAEMON_FILE"
+        echo "{}" | tee "$DAEMON_FILE" > /dev/null
         if [ $? -eq 0 ]; then
             echo "daemon.json 文件创建成功。"
         else
@@ -996,7 +996,7 @@ function edit_daemon_json() {
     echo "正在使用 nano 编辑器打开 daemon.json 文件..."
     echo "编辑完成后，请按 Ctrl+X，然后按 Y 保存，最后按 Enter 退出。"
     echo ""
-    sudo nano "$DAEMON_FILE"
+    nano "$DAEMON_FILE"
 
     if [ $? -eq 0 ]; then
         echo "daemon.json 文件编辑完成。建议重启 Docker 服务以应用更改。"
@@ -1026,8 +1026,8 @@ function enable_docker_ipv6() {
     # 确保 daemon.json 文件存在
     if [ ! -f "$DAEMON_FILE" ]; then
         echo "daemon.json 文件不存在，正在创建..."
-        sudo mkdir -p $(dirname "$DAEMON_FILE")
-        echo "{}" | sudo tee "$DAEMON_FILE" > /dev/null
+       mkdir -p $(dirname "$DAEMON_FILE")
+    echo "{}" | tee "$DAEMON_FILE" > /dev/null
         if [ $? -ne 0 ]; then
             echo "创建 daemon.json 文件失败。"
             read -p "按任意键继续..."
@@ -1037,12 +1037,14 @@ function enable_docker_ipv6() {
 
     echo "正在配置 daemon.json 以启用 IPv6..."
     # 使用 jq 更新 daemon.json 文件
-    sudo jq '. + {"ipv6": true, "fixed-cidr-v6": "2001:db8:1::/64"}' "$DAEMON_FILE" | sudo tee "$DAEMON_FILE" > /dev/null
+    IPV6_CONFIG='{"fixed_cidr_v6": "2001:db8:1::/64"}' # Default IPv6 CIDR
+    jq --argjson ipv6_config "$IPV6_CONFIG" '. + {ipv6: true, fixed-cidr-v6: $ipv6_config.fixed_cidr_v6, enable-ipv6: true}' "$DAEMON_FILE" > /tmp/daemon.json.tmp
+    mv /tmp/daemon.json.tmp "$DAEMON_FILE"
 
     if [ $? -eq 0 ]; then
         echo "daemon.json 文件已更新，IPv6 已启用。"
         echo "正在重启 Docker 服务以应用更改..."
-        sudo systemctl restart docker
+        systemctl restart docker
         if [ $? -eq 0 ]; then
             echo "Docker 服务重启成功。IPv6 访问已开启。"
         else
@@ -1080,12 +1082,13 @@ function disable_docker_ipv6() {
 
     echo "正在配置 daemon.json 以禁用 IPv6..."
     # 使用 jq 更新 daemon.json 文件，移除 ipv6 和 fixed-cidr-v6 配置
-    sudo jq 'del(.ipv6) | del(."fixed-cidr-v6")' "$DAEMON_FILE" | sudo tee "$DAEMON_FILE" > /dev/null
+    jq 'del(.ipv6) | del(."fixed-cidr-v6") | del(."enable-ipv6")' "$DAEMON_FILE" > /tmp/daemon.json.tmp
+    mv /tmp/daemon.json.tmp "$DAEMON_FILE"
 
     if [ $? -eq 0 ]; then
         echo "daemon.json 文件已更新，IPv6 已禁用。"
         echo "正在重启 Docker 服务以应用更改..."
-        sudo systemctl restart docker
+        systemctl restart docker
         if [ $? -eq 0 ]; then
             echo "Docker 服务重启成功。IPv6 访问已关闭。"
         else
@@ -1137,10 +1140,10 @@ function backup_docker_env() {
         backup_path="."
     fi
 
-    sudo mkdir -p "$backup_path"
+    mkdir -p "$backup_path"
 
     echo "正在备份 Docker 环境到 $backup_path/$backup_file ..."
-    sudo tar -czvf "$backup_path/$backup_file" /var/lib/docker
+    tar -czvf "$backup_path/$backup_file" /var/lib/docker
 
     if [ $? -eq 0 ]; then
         echo "Docker 环境备份成功。"
@@ -1171,30 +1174,30 @@ function uninstall_docker() {
         docker volume rm $(docker volume ls -q)
 
         echo "正在停止并禁用 Docker 服务..."
-        sudo systemctl stop docker
-        sudo systemctl disable docker
+        systemctl stop docker
+        systemctl disable docker
 
         echo "正在卸载 Docker 软件包..."
         if command -v apt >/dev/null 2>&1; then
             echo "检测到 Debian/Ubuntu 系统，使用 apt 进行卸载..."
-            sudo apt purge -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-            sudo apt autoremove -y
+            apt purge -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            apt autoremove -y
         elif command -v yum >/dev/null 2>&1; then
             echo "检测到 CentOS/RHEL 系统，使用 yum 进行卸载..."
-            sudo yum remove -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-            sudo yum autoremove -y
+            yum remove -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            yum autoremove -y
         elif command -v dnf >/dev/null 2>&1; then
             echo "检测到 Fedora/RHEL 8+ 系统，使用 dnf 进行卸载..."
-            sudo dnf remove -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-            sudo dnf autoremove -y
+            dnf remove -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            dnf autoremove -y
         else
             echo "未检测到支持的包管理器 (apt, yum, dnf)。请手动卸载 Docker 软件包。"
         fi
 
         echo "正在删除 Docker 配置文件和目录..."
-        sudo rm -rf /var/lib/docker
-        sudo rm -rf /etc/docker
-        sudo rm -rf /var/run/docker.sock
+        rm -rf /var/lib/docker
+        rm -rf /etc/docker
+        rm -rf /var/run/docker.sock
 
         echo "Docker 环境已成功卸载。"
     else
