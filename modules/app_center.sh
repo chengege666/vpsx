@@ -280,16 +280,18 @@ function github_proxy_management() {
         echo -e " ${GREEN}2.${NC} 更新 GitHub 加速站"
         echo -e " ${GREEN}3.${NC} 卸载 GitHub 加速站"
         echo -e " ${GREEN}4.${NC} 启动/停止/重启管理"
+        echo -e " ${GREEN}5.${NC} 查看容器日志 (排错)"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC} 返回上一级菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-4): " github_choice
+        read -p "请输入你的选择 (0-5): " github_choice
 
         case "$github_choice" in
             1) install_github_proxy ;;
             2) update_github_proxy ;;
             3) uninstall_github_proxy ;;
             4) manage_github_proxy_container ;;
+            5) docker logs --tail 50 gh-proxy-py; read -p "按回车键继续..." ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
