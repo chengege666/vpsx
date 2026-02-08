@@ -1855,7 +1855,7 @@ function view_npm_status() {
 function view_npm_login_info() {
     clear
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}          查看 Nginx Proxy Manager 登录信息${NC}"
+    echo -e "${GREEN}    查看 Nginx Proxy Manager 登录信息     ${NC}"
     echo -e "${CYAN}=========================================${NC}"
 
     if [ -d "/opt/npm" ]; then
