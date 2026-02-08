@@ -262,7 +262,7 @@ function github_proxy_management() {
         if docker ps -a --format '{{.Names}}' | grep -q "^gh-proxy-py$"; then
             echo -e "          状态: ${GREEN}已安装${NC}"
             # 获取映射端口
-            local host_port=$(docker inspect gh-proxy-py --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}' 2>/dev/null)
+            local host_port=$(docker inspect gh-proxy-py --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}' 2>/dev/null)
             local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
             local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
             local local_ip=$(hostname -I | awk '{print $1}')
@@ -329,8 +329,8 @@ function install_github_proxy() {
     docker run -d \
         --name="gh-proxy-py" \
         --restart=always \
-        -p ${host_port}:80 \
-        hunsh/gh-proxy-py:latest
+        -p ${host_port}:8080 \
+        hunsh/gh-proxy:latest
 
     if [ $? -eq 0 ]; then
         local local_ip=$(hostname -I | awk '{print $1}')
@@ -355,10 +355,10 @@ function update_github_proxy() {
     fi
 
     # 获取当前映射端口
-    local old_port=$(docker inspect gh-proxy-py --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}' 2>/dev/null)
+    local old_port=$(docker inspect gh-proxy-py --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}' 2>/dev/null)
     
     echo -e "${BLUE}正在拉取最新镜像...${NC}"
-    docker pull hunsh/gh-proxy-py:latest
+    docker pull hunsh/gh-proxy:latest
     
     echo -e "${BLUE}正在重启容器...${NC}"
     docker stop gh-proxy-py &>/dev/null
@@ -367,8 +367,8 @@ function update_github_proxy() {
     docker run -d \
         --name="gh-proxy-py" \
         --restart=always \
-        -p ${old_port}:80 \
-        hunsh/gh-proxy-py:latest
+        -p ${old_port}:8080 \
+        hunsh/gh-proxy:latest
 
     echo -e "${GREEN}更新完成！${NC}"
     read -p "按回车键继续..."
