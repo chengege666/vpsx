@@ -45,9 +45,9 @@ function install_update_docker_env() {
             1)
                 echo -e "${BLUE}开始更新 Docker...${NC}"
                 curl -fsSL https://get.docker.com -o get-docker.sh
-                if sudo sh get-docker.sh; then
+                if sh get-docker.sh; then
                     rm get-docker.sh
-                    sudo systemctl start docker
+                    systemctl start docker
                     if systemctl is-active --quiet docker; then
                         echo -e "${GREEN}Docker 更新并启动成功。${NC}"
                     else
@@ -79,15 +79,15 @@ function install_update_docker_env() {
             1)
                 echo -e "${BLUE}开始安装 Docker...${NC}"
                 curl -fsSL https://get.docker.com -o get-docker.sh
-                if sudo sh get-docker.sh; then
+                if sh get-docker.sh; then
                     rm get-docker.sh
                     
                     echo -e "${BLUE}正在启动 Docker 服务...${NC}"
-                    sudo systemctl start docker
-                    sudo systemctl enable docker
+                    systemctl start docker
+                    systemctl enable docker
                     
                     if systemctl is-active --quiet docker; then
-                        sudo usermod -aG docker $USER
+                        usermod -aG docker $USER
                         echo -e "${GREEN}Docker 安装并启动成功。${NC}"
                     else
                         echo -e "${RED}Docker 安装脚本执行成功，但服务启动失败。${NC}"
@@ -146,38 +146,38 @@ function fix_docker_iptables() {
     
     # 1. 加载必要的内核模块
     echo -e "${BLUE}[1/3] 正在加载内核模块 (overlay, br_netfilter)...${NC}"
-    sudo modprobe overlay
-    sudo modprobe br_netfilter
+    modprobe overlay
+    modprobe br_netfilter
     
     # 永久写入模块配置
-    cat <<EOF | sudo tee /etc/modules-load.d/docker.conf > /dev/null
+    cat <<EOF | tee /etc/modules-load.d/docker.conf > /dev/null
 overlay
 br_netfilter
 EOF
 
     # 2. 优化系统网络参数
     echo -e "${BLUE}[2/3] 正在优化内核网络参数...${NC}"
-    cat <<EOF | sudo tee /etc/sysctl.d/docker.conf > /dev/null
+    cat <<EOF | tee /etc/sysctl.d/docker.conf > /dev/null
 net.bridge.bridge-nf-call-iptables  = 1
 net.bridge.bridge-nf-call-ip6tables = 1
 net.ipv4.ip_forward                 = 1
 EOF
-    sudo sysctl --system >/dev/null 2>&1
+    sysctl --system >/dev/null 2>&1
 
     # 3. 强制切换 iptables 模式
     echo -e "${BLUE}[3/3] 正在强制切换 iptables 至 legacy 模式...${NC}"
     if command -v update-alternatives >/dev/null 2>&1; then
-        sudo update-alternatives --set iptables /usr/sbin/iptables-legacy >/dev/null 2>&1
-        sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy >/dev/null 2>&1
+        update-alternatives --set iptables /usr/sbin/iptables-legacy >/dev/null 2>&1
+        update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy >/dev/null 2>&1
     else
         echo -e "${YELLOW}警告: 找不到 update-alternatives，尝试手动软链接...${NC}"
-        sudo ln -sf /usr/sbin/iptables-legacy /usr/sbin/iptables
-        sudo ln -sf /usr/sbin/ip6tables-legacy /usr/sbin/ip6tables
+        ln -sf /usr/sbin/iptables-legacy /usr/sbin/iptables
+        ln -sf /usr/sbin/ip6tables-legacy /usr/sbin/ip6tables
     fi
     
     echo -e "${BLUE}正在清理残留规则并重启 Docker...${NC}"
-    sudo systemctl stop docker >/dev/null 2>&1
-    sudo systemctl restart docker
+    systemctl stop docker >/dev/null 2>&1
+    systemctl restart docker
     
     if systemctl is-active --quiet docker; then
         echo -e "${GREEN}修复成功！Docker 服务已正常运行。${NC}"
