@@ -14,10 +14,14 @@ function node_tools_menu() {
         echo -e " ${GREEN}3.${NC}  安装 Argo X (X-UI)"
         echo -e " ${GREEN}4.${NC}  Cloudflare Argo 隧道管理"
         echo -e " ${GREEN}5.${NC}  Hi Hysteria"
+        echo -e " ${GREEN}6.${NC}  Sing-box 全家桶"
+        echo -e " ${GREEN}7.${NC}  233boysing-box"
+        echo -e " ${GREEN}8.${NC}  Sing-box-yg"
+        echo -e " ${GREEN}9.${NC}  s-ui"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-5): " node_choice
+        read -p "请输入你的选择 (0-9): " node_choice
 
         case "$node_choice" in
             1)
@@ -44,6 +48,26 @@ function node_tools_menu() {
                 echo -e "${BLUE}正在启动 Hi Hysteria 安装脚本...${NC}"
                 # 注意：根据系统提醒，git.io 链接可能失效，但此处保留用户原始意图，若失效建议用户更换为项目原地址
                 bash <(curl -fsSL https://git.io/hysteria.sh)
+                read -p "按任意键继续..."
+                ;;
+            6)
+                echo -e "${BLUE}正在启动 Sing-box 全家桶脚本...${NC}"
+                bash <(wget -qO- https://raw.githubusercontent.com/fscarmen/sing-box/main/sing-box.sh)
+                read -p "按任意键继续..."
+                ;;
+            7)
+                echo -e "${BLUE}正在启动 233boysing-box 脚本...${NC}"
+                bash <(wget -qO- -o- https://github.com/233boy/sing-box/raw/main/install.sh)
+                read -p "按任意键继续..."
+                ;;
+            8)
+                echo -e "${BLUE}正在启动 Sing-box-yg 脚本...${NC}"
+                bash <(wget -qO- https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/sb.sh)
+                read -p "按任意键继续..."
+                ;;
+            9)
+                echo -e "${BLUE}正在启动 s-ui 脚本...${NC}"
+                bash <(curl -Ls https://raw.githubusercontent.com/alireza0/s-ui/master/install.sh)
                 read -p "按任意键继续..."
                 ;;
             0)
