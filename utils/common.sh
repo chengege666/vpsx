@@ -27,3 +27,37 @@ install_package() {
     fi
     sleep 1
 }
+
+# 获取访问 IP (优先公网 IPv4 -> 内网 IPv4, 优先公网 IPv6 -> 内网 IPv6)
+function get_access_ips() {
+    local ipv4=""
+    local ipv6=""
+
+    # 1. 获取 IPv4
+    # 优先公网 IPv4
+    ipv4=$(curl -4 -s --connect-timeout 2 ifconfig.me 2>/dev/null || curl -4 -s --connect-timeout 2 ipv4.icanhazip.com 2>/dev/null)
+    # 严格校验 IPv4 格式，防止混入 IPv6
+    if [[ ! "$ipv4" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        ipv4=""
+    fi
+
+    # 若公网获取失败，则获取内网 IPv4
+    if [ -z "$ipv4" ]; then
+        ipv4=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
+    fi
+    
+    # 2. 获取 IPv6
+    # 优先公网 IPv6
+    ipv6=$(curl -6 -s --connect-timeout 2 ifconfig.me 2>/dev/null || curl -6 -s --connect-timeout 2 ipv6.icanhazip.com 2>/dev/null)
+    # 校验 IPv6 格式 (简单检查是否包含冒号)
+    if [[ ! "$ipv6" =~ : ]]; then
+        ipv6=""
+    fi
+
+    # 若公网获取失败，则获取内网 IPv6 (全球单播地址 2000::/3)
+    if [ -z "$ipv6" ]; then
+        ipv6=$(ip -6 addr show 2>/dev/null | grep -E 'inet6 [23]' | awk '{print $2}' | cut -d/ -f1 | head -n1)
+    fi
+    
+    echo "$ipv4|$ipv6"
+}

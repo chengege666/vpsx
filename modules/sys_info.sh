@@ -114,29 +114,33 @@ function system_info_query() {
     DEFAULT_QDISC=$(sysctl net.core.default_qdisc | awk '{print $3}')
     echo -e "${GREEN}队列规则：${NC}${SKYBLUE}${DEFAULT_QDISC:-无法获取}${NC}"
     
-    # 公网IP及地理位置 (ipinfo.io 一次请求获取多个信息)
-    IP_INFO=$(curl -s --connect-timeout 5 ipinfo.io/json)
-    if [ -n "$IP_INFO" ]; then
-        IPV4=$(echo "$IP_INFO" | grep '"ip"' | cut -d'"' -f4)
-        ISP=$(echo "$IP_INFO" | grep '"org"' | cut -d'"' -f4)
-        CITY=$(echo "$IP_INFO" | grep '"city"' | cut -d'"' -f4)
-        REGION=$(echo "$IP_INFO" | grep '"region"' | cut -d'"' -f4)
-        COUNTRY=$(echo "$IP_INFO" | grep '"country"' | cut -d'"' -f4)
-        
-        echo -e "${GREEN}运营商：${NC}${SKYBLUE}$ISP${NC}"
-        echo -e "${GREEN}IPV4地址：${NC}${SKYBLUE}$IPV4${NC}"
-        
-        # 尝试获取 IPV6
-        IPV6=$(curl -6 -s --connect-timeout 3 ifconfig.me || curl -6 -s --connect-timeout 3 http://ipv6.icanhazip.com)
-        [ -n "$IPV6" ] && echo -e "${GREEN}IPV6地址：${NC}${SKYBLUE}$IPV6${NC}"
-        
-        echo -e "${GREEN}地理位置:${NC} ${SKYBLUE}$CITY, $REGION, $COUNTRY${NC}"
-    else
-        echo -e "${GREEN}运营商：${NC}${SKYBLUE}无法获取${NC}"
-        echo -e "${GREEN}IPV4地址：${NC}${SKYBLUE}$(curl -4 -s --connect-timeout 3 ifconfig.me || echo "无法获取")${NC}"
-        echo -e "${GREEN}IPV6地址：${NC}${SKYBLUE}$(curl -6 -s --connect-timeout 3 ifconfig.me || echo "未分配/无法获取")${NC}"
-        echo -e "${GREEN}地理位置:${NC} ${SKYBLUE}无法获取${NC}"
+    # IP及地理位置
+    IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+    
+    # 获取地理位置及运营商信息
+    ISP="无法获取"
+    LOCATION="无法获取"
+    if [ -n "$ipv4" ]; then
+        # 如果是公网 IP，尝试获取详细信息
+        if [[ ! "$ipv4" =~ ^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.) ]]; then
+            IP_INFO=$(curl -s --connect-timeout 5 "ipinfo.io/$ipv4/json")
+            if [ -n "$IP_INFO" ]; then
+                ISP=$(echo "$IP_INFO" | grep '"org"' | cut -d'"' -f4)
+                CITY=$(echo "$IP_INFO" | grep '"city"' | cut -d'"' -f4)
+                REGION=$(echo "$IP_INFO" | grep '"region"' | cut -d'"' -f4)
+                COUNTRY=$(echo "$IP_INFO" | grep '"country"' | cut -d'"' -f4)
+                [ -n "$CITY" ] && LOCATION="$CITY, $REGION, $COUNTRY"
+            fi
+        else
+            ISP="内网 IP"
+            LOCATION="局域网"
+        fi
     fi
+    
+    echo -e "${GREEN}运营商：${NC}${SKYBLUE}${ISP}${NC}"
+    [ -n "$ipv4" ] && echo -e "${GREEN}IPV4地址：${NC}${SKYBLUE}$ipv4${NC}"
+    [ -n "$ipv6" ] && echo -e "${GREEN}IPV6地址：${NC}${SKYBLUE}$ipv6${NC}"
+    echo -e "${GREEN}地理位置:${NC} ${SKYBLUE}${LOCATION}${NC}"
     
     DNS_ADDR=$(grep -E '^nameserver' /etc/resolv.conf | awk '{print $2}' | tr '\n' ' ')
     echo -e "${GREEN}DNS地址:${NC} ${SKYBLUE}${DNS_ADDR:-无法获取}${NC}"
