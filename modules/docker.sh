@@ -23,32 +23,41 @@ function check_docker_status() {
 
     local docker_command_found=false
     local docker_service_active=false
+    local docker_version=""
+    local docker_is_functional=false
 
+    # 1. 检查 'docker' 命令是否存在且可执行
     if command -v docker >/dev/null 2>&1; then
         docker_command_found=true
+        # 2. 尝试获取 Docker 版本以确认其功能正常
+        docker_version=$(docker --version 2>/dev/null | awk '{print $3}' | sed 's/,//')
+        if [ -n "$docker_version" ]; then
+            docker_is_functional=true
+        fi
     fi
 
-    # 检查 systemctl 是否可用，因为某些精简系统可能没有
+    # 3. 检查 Docker 服务状态
     if command -v systemctl >/dev/null 2>&1; then
         if systemctl is-active --quiet docker >/dev/null 2>&1; then
             docker_service_active=true
         fi
     else
-        # 如果没有 systemctl，尝试检查 docker 进程是否存在
+        # 对于没有 systemctl 的系统，尝试检查 dockerd 进程是否存在
         if pgrep dockerd >/dev/null 2>&1; then
             docker_service_active=true
         fi
     fi
 
-    if $docker_command_found && $docker_service_active; then
-        echo -e " Docker ${GREEN}已安装并运行${NC}。版本信息:"
-        docker --version | awk '{print $3}' | sed 's/,//'
-    elif $docker_command_found && ! $docker_service_active; then
-        echo -e " Docker ${YELLOW}已安装但未运行${NC}。版本信息:"
-        docker --version | awk '{print $3}' | sed 's/,//'
+    if $docker_is_functional && $docker_service_active; then
+        echo -e " Docker ${GREEN}已安装并运行${NC}。版本信息: ${docker_version}"
+    elif $docker_is_functional && ! $docker_service_active; then
+        echo -e " Docker ${YELLOW}已安装但未运行${NC}。版本信息: ${docker_version}"
         echo -e "${YELLOW}请尝试启动 Docker 服务: systemctl start docker${NC}"
     else
-        echo -e " Docker ${RED}未安装${NC}。"
+        echo -e " Docker ${RED}未安装或安装异常${NC}。"
+        if $docker_command_found && ! $docker_is_functional; then
+            echo -e "${YELLOW}提示: 'docker' 命令存在，但无法获取版本信息，可能安装不完整或已损坏。${NC}"
+        fi
     fi
     echo -e "${CYAN}=========================================${NC}"
 }
