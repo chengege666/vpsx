@@ -1903,82 +1903,62 @@ function adguard_home_management() {
                 echo -e "${BLUE}开始安装 AdGuard Home...${NC}"
                 curl -s -S -L https://raw.githubusercontent.com/AdguardTeam/AdGuardHome/master/scripts/install.sh | sh -s -- -v
                 
-                # 获取网络地址信息
-                echo -e "\n${YELLOW}正在检测网络地址...${NC}"
-                
-                # 1. 获取公网IPv4
-                local public_ipv4=""
-                public_ipv4=$(curl -4 -s --connect-timeout 3 ifconfig.me 2>/dev/null || \
-                             curl -4 -s --connect-timeout 3 ipv4.icanhazip.com 2>/dev/null || \
-                             curl -4 -s --connect-timeout 3 api.ipify.org 2>/dev/null || \
-                             curl -4 -s --connect-timeout 3 ident.me 2>/dev/null)
-                
-                # 验证是否为有效的IPv4地址
-                if [[ -z "$public_ipv4" || ! "$public_ipv4" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-                    public_ipv4=""
-                fi
-                
-                # 2. 获取公网IPv6
-                local public_ipv6=""
-                public_ipv6=$(curl -6 -s --connect-timeout 3 ifconfig.me 2>/dev/null || \
-                             curl -6 -s --connect-timeout 3 ipv6.icanhazip.com 2>/dev/null || \
-                             curl -6 -s --connect-timeout 3 api6.ipify.org 2>/dev/null)
-                
-                # 3. 获取内网IP（优先获取私有地址）
-                local local_ips=""
-                # 方法1：使用hostname -I
-                local_ips=$(hostname -I 2>/dev/null | awk '{print $1}')
-                
-                # 方法2：如果hostname -I失败，使用ip命令
-                if [ -z "$local_ips" ]; then
-                    # 获取所有IPv4地址
-                    local all_ips=$(ip -4 addr show scope global 2>/dev/null | grep -E "inet (172|192|10|127|169)" | awk '{print $2}' | cut -d/ -f1)
-                    
-                    # 优先选择非127和169开头的地址
-                    for ip in $all_ips; do
-                        if [[ $ip != 127.* && $ip != 169.254.* ]]; then
-                            local_ips="$ip"
-                            break
-                        fi
-                    done
-                    
-                    # 如果没有找到合适的，取第一个
-                    if [ -z "$local_ips" ] && [ -n "$all_ips" ]; then
-                        local_ips=$(echo "$all_ips" | head -1)
-                    fi
-                fi
-                
-                # 方法3：使用路由信息获取本地IP
-                if [ -z "$local_ips" ]; then
-                    local_ips=$(ip route get 1 2>/dev/null | awk '{print $7}' | head -1)
-                fi
-                
                 echo -e "${GREEN}安装完成，访问地址：${NC}"
                 
-                # 显示访问地址
-                if [ -n "$public_ipv4" ]; then
-                    echo -e "• 公网IPv4: ${YELLOW}http://${public_ipv4}:3000${NC}"
+                # 获取IPv4地址（优先内网，没有则尝试公网）
+                local ipv4_address=""
+                
+                # 1. 尝试获取内网IPv4
+                local_ips=$(hostname -I 2>/dev/null | awk '{print $1}')
+                if [ -z "$local_ips" ]; then
+                    local_ips=$(ip addr show 2>/dev/null | grep -E "inet (192\.168|10\.|172\.)" | awk '{print $2}' | cut -d/ -f1 | head -1)
                 fi
                 
                 if [ -n "$local_ips" ]; then
-                    echo -e "• 本地网络: ${CYAN}http://${local_ips}:3000${NC}"
-                fi
-                
-                if [ -n "$public_ipv6" ]; then
-                    echo -e "• 公网IPv6: ${YELLOW}http://[${public_ipv6}]:3000${NC}"
-                fi
-                
-                # 如果都没有获取到IP，提示用户手动检查
-                if [ -z "$public_ipv4" ] && [ -z "$local_ips" ] && [ -z "$public_ipv6" ]; then
-                    echo -e "${RED}未能自动获取IP地址，请手动检查网络配置。${NC}"
-                    echo -e "尝试运行以下命令获取IP："
-                    echo -e "  ${YELLOW}ip addr show | grep -E 'inet (172|192|10)'${NC}"
+                    ipv4_address="$local_ips"
                 else
-                    echo -e "\n${YELLOW}注意：${NC}"
-                    if [ -n "$local_ips" ] && [ -z "$public_ipv4" ]; then
-                        echo -e "• 您使用的是内网IP，只能在局域网内访问"
+                    # 2. 尝试获取公网IPv4（确保是真正的IPv4）
+                    local ipv4_candidates=(
+                        "$(curl -4 -s --connect-timeout 3 ifconfig.me 2>/dev/null)"
+                        "$(curl -4 -s --connect-timeout 3 ipv4.icanhazip.com 2>/dev/null)"
+                        "$(curl -4 -s --connect-timeout 3 api.ipify.org 2>/dev/null)"
+                    )
+                    
+                    for candidate in "${ipv4_candidates[@]}"; do
+                        # 验证是否为有效的IPv4地址（不是IPv6）
+                        if [[ -n "$candidate" && "$candidate" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                            ipv4_address="$candidate"
+                            break
+                        fi
+                    done
+                fi
+                
+                # 获取IPv6地址
+                local ipv6_address=""
+                local ipv6_candidates=(
+                    "$(curl -6 -s --connect-timeout 3 ifconfig.me 2>/dev/null)"
+                    "$(curl -6 -s --connect-timeout 3 ipv6.icanhazip.com 2>/dev/null)"
+                    "$(curl -6 -s --connect-timeout 3 api6.ipify.org 2>/dev/null)"
+                )
+                
+                for candidate in "${ipv6_candidates[@]}"; do
+                    if [[ -n "$candidate" && "$candidate" =~ : ]]; then
+                        ipv6_address="$candidate"
+                        break
                     fi
-                    echo -e "• 如果无法访问，请检查防火墙是否开放3000端口"
+                done
+                
+                # 显示管理地址
+                if [ -n "$ipv4_address" ]; then
+                    echo -e "• ${YELLOW}http://${ipv4_address}:3000${NC}"
+                fi
+                
+                if [ -n "$ipv6_address" ]; then
+                    echo -e "• ${YELLOW}http://[${ipv6_address}]:3000${NC}"
+                fi
+                
+                if [ -z "$ipv4_address" ] && [ -z "$ipv6_address" ]; then
+                    echo -e "${RED}未能获取IP地址，请手动检查网络配置。${NC}"
                 fi
                 
                 read -p "按任意键继续..."
@@ -2031,57 +2011,29 @@ function adguard_home_management() {
                 if [ -f "/opt/AdGuardHome/AdGuardHome" ]; then
                     echo -e "${CYAN}--- AdGuard Home 信息 ---${NC}"
                     /opt/AdGuardHome/AdGuardHome --version
-                    echo ""
                     
-                    echo -e "${YELLOW}网络地址信息：${NC}"
+                    echo -e "\n${YELLOW}管理地址：${NC}"
                     
-                    # 获取公网IPv4
-                    local public_ipv4=""
-                    public_ipv4=$(curl -4 -s --connect-timeout 3 ifconfig.me 2>/dev/null || \
-                                 curl -4 -s --connect-timeout 3 ipv4.icanhazip.com 2>/dev/null)
-                    
-                    # 获取内网IP
-                    local local_ips=""
+                    # 获取IPv4地址（优先内网）
+                    local ipv4_address=""
                     local_ips=$(hostname -I 2>/dev/null | awk '{print $1}')
-                    
                     if [ -z "$local_ips" ]; then
-                        local_ips=$(ip addr show 2>/dev/null | grep -E "inet (172|192|10)" | awk '{print $2}' | cut -d/ -f1 | head -1)
-                    fi
-                    
-                    # 获取公网IPv6
-                    local public_ipv6=""
-                    public_ipv6=$(curl -6 -s --connect-timeout 3 ifconfig.me 2>/dev/null || \
-                                 curl -6 -s --connect-timeout 3 ipv6.icanhazip.com 2>/dev/null)
-                    
-                    # 显示IP地址
-                    if [ -n "$public_ipv4" ]; then
-                        echo -e "公网IPv4: ${GREEN}${public_ipv4}${NC}"
-                    else
-                        echo -e "公网IPv4: ${YELLOW}未检测到${NC}"
+                        local_ips=$(ip addr show 2>/dev/null | grep -E "inet (192\.168|10\.|172\.)" | awk '{print $2}' | cut -d/ -f1 | head -1)
                     fi
                     
                     if [ -n "$local_ips" ]; then
-                        echo -e "本地IPv4: ${GREEN}${local_ips}${NC}"
+                        ipv4_address="$local_ips"
+                        echo -e "• ${GREEN}http://${ipv4_address}:3000${NC}"
                     else
-                        echo -e "本地IPv4: ${YELLOW}未检测到${NC}"
+                        # 尝试获取公网IPv4
+                        public_ipv4=$(curl -4 -s --connect-timeout 3 ifconfig.me 2>/dev/null)
+                        if [[ -n "$public_ipv4" && "$public_ipv4" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                            echo -e "• ${GREEN}http://${public_ipv4}:3000${NC}"
+                        fi
                     fi
                     
-                    if [ -n "$public_ipv6" ]; then
-                        echo -e "公网IPv6: ${GREEN}${public_ipv6}${NC}"
-                    else
-                        echo -e "公网IPv6: ${YELLOW}未检测到${NC}"
-                    fi
-                    
-                    echo ""
-                    echo -e "${YELLOW}管理地址：${NC}"
-                    
-                    # 显示可访问地址（优先使用公网IP，如果没有则用内网IP）
-                    if [ -n "$public_ipv4" ]; then
-                        echo -e "• ${GREEN}http://${public_ipv4}:3000${NC}"
-                    elif [ -n "$local_ips" ]; then
-                        echo -e "• ${CYAN}http://${local_ips}:3000${NC} (内网地址)"
-                    fi
-                    
+                    # 获取IPv6地址
+                    public_ipv6=$(curl -6 -s --connect-timeout 3 ifconfig.me 2>/dev/null)
                     if [ -n "$public_ipv6" ]; then
                         echo -e "• ${GREEN}http://[${public_ipv6}]:3000${NC}"
                     fi
@@ -2089,14 +2041,6 @@ function adguard_home_management() {
                     echo ""
                     echo "安装目录: /opt/AdGuardHome"
                     echo "配置文件: /opt/AdGuardHome/AdGuardHome.yaml"
-                    
-                    # 检查端口监听状态
-                    echo -e "\n${YELLOW}端口监听状态：${NC}"
-                    if command -v ss &> /dev/null; then
-                        ss -tulpn | grep -E ":3000|:53" | head -5
-                    elif command -v netstat &> /dev/null; then
-                        netstat -tulpn | grep -E ":3000|:53" | head -5
-                    fi
                 else
                     echo -e "${YELLOW}未检测到 AdGuard Home 安装。${NC}"
                 fi
@@ -2106,24 +2050,12 @@ function adguard_home_management() {
                 if [ -f "/opt/AdGuardHome/AdGuardHome" ]; then
                     echo -e "${CYAN}--- AdGuard Home 状态 ---${NC}"
                     /opt/AdGuardHome/AdGuardHome -s status
-                    echo ""
                     
                     # 检查服务是否正在运行
                     if systemctl is-active --quiet AdGuardHome; then
-                        echo -e "服务状态: ${GREEN}运行中${NC}"
+                        echo -e "\n服务状态: ${GREEN}运行中${NC}"
                     else
-                        echo -e "服务状态: ${RED}未运行${NC}"
-                    fi
-                    
-                    # 查看最近日志
-                    echo -e "\n${YELLOW}最近日志：${NC}"
-                    if journalctl -u AdGuardHome --no-pager -n 10 2>/dev/null; then
-                        echo ""
-                    else
-                        echo "无法获取日志，尝试其他方式..."
-                        if [ -f "/var/log/AdGuardHome.log" ]; then
-                            tail -10 /var/log/AdGuardHome.log
-                        fi
+                        echo -e "\n服务状态: ${RED}未运行${NC}"
                     fi
                 else
                     echo -e "${RED}未安装 AdGuard Home。${NC}"
