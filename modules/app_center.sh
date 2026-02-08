@@ -2,6 +2,25 @@
 
 # 应用中心模块
 
+# 获取访问 IP (优先公网 IPv4 -> 内网 IPv4, 优先公网 IPv6 -> 内网 IPv6)
+function get_access_ips() {
+    # 1. 获取 IPv4
+    local ipv4=$(curl -4 -s --connect-timeout 2 ifconfig.me 2>/dev/null || curl -4 -s --connect-timeout 2 ipv4.icanhazip.com 2>/dev/null)
+    if [ -z "$ipv4" ]; then
+        # 确保只匹配 IPv4 地址
+        ipv4=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
+    fi
+    
+    # 2. 获取 IPv6
+    local ipv6=$(curl -6 -s --connect-timeout 2 ifconfig.me 2>/dev/null || curl -6 -s --connect-timeout 2 ipv6.icanhazip.com 2>/dev/null)
+    if [ -z "$ipv6" ]; then
+        # 获取全球单播地址 (2000::/3)
+        ipv6=$(ip -6 addr show 2>/dev/null | grep -E 'inet6 [23]' | awk '{print $2}' | cut -d/ -f1 | head -n1)
+    fi
+    
+    echo "$ipv4|$ipv6"
+}
+
 # 应用中心菜单
 function app_center_menu() {
     while true; do
@@ -263,14 +282,11 @@ function github_proxy_management() {
             echo -e "          状态: ${GREEN}已安装${NC}"
             # 获取映射端口
             local host_port=$(docker inspect github-proxy --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}' 2>/dev/null)
-            local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
-            local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
-            local local_ip=$(hostname -I | awk '{print $1}')
+            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
             
             echo -e "${CYAN}-----------------------------------------${NC}"
-            [ -n "$public_ipv4" ] && echo -e "公网 IPv4 访问: ${YELLOW}http://${public_ipv4}:${host_port}${NC}"
-            [ -n "$local_ip" ] && echo -e "内网 IP 访问:   ${YELLOW}http://${local_ip}:${host_port}${NC}"
-            [ -n "$public_ipv6" ] && echo -e "公网 IPv6 访问: ${YELLOW}http://[${public_ipv6}]:${host_port}${NC}"
+            [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+            [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
         else
             echo -e "          状态: ${RED}未安装${NC}"
         fi
@@ -341,9 +357,11 @@ function install_github_proxy() {
         wjqserver/ghproxy
 
     if [ $? -eq 0 ]; then
-        local local_ip=$(hostname -I | awk '{print $1}')
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+
         echo -e "${GREEN}GitHub 加速站安装成功！${NC}"
-        echo -e "访问地址 (内网): ${YELLOW}http://${local_ip}:${host_port}${NC}"
+        [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+        [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
     else
         echo -e "${RED}安装失败，请检查 Docker 日志。${NC}"
     fi
@@ -980,12 +998,11 @@ function deploy_komari_panel() {
         ghcr.io/komari-monitor/komari:latest
 
     if [ $? -eq 0 ]; then
-        local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
-        local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
         
         echo -e "${GREEN}Komari 监控面板部署成功！${NC}"
-        [ -n "$public_ipv4" ] && echo -e "IPv4 访问地址: ${CYAN}http://${public_ipv4}:${host_port}${NC}"
-        [ -n "$public_ipv6" ] && echo -e "IPv6 访问地址: ${CYAN}http://[${public_ipv6}]:${host_port}${NC}"
+        [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${CYAN}http://${ipv4}:${host_port}${NC}"
+        [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${CYAN}http://[${ipv6}]:${host_port}${NC}"
         
         # 尝试从日志中获取默认密码
         sleep 2 # 等待容器启动并生成密码
@@ -1148,12 +1165,14 @@ function access_komari_web() {
     local host_port=$(docker inspect komari --format='{{(index (index .NetworkSettings.Ports "25774/tcp") 0).HostPort}}' 2>/dev/null)
     host_port=${host_port:-25774}
     
-    local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
-    local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
+    local ipv4=$(curl -4 -s --connect-timeout 2 ifconfig.me 2>/dev/null || curl -4 -s --connect-timeout 2 ipv4.icanhazip.com 2>/dev/null)
+    [ -z "$ipv4" ] && ipv4=$(hostname -I 2>/dev/null | awk '{print $1}')
+    local ipv6=$(curl -6 -s --connect-timeout 2 ifconfig.me 2>/dev/null || curl -6 -s --connect-timeout 2 ipv6.icanhazip.com 2>/dev/null)
+    [ -z "$ipv6" ] && ipv6=$(ip -6 addr show 2>/dev/null | grep -E 'inet6 [23]' | awk '{print $2}' | cut -d/ -f1 | head -n1)
     
     echo -e "您的 Komari 面板访问地址为："
-    [ -n "$public_ipv4" ] && echo -e "IPv4 地址: ${YELLOW}http://${public_ipv4}:${host_port}${NC}"
-    [ -n "$public_ipv6" ] && echo -e "IPv6 地址: ${YELLOW}http://[${public_ipv6}]:${host_port}${NC}"
+    [ -n "$ipv4" ] && echo -e "IPv4 地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+    [ -n "$ipv6" ] && echo -e "IPv6 地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
     echo ""
     # 尝试从日志中获取默认密码
     local log_pwd=$(docker logs komari 2>&1 | grep "Password:" | awk -F 'Password: ' '{print $2}' | awk '{print $1}')
@@ -1258,12 +1277,11 @@ function install_pansou_docker_run() {
     
     echo "正在拉取镜像并启动容器..."
     if docker run -d --name pansou -p ${host_port}:80 ghcr.io/fish2018/pansou-web; then
-        local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
-        local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
         
         echo -e "${GREEN}✅ PanSou 安装成功！${NC}"
-        [ -n "$public_ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${public_ipv4}:${host_port}${NC}"
-        [ -n "$public_ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${public_ipv6}]:${host_port}${NC}"
+        [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+        [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
     else
         echo -e "${RED}❌ 安装失败，请检查错误信息。${NC}"
     fi
@@ -1331,12 +1349,11 @@ EOF
     # 启动服务
     echo "正在启动 PanSou 服务..."
     if $compose_cmd up -d; then
-        local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
-        local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
         
         echo -e "${GREEN}✅ PanSou 安装成功！${NC}"
-        [ -n "$public_ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${public_ipv4}:${host_port}${NC}"
-        [ -n "$public_ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${public_ipv6}]:${host_port}${NC}"
+        [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+        [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
         echo -e "数据目录：${pansou_dir}/data"
     else
         echo -e "${RED}❌ 启动失败，请检查错误信息。${NC}"
@@ -1478,13 +1495,12 @@ function change_pansou_port() {
     fi
     
     if docker ps --format '{{.Names}}' | grep -q "^pansou$"; then
-        local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
-        local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
         
         echo -e "${GREEN}✅ 端口修改成功！${NC}"
         echo -e "安装方式: ${method}"
-        [ -n "$public_ipv4" ] && echo -e "新 IPv4 访问地址: ${YELLOW}http://${public_ipv4}:${new_port}${NC}"
-        [ -n "$public_ipv6" ] && echo -e "新 IPv6 访问地址: ${YELLOW}http://[${public_ipv6}]:${new_port}${NC}"
+        [ -n "$ipv4" ] && echo -e "新 IPv4 访问地址: ${YELLOW}http://${ipv4}:${new_port}${NC}"
+        [ -n "$ipv6" ] && echo -e "新 IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${new_port}${NC}"
     else
         echo -e "${RED}❌ 端口修改失败，请检查错误信息。${NC}"
     fi
@@ -1556,12 +1572,11 @@ function access_pansou_web() {
         return
     fi
     
-    local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
-    local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
+    IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
     
     echo -e "您的 PanSou 网盘访问地址为："
-    [ -n "$public_ipv4" ] && echo -e "IPv4 地址: ${YELLOW}http://${public_ipv4}:${host_port}${NC}"
-    [ -n "$public_ipv6" ] && echo -e "IPv6 地址: ${YELLOW}http://[${public_ipv6}]:${host_port}${NC}"
+    [ -n "$ipv4" ] && echo -e "IPv4 地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+    [ -n "$ipv6" ] && echo -e "IPv6 地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
     echo ""
 }
 
@@ -1724,13 +1739,15 @@ EOF
 
             docker compose up -d
             if [ $? -eq 0 ]; then
-                local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
-                local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
+                local ipv4=$(curl -4 -s --connect-timeout 2 ifconfig.me 2>/dev/null || curl -4 -s --connect-timeout 2 ipv4.icanhazip.com 2>/dev/null)
+                [ -z "$ipv4" ] && ipv4=$(hostname -I 2>/dev/null | awk '{print $1}')
+                local ipv6=$(curl -6 -s --connect-timeout 2 ifconfig.me 2>/dev/null || curl -6 -s --connect-timeout 2 ipv6.icanhazip.com 2>/dev/null)
+                [ -z "$ipv6" ] && ipv6=$(ip -6 addr show 2>/dev/null | grep -E 'inet6 [23]' | awk '{print $2}' | cut -d/ -f1 | head -n1)
                 
                 echo -e "${GREEN}Nginx Proxy Manager 安装成功！${NC}"
                 echo -e "${CYAN}默认登录信息：${NC}"
-                [ -n "$public_ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${public_ipv4}:81${NC}"
-                [ -n "$public_ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${public_ipv6}]:81${NC}"
+                [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:81${NC}"
+                [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:81${NC}"
                 echo -e "用户名: ${GREEN}admin@example.com${NC}"
                 echo -e "密码: ${GREEN}changeme${NC}"
                 echo -e "${RED}请尽快登录面板修改默认密码和邮箱！${NC}"
@@ -1859,12 +1876,11 @@ function view_npm_login_info() {
     echo -e "${CYAN}=========================================${NC}"
 
     if [ -d "/opt/npm" ]; then
-        local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
-        local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
         
         echo -e "${GREEN}Nginx Proxy Manager 面板登录信息：${NC}"
-        [ -n "$public_ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${public_ipv4}:81${NC}"
-        [ -n "$public_ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${public_ipv6}]:81${NC}"
+        [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:81${NC}"
+        [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:81${NC}"
         echo -e "用户名: ${GREEN}admin@example.com${NC}"
         echo -e "密码: ${GREEN}changeme${NC}"
         echo -e "${RED}请注意：如果已修改过默认端口或密码，请使用您修改后的信息登录。${NC}"
