@@ -265,10 +265,12 @@ function github_proxy_management() {
             local host_port=$(docker inspect gh-proxy-py --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}' 2>/dev/null)
             local public_ipv4=$(curl -4 -s --connect-timeout 5 ifconfig.me || curl -4 -s --connect-timeout 5 http://ipv4.icanhazip.com)
             local public_ipv6=$(curl -6 -s --connect-timeout 5 ifconfig.me || curl -6 -s --connect-timeout 5 http://ipv6.icanhazip.com)
+            local local_ip=$(hostname -I | awk '{print $1}')
             
             echo -e "${CYAN}-----------------------------------------${NC}"
-            [ -n "$public_ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${public_ipv4}:${host_port}${NC}"
-            [ -n "$public_ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${public_ipv6}]:${host_port}${NC}"
+            [ -n "$public_ipv4" ] && echo -e "公网 IPv4 访问: ${YELLOW}http://${public_ipv4}:${host_port}${NC}"
+            [ -n "$local_ip" ] && echo -e "内网 IP 访问:   ${YELLOW}http://${local_ip}:${host_port}${NC}"
+            [ -n "$public_ipv6" ] && echo -e "公网 IPv6 访问: ${YELLOW}http://[${public_ipv6}]:${host_port}${NC}"
         else
             echo -e "          状态: ${RED}未安装${NC}"
         fi
@@ -329,7 +331,9 @@ function install_github_proxy() {
         hunsh/gh-proxy-py:latest
 
     if [ $? -eq 0 ]; then
+        local local_ip=$(hostname -I | awk '{print $1}')
         echo -e "${GREEN}GitHub 加速站安装成功！${NC}"
+        echo -e "访问地址 (内网): ${YELLOW}http://${local_ip}:${host_port}${NC}"
     else
         echo -e "${RED}安装失败，请检查 Docker 日志。${NC}"
     fi
