@@ -20,9 +20,33 @@ function check_docker_status() {
     echo -e "${CYAN}=========================================${NC}"
     echo -e "${GREEN}         检查 Docker 安装状态${NC}"
     echo -e "${CYAN}=========================================${NC}"
+
+    local docker_command_found=false
+    local docker_service_active=false
+
     if command -v docker >/dev/null 2>&1; then
-        echo -e " Docker ${GREEN}已安装${NC}。版本信息:"
+        docker_command_found=true
+    fi
+
+    # 检查 systemctl 是否可用，因为某些精简系统可能没有
+    if command -v systemctl >/dev/null 2>&1; then
+        if systemctl is-active --quiet docker >/dev/null 2>&1; then
+            docker_service_active=true
+        fi
+    else
+        # 如果没有 systemctl，尝试检查 docker 进程是否存在
+        if pgrep dockerd >/dev/null 2>&1; then
+            docker_service_active=true
+        fi
+    fi
+
+    if $docker_command_found && $docker_service_active; then
+        echo -e " Docker ${GREEN}已安装并运行${NC}。版本信息:"
         docker --version | awk '{print $3}' | sed 's/,//'
+    elif $docker_command_found && ! $docker_service_active; then
+        echo -e " Docker ${YELLOW}已安装但未运行${NC}。版本信息:"
+        docker --version | awk '{print $3}' | sed 's/,//'
+        echo -e "${YELLOW}请尝试启动 Docker 服务: systemctl start docker${NC}"
     else
         echo -e " Docker ${RED}未安装${NC}。"
     fi
