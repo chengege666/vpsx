@@ -11,7 +11,7 @@ function uninstall_script() {
     echo -e "${YELLOW}警告：此操作将删除脚本文件及其配置的快捷键。${NC}"
     echo -e "${YELLOW}注意：此操作不会删除您通过脚本安装的应用（如 Docker、NPM 等）。${NC}"
     echo ""
-    read -p "确定要卸载吗？(y/N): " confirm_uninstall
+    read -p "确定要卸载吗？(y/N): " confirm_uninstall < /dev/tty
     
     if [[ "$confirm_uninstall" =~ ^[yY]$ ]]; then
         echo -e "${BLUE}正在执行卸载程序...${NC}"
