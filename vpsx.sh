@@ -72,9 +72,14 @@ main() {
     
     while true; do
         show_menu
-        read -p "请输入选项: " choice
-        # 只保留数字，去掉所有干扰项
+        # 强制从终端读取输入，不受 curl | bash 影响
+        read -p "请输入选项: " choice < /dev/tty
+        # 只保留数字
         choice=$(echo "$choice" | tr -cd '0-9')
+        
+        if [ -z "$choice" ]; then
+            continue
+        fi
         
         case "$choice" in
             1)
@@ -136,7 +141,7 @@ main() {
                 ;;
         esac
         echo -e "${YELLOW}按任意键返回主菜单...${NC}"
-        read -n 1
+        read -n 1 < /dev/tty
     done
 }
 
