@@ -23,10 +23,11 @@ function app_center_menu() {
         echo -e " ${GREEN}12.${NC} GitHub加速站"
         echo -e " ${GREEN}13.${NC} MoonTV流媒体应用管理"
         echo -e " ${GREEN}14.${NC} LibreTV流媒体应用管理"
+        echo -e " ${GREEN}15.${NC} FRP内网穿透管理"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-14): " app_choice
+        read -p "请输入你的选择 (0-15): " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
@@ -43,6 +44,7 @@ function app_center_menu() {
             12) github_proxy_management ;;
             13) moontv_management ;;
             14) libretv_management ;;
+            15) frp_management ;;
             0) break ;; 
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -3550,6 +3552,2048 @@ function access_libretv_web() {
     echo -e "${YELLOW}提示：${NC}"
     echo "1. 如果忘记密码，可通过修改配置功能重置"
     echo "2. 容器未运行时请先启动服务"
+    echo -e "${CYAN}=========================================${NC}"
+    read -p "按回车键返回..."
+}
+
+# FRP 内网穿透管理主菜单
+function frp_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}          FRP 内网穿透管理${NC}"
+        echo -e "${CYAN}=========================================${NC}"
+        echo "FRP 是一个高性能的反向代理应用，用于将内网服务暴露到公网"
+        echo "支持 TCP/UDP/HTTP/HTTPS 等多种协议"
+        echo ""
+        echo -e "${YELLOW}当前状态：${NC}"
+        
+        # 检查 FRPS 状态
+        if systemctl is-active --quiet frps 2>/dev/null; then
+            echo -e "FRPS 服务端: ${GREEN}运行中${NC}"
+        elif [ -f "/etc/systemd/system/frps.service" ] || [ -f "/etc/frp/frps.ini" ]; then
+            echo -e "FRPS 服务端: ${YELLOW}已安装但未运行${NC}"
+        else
+            echo -e "FRPS 服务端: ${RED}未安装${NC}"
+        fi
+        
+        # 检查 FRPC 状态
+        if systemctl is-active --quiet frpc 2>/dev/null; then
+            echo -e "FRPC 客户端: ${GREEN}运行中${NC}"
+        elif [ -f "/etc/systemd/system/frpc.service" ] || [ -f "/etc/frp/frpc.ini" ]; then
+            echo -e "FRPC 客户端: ${YELLOW}已安装但未运行${NC}"
+        else
+            echo -e "FRPC 客户端: ${RED}未安装${NC}"
+        fi
+        
+        echo ""
+        echo -e " ${GREEN}1.${NC}  FRPS 服务端管理（部署在公网VPS）"
+        echo -e " ${GREEN}2.${NC}  FRPC 客户端管理（部署在内网设备）"
+        echo -e " ${GREEN}3.${NC}  快速安装向导"
+        echo -e " ${GREEN}4.${NC}  查看 FRP 版本和帮助"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC}  返回应用中心菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 (0-4): " frp_choice
+
+        case "$frp_choice" in
+            1) frps_management ;;
+            2) frpc_management ;;
+            3) frp_quick_wizard ;;
+            4) frp_info_help ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
+        esac
+    done
+}
+
+# FRPS 服务端管理菜单
+function frps_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}          FRPS 服务端管理${NC}"
+        
+        # 显示当前状态
+        if systemctl is-active --quiet frps 2>/dev/null; then
+            echo -e "          状态: ${GREEN}运行中${NC}"
+        elif [ -f "/etc/systemd/system/frps.service" ]; then
+            echo -e "          状态: ${YELLOW}已安装但未运行${NC}"
+        else
+            echo -e "          状态: ${RED}未安装${NC}"
+        fi
+        
+        echo -e "${CYAN}=========================================${NC}"
+        echo "FRPS 是 FRP 的服务端，运行在具有公网 IP 的服务器上"
+        echo "用于接收来自内网客户端的连接请求"
+        echo ""
+        echo -e " ${GREEN}1.${NC}  安装/配置 FRPS 服务端"
+        echo -e " ${GREEN}2.${NC}  启动 FRPS 服务端"
+        echo -e " ${GREEN}3.${NC}  停止 FRPS 服务端"
+        echo -e " ${GREEN}4.${NC}  重启 FRPS 服务端"
+        echo -e " ${GREEN}5.${NC}  查看 FRPS 状态和日志"
+        echo -e " ${GREEN}6.${NC}  修改 FRPS 配置"
+        echo -e " ${GREEN}7.${NC}  卸载 FRPS 服务端"
+        echo -e " ${GREEN}8.${NC}  查看 FRPS 仪表板信息"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC}  返回上一级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 (0-8): " frps_choice
+
+        case "$frps_choice" in
+            1) install_frps ;;
+            2) start_frps ;;
+            3) stop_frps ;;
+            4) restart_frps ;;
+            5) view_frps_status ;;
+            6) modify_frps_config ;;
+            7) uninstall_frps ;;
+            8) view_frps_dashboard ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
+        esac
+    done
+}
+
+# FRPC 客户端管理菜单
+function frpc_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}          FRPC 客户端管理${NC}"
+        
+        # 显示当前状态
+        if systemctl is-active --quiet frpc 2>/dev/null; then
+            echo -e "          状态: ${GREEN}运行中${NC}"
+        elif [ -f "/etc/systemd/system/frpc.service" ]; then
+            echo -e "          状态: ${YELLOW}已安装但未运行${NC}"
+        else
+            echo -e "          状态: ${RED}未安装${NC}"
+        fi
+        
+        echo -e "${CYAN}=========================================${NC}"
+        echo "FRPC 是 FRP 的客户端，运行在内网设备上"
+        echo "用于将内网服务暴露到公网服务器"
+        echo ""
+        echo -e " ${GREEN}1.${NC}  安装/配置 FRPC 客户端"
+        echo -e " ${GREEN}2.${NC}  启动 FRPC 客户端"
+        echo -e " ${GREEN}3.${NC}  停止 FRPC 客户端"
+        echo -e " ${GREEN}4.${NC}  重启 FRPC 客户端"
+        echo -e " ${GREEN}5.${NC}  查看 FRPC 状态和日志"
+        echo -e " ${GREEN}6.${NC}  修改 FRPC 配置"
+        echo -e " ${GREEN}7.${NC}  卸载 FRPC 客户端"
+        echo -e " ${GREEN}8.${NC}  管理隧道配置"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC}  返回上一级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 (0-8): " frpc_choice
+
+        case "$frpc_choice" in
+            1) install_frpc ;;
+            2) start_frpc ;;
+            3) stop_frpc ;;
+            4) restart_frpc ;;
+            5) view_frpc_status ;;
+            6) modify_frpc_config ;;
+            7) uninstall_frpc ;;
+            8) manage_tunnels ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
+        esac
+    done
+}
+
+# 安装/配置 FRPS 服务端
+function install_frps() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          安装/配置 FRPS 服务端${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    # 检查是否已安装
+    if [ -f "/etc/systemd/system/frps.service" ]; then
+        echo -e "${YELLOW}检测到 FRPS 已安装。${NC}"
+        read -p "是否重新安装？(这将覆盖现有配置) (y/N): " reinstall
+        if [[ ! "$reinstall" =~ ^[yY]$ ]]; then
+            return
+        fi
+    fi
+
+    echo -e "${YELLOW}正在配置 FRPS 服务端...${NC}"
+    echo ""
+
+    # 获取 FRP 版本
+    read -p "请输入 FRP 版本 (默认 v0.52.3，建议使用最新版): " frp_version
+    frp_version=${frp_version:-"v0.52.3"}
+    
+    # 检测系统架构
+    local arch=$(uname -m)
+    case "$arch" in
+        x86_64) arch="amd64" ;;
+        aarch64) arch="arm64" ;;
+        armv7l) arch="arm" ;;
+        *) arch="amd64" ;;
+    esac
+    
+    echo -e "检测到系统架构: ${GREEN}${arch}${NC}"
+    
+    # 获取基本配置
+    read -p "请输入 FRPS 监听端口 (默认 7000): " bind_port
+    bind_port=${bind_port:-7000}
+    
+    read -p "请输入 FRPS Dashboard 端口 (默认 7500): " dashboard_port
+    dashboard_port=${dashboard_port:-7500}
+    
+    read -p "请输入 Dashboard 用户名 (默认 admin): " dashboard_user
+    dashboard_user=${dashboard_user:-admin}
+    
+    while true; do
+        read -sp "请输入 Dashboard 密码: " dashboard_pwd
+        echo ""
+        if [ -z "$dashboard_pwd" ]; then
+            echo -e "${RED}密码不能为空，请重新输入。${NC}"
+            continue
+        fi
+        
+        read -sp "请再次输入密码确认: " dashboard_pwd_confirm
+        echo ""
+        
+        if [ "$dashboard_pwd" != "$dashboard_pwd_confirm" ]; then
+            echo -e "${RED}两次输入的密码不一致，请重新输入。${NC}"
+        else
+            break
+        fi
+    done
+    
+    read -p "请输入认证令牌 (可选，用于客户端连接认证): " token
+    
+    read -p "是否启用 HTTPS 支持？(y/N): " enable_https
+    https_port=""
+    if [[ "$enable_https" =~ ^[yY]$ ]]; then
+        read -p "请输入 HTTPS 端口 (默认 7443): " https_port
+        https_port=${https_port:-7443}
+    fi
+    
+    read -p "是否启用 UDP 端口转发？(y/N): " enable_udp
+    udp_port_range=""
+    if [[ "$enable_udp" =~ ^[yY]$ ]]; then
+        read -p "请输入 UDP 端口范围 (默认 7001-7500): " udp_port_range
+        udp_port_range=${udp_port_range:-"7001-7500"}
+    fi
+    
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${YELLOW}安装配置确认：${NC}"
+    echo -e "FRP 版本: ${GREEN}${frp_version}${NC}"
+    echo -e "监听端口: ${GREEN}${bind_port}${NC}"
+    echo -e "Dashboard 端口: ${GREEN}${dashboard_port}${NC}"
+    echo -e "Dashboard 用户名: ${GREEN}${dashboard_user}${NC}"
+    echo -e "Dashboard 密码: ${GREEN}********${NC}"
+    if [ -n "$token" ]; then
+        echo -e "认证令牌: ${GREEN}${token}${NC}"
+    else
+        echo -e "认证令牌: ${YELLOW}无${NC}"
+    fi
+    if [ -n "$https_port" ]; then
+        echo -e "HTTPS 端口: ${GREEN}${https_port}${NC}"
+    fi
+    if [ -n "$udp_port_range" ]; then
+        echo -e "UDP 端口范围: ${GREEN}${udp_port_range}${NC}"
+    fi
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    
+    read -p "确认以上配置并开始安装？(y/N): " confirm_install
+    if [[ ! "$confirm_install" =~ ^[yY]$ ]]; then
+        echo "安装已取消。"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}开始安装 FRPS 服务端...${NC}"
+    
+    # 创建安装目录
+    mkdir -p /usr/local/frp
+    cd /usr/local/frp
+    
+    # 下载 FRP
+    echo "正在下载 FRP ${frp_version}..."
+    local download_url="https://github.com/fatedier/frp/releases/download/${frp_version}/frp_${frp_version#v}_linux_${arch}.tar.gz"
+    
+    if ! curl -L -o frp.tar.gz "$download_url"; then
+        echo -e "${RED}下载 FRP 失败，请检查网络连接或版本号。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+    
+    # 解压并安装
+    echo "正在解压安装包..."
+    tar -zxvf frp.tar.gz
+    cd frp_${frp_version#v}_linux_${arch}
+    
+    # 复制二进制文件
+    cp frps /usr/local/bin/
+    chmod +x /usr/local/bin/frps
+    
+    # 创建配置文件目录
+    mkdir -p /etc/frp
+    
+    # 生成配置文件
+    echo "正在生成配置文件..."
+    cat > /etc/frp/frps.ini << EOF
+[common]
+bind_port = ${bind_port}
+bind_addr = 0.0.0.0
+
+# Dashboard 配置
+dashboard_port = ${dashboard_port}
+dashboard_user = ${dashboard_user}
+dashboard_pwd = ${dashboard_pwd}
+
+# 认证令牌
+EOF
+
+    if [ -n "$token" ]; then
+        echo "token = ${token}" >> /etc/frp/frps.ini
+    fi
+    
+    if [ -n "$https_port" ]; then
+        echo "vhost_https_port = ${https_port}" >> /etc/frp/frps.ini
+    fi
+    
+    if [ -n "$udp_port_range" ]; then
+        echo "udp_packet_size = 1500" >> /etc/frp/frps.ini
+        # 这里简化处理，实际需要更复杂的 UDP 端口配置
+    fi
+    
+    # 添加日志配置
+    cat >> /etc/frp/frps.ini << EOF
+
+# 日志配置
+log_file = /var/log/frps.log
+log_level = info
+log_max_days = 3
+EOF
+    
+    # 创建 systemd 服务文件
+    echo "正在创建 systemd 服务..."
+    cat > /etc/systemd/system/frps.service << EOF
+[Unit]
+Description=FRP Server (frps)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Restart=on-failure
+RestartSec=5s
+ExecStart=/usr/local/bin/frps -c /etc/frp/frps.ini
+ExecReload=/usr/local/bin/frps reload -c /etc/frp/frps.ini
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    # 创建日志文件
+    touch /var/log/frps.log
+    chmod 644 /var/log/frps.log
+    
+    # 重新加载 systemd
+    systemctl daemon-reload
+    
+    # 启用并启动服务
+    systemctl enable frps
+    
+    echo -e "${BLUE}正在启动 FRPS 服务...${NC}"
+    systemctl start frps
+    
+    if systemctl is-active --quiet frps; then
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        
+        echo -e "${GREEN}✅ FRPS 服务端安装成功！${NC}"
+        echo ""
+        echo -e "${CYAN}服务端配置信息：${NC}"
+        echo -e "监听地址: ${GREEN}0.0.0.0:${bind_port}${NC}"
+        [ -n "$ipv4" ] && echo -e "Dashboard 地址: ${YELLOW}http://${ipv4}:${dashboard_port}${NC}"
+        [ -n "$ipv6" ] && echo -e "Dashboard 地址 (IPv6): ${YELLOW}http://[${ipv6}]:${dashboard_port}${NC}"
+        echo -e "Dashboard 用户名: ${GREEN}${dashboard_user}${NC}"
+        echo -e "Dashboard 密码: ${GREEN}${dashboard_pwd}${NC}"
+        if [ -n "$token" ]; then
+            echo -e "认证令牌: ${GREEN}${token}${NC}"
+        fi
+        echo ""
+        echo -e "${CYAN}服务管理命令：${NC}"
+        echo -e "启动: ${GREEN}systemctl start frps${NC}"
+        echo -e "停止: ${GREEN}systemctl stop frps${NC}"
+        echo -e "重启: ${GREEN}systemctl restart frps${NC}"
+        echo -e "状态: ${GREEN}systemctl status frps${NC}"
+        echo ""
+        echo -e "${YELLOW}重要提示：${NC}"
+        echo "1. 请确保防火墙已开放端口: ${bind_port}, ${dashboard_port}"
+        echo "2. 配置文件位置: /etc/frp/frps.ini"
+        echo "3. 日志文件位置: /var/log/frps.log"
+        
+        # 显示服务状态
+        sleep 2
+        echo ""
+        echo -e "${BLUE}服务状态：${NC}"
+        systemctl status frps --no-pager -l
+    else
+        echo -e "${RED}❌ FRPS 启动失败，请检查配置和日志。${NC}"
+        echo "查看日志: journalctl -u frps -n 20"
+    fi
+    
+    # 清理临时文件
+    cd /usr/local/frp
+    rm -rf frp_${frp_version#v}_linux_${arch} frp.tar.gz
+    
+    read -p "按回车键继续..."
+}
+
+# 启动 FRPS 服务端
+function start_frps() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}            启动 FRPS 服务端${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/etc/systemd/system/frps.service" ]; then
+        echo -e "${RED}未检测到 FRPS 安装，请先安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在启动 FRPS 服务...${NC}"
+    systemctl start frps
+    
+    if systemctl is-active --quiet frps; then
+        echo -e "${GREEN}✅ FRPS 启动成功！${NC}"
+    else
+        echo -e "${RED}❌ FRPS 启动失败。${NC}"
+        echo "查看错误信息: systemctl status frps"
+    fi
+    read -p "按回车键继续..."
+}
+
+# 停止 FRPS 服务端
+function stop_frps() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}            停止 FRPS 服务端${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/etc/systemd/system/frps.service" ]; then
+        echo -e "${RED}未检测到 FRPS 安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在停止 FRPS 服务...${NC}"
+    systemctl stop frps
+    
+    if ! systemctl is-active --quiet frps; then
+        echo -e "${GREEN}✅ FRPS 停止成功！${NC}"
+    else
+        echo -e "${RED}❌ FRPS 停止失败。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+# 重启 FRPS 服务端
+function restart_frps() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}            重启 FRPS 服务端${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/etc/systemd/system/frps.service" ]; then
+        echo -e "${RED}未检测到 FRPS 安装，请先安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在重启 FRPS 服务...${NC}"
+    systemctl restart frps
+    
+    if systemctl is-active --quiet frps; then
+        echo -e "${GREEN}✅ FRPS 重启成功！${NC}"
+    else
+        echo -e "${RED}❌ FRPS 重启失败。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+# 查看 FRPS 状态和日志
+function view_frps_status() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          FRPS 状态和日志${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/etc/systemd/system/frps.service" ]; then
+        echo -e "${RED}未检测到 FRPS 安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}服务状态：${NC}"
+    systemctl status frps --no-pager
+    
+    echo -e "\n${BLUE}最近 50 行日志：${NC}"
+    journalctl -u frps -n 50 --no-pager
+    
+    echo -e "${CYAN}=========================================${NC}"
+    read -p "按回车键继续..."
+}
+
+# 修改 FRPS 配置
+function modify_frps_config() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}           修改 FRPS 配置${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/etc/frp/frps.ini" ]; then
+        echo -e "${RED}未检测到 FRPS 配置文件。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${YELLOW}当前配置信息：${NC}"
+    echo ""
+    
+    # 显示当前配置摘要
+    local bind_port=$(grep -oP 'bind_port\s*=\s*\K[0-9]+' /etc/frp/frps.ini 2>/dev/null | head -1)
+    local dashboard_port=$(grep -oP 'dashboard_port\s*=\s*\K[0-9]+' /etc/frp/frps.ini 2>/dev/null | head -1)
+    local dashboard_user=$(grep -oP 'dashboard_user\s*=\s*\K[^ ]+' /etc/frp/frps.ini 2>/dev/null | head -1)
+    local token=$(grep -oP 'token\s*=\s*\K[^ ]+' /etc/frp/frps.ini 2>/dev/null | head -1)
+    
+    echo -e "监听端口: ${GREEN}${bind_port:-7000}${NC}"
+    echo -e "Dashboard 端口: ${GREEN}${dashboard_port:-7500}${NC}"
+    echo -e "Dashboard 用户名: ${GREEN}${dashboard_user:-admin}${NC}"
+    if [ -n "$token" ]; then
+        echo -e "认证令牌: ${GREEN}${token}${NC}"
+    else
+        echo -e "认证令牌: ${YELLOW}无${NC}"
+    fi
+    
+    echo ""
+    echo -e "${YELLOW}修改选项：${NC}"
+    echo "1. 编辑配置文件 (手动修改)"
+    echo "2. 修改 Dashboard 密码"
+    echo "3. 修改监听端口"
+    echo "4. 修改认证令牌"
+    echo "5. 查看完整配置文件"
+    echo "0. 返回"
+    echo ""
+    read -p "请选择操作: " config_choice
+
+    case "$config_choice" in
+        1)
+            echo -e "${YELLOW}使用编辑器修改配置文件...${NC}"
+            echo "保存后需要重启 FRPS 服务使更改生效。"
+            read -p "按回车键继续..."
+            
+            # 使用 nano 或 vi 编辑
+            if command -v nano &> /dev/null; then
+                nano /etc/frp/frps.ini
+            else
+                vi /etc/frp/frps.ini
+            fi
+            
+            read -p "是否现在重启 FRPS 服务使更改生效？(y/N): " restart_now
+            if [[ "$restart_now" =~ ^[yY]$ ]]; then
+                systemctl restart frps
+                echo -e "${GREEN}FRPS 服务已重启。${NC}"
+            fi
+            ;;
+        2)
+            while true; do
+                read -sp "请输入新的 Dashboard 密码: " new_pwd
+                echo ""
+                if [ -z "$new_pwd" ]; then
+                    echo -e "${RED}密码不能为空，请重新输入。${NC}"
+                    continue
+                fi
+                
+                read -sp "请再次输入密码确认: " new_pwd_confirm
+                echo ""
+                
+                if [ "$new_pwd" != "$new_pwd_confirm" ]; then
+                    echo -e "${RED}两次输入的密码不一致，请重新输入。${NC}"
+                else
+                    break
+                fi
+            done
+            
+            # 停止服务
+            systemctl stop frps
+            
+            # 更新配置文件
+            if grep -q "dashboard_pwd" /etc/frp/frps.ini; then
+                sed -i "s/^dashboard_pwd\s*=.*/dashboard_pwd = ${new_pwd}/" /etc/frp/frps.ini
+            else
+                # 如果没有该配置，找到 dashboard_user 行后插入
+                sed -i "/dashboard_user/a dashboard_pwd = ${new_pwd}" /etc/frp/frps.ini
+            fi
+            
+            # 重新启动
+            systemctl start frps
+            
+            echo -e "${GREEN}✅ Dashboard 密码已更新${NC}"
+            ;;
+        3)
+            read -p "请输入新的监听端口: " new_port
+            if [[ ! "$new_port" =~ ^[0-9]+$ ]] || [ "$new_port" -lt 1 ] || [ "$new_port" -gt 65535 ]; then
+                echo -e "${RED}端口号无效。请输入 1-65535 之间的数字。${NC}"
+                read -p "按回车键继续..."
+                return
+            fi
+            
+            # 停止服务
+            systemctl stop frps
+            
+            # 更新配置文件
+            sed -i "s/^bind_port\s*=.*/bind_port = ${new_port}/" /etc/frp/frps.ini
+            
+            # 重新启动
+            systemctl start frps
+            
+            echo -e "${GREEN}✅ 监听端口已修改为 ${new_port}${NC}"
+            echo -e "${YELLOW}请确保防火墙已开放新端口 ${new_port}${NC}"
+            ;;
+        4)
+            read -p "请输入新的认证令牌 (留空则删除令牌): " new_token
+            
+            # 停止服务
+            systemctl stop frps
+            
+            if [ -z "$new_token" ]; then
+                # 删除令牌配置
+                sed -i '/^token\s*=.*/d' /etc/frp/frps.ini
+                echo -e "${GREEN}✅ 认证令牌已删除${NC}"
+            else
+                # 更新或添加令牌
+                if grep -q "^token\s*=" /etc/frp/frps.ini; then
+                    sed -i "s/^token\s*=.*/token = ${new_token}/" /etc/frp/frps.ini
+                else
+                    # 在 common 段添加
+                    sed -i "/^\[common\]/a token = ${new_token}" /etc/frp/frps.ini
+                fi
+                echo -e "${GREEN}✅ 认证令牌已更新${NC}"
+            fi
+            
+            # 重新启动
+            systemctl start frps
+            ;;
+        5)
+            echo -e "${BLUE}完整配置文件内容:${NC}"
+            echo ""
+            cat /etc/frp/frps.ini
+            echo ""
+            read -p "按回车键继续..."
+            return
+            ;;
+        0) return ;;
+        *) echo -e "${RED}无效选择。${NC}" ;;
+    esac
+    
+    read -p "按回车键继续..."
+}
+
+# 卸载 FRPS 服务端
+function uninstall_frps() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}             卸载 FRPS${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/etc/systemd/system/frps.service" ]; then
+        echo -e "${YELLOW}未检测到 FRPS 安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${RED}⚠️  警告：此操作将删除 FRPS 服务及所有配置！${NC}"
+    echo ""
+    echo -e "将删除以下内容："
+    echo "1. FRPS 二进制文件 (/usr/local/bin/frps)"
+    echo "2. 配置文件 (/etc/frp/frps.ini)"
+    echo "3. 日志文件 (/var/log/frps.log)"
+    echo "4. systemd 服务文件"
+    echo ""
+    
+    read -p "确定要卸载 FRPS 吗？(y/N): " confirm_uninstall
+    if [[ ! "$confirm_uninstall" =~ ^[yY]$ ]]; then
+        echo "卸载已取消。"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在停止服务...${NC}"
+    systemctl stop frps
+    systemctl disable frps
+    
+    echo -e "${BLUE}正在删除文件...${NC}"
+    rm -f /usr/local/bin/frps
+    rm -f /etc/frp/frps.ini
+    rm -f /var/log/frps.log
+    rm -f /etc/systemd/system/frps.service
+    
+    # 重新加载 systemd
+    systemctl daemon-reload
+    
+    echo -e "${GREEN}✅ FRPS 卸载完成！${NC}"
+    read -p "按回车键继续..."
+}
+
+# 查看 FRPS 仪表板信息
+function view_frps_dashboard() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}        FRPS 仪表板信息${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if [ ! -f "/etc/frp/frps.ini" ]; then
+        echo -e "${RED}未检测到 FRPS 安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+    
+    # 从配置文件读取信息
+    local bind_port=$(grep -oP 'bind_port\s*=\s*\K[0-9]+' /etc/frp/frps.ini 2>/dev/null | head -1)
+    local dashboard_port=$(grep -oP 'dashboard_port\s*=\s*\K[0-9]+' /etc/frp/frps.ini 2>/dev/null | head -1)
+    local dashboard_user=$(grep -oP 'dashboard_user\s*=\s*\K[^ ]+' /etc/frp/frps.ini 2>/dev/null | head -1)
+    
+    IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+    
+    echo -e "FRPS 仪表板访问信息："
+    [ -n "$ipv4" ] && echo -e "地址: ${YELLOW}http://${ipv4}:${dashboard_port:-7500}${NC}"
+    [ -n "$ipv6" ] && echo -e "地址 (IPv6): ${YELLOW}http://[${ipv6}]:${dashboard_port:-7500}${NC}"
+    echo -e "用户名: ${GREEN}${dashboard_user:-admin}${NC}"
+    echo -e "密码: ${YELLOW}(安装时设置，可在修改配置中查看)${NC}"
+    
+    # 尝试获取统计信息
+    if systemctl is-active --quiet frps; then
+        echo ""
+        echo -e "${CYAN}服务状态：${NC}"
+        
+        # 获取运行时间
+        local uptime=$(systemctl show frps --property=ActiveEnterTimestamp --value 2>/dev/null)
+        if [ -n "$uptime" ]; then
+            local now=$(date +%s)
+            local start=$(date -d "$uptime" +%s 2>/dev/null || echo $now)
+            local diff=$((now - start))
+            local days=$((diff / 86400))
+            local hours=$(((diff % 86400) / 3600))
+            local minutes=$(((diff % 3600) / 60))
+            
+            echo -e "运行时间: ${GREEN}"
+            [ $days -gt 0 ] && echo -n "${days}天 "
+            [ $hours -gt 0 ] && echo -n "${hours}小时 "
+            echo "${minutes}分钟${NC}"
+        fi
+        
+        # 获取客户端连接数（简化版本，实际需要解析日志或使用API）
+        echo -e "服务状态: ${GREEN}运行中${NC}"
+        echo -e "监听端口: ${GREEN}${bind_port:-7000}${NC}"
+    else
+        echo -e "\n服务状态: ${RED}未运行${NC}"
+    fi
+    
+    echo ""
+    echo -e "${YELLOW}提示：${NC}"
+    echo "1. 如果忘记密码，可通过修改配置功能重置"
+    echo "2. 请确保防火墙已开放端口 ${dashboard_port:-7500}"
+    echo -e "${CYAN}=========================================${NC}"
+    read -p "按回车键返回..."
+}
+
+# 安装/配置 FRPC 客户端
+function install_frpc() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          安装/配置 FRPC 客户端${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    # 检查是否已安装
+    if [ -f "/etc/systemd/system/frpc.service" ]; then
+        echo -e "${YELLOW}检测到 FRPC 已安装。${NC}"
+        read -p "是否重新安装？(这将覆盖现有配置) (y/N): " reinstall
+        if [[ ! "$reinstall" =~ ^[yY]$ ]]; then
+            return
+        fi
+    fi
+
+    echo -e "${YELLOW}请选择配置方式：${NC}"
+    echo "1. 快速配置（使用默认模板）"
+    echo "2. 手动配置（编辑配置文件）"
+    echo "3. 隧道向导（逐步配置）"
+    echo ""
+    read -p "请选择 (1-3): " config_method
+
+    case "$config_method" in
+        1) quick_config_frpc ;;
+        2) manual_config_frpc ;;
+        3) tunnel_wizard_frpc ;;
+        *) echo -e "${RED}无效的选择。${NC}"; return ;;
+    esac
+}
+
+# 快速配置 FRPC
+function quick_config_frpc() {
+    echo -e "${BLUE}快速配置 FRPC 客户端...${NC}"
+    
+    read -p "请输入 FRPS 服务端地址 (IP或域名): " server_addr
+    read -p "请输入 FRPS 服务端端口 (默认 7000): " server_port
+    server_port=${server_port:-7000}
+    
+    read -p "请输入认证令牌 (如果服务端设置了): " token
+    
+    # 检测系统架构
+    local arch=$(uname -m)
+    case "$arch" in
+        x86_64) arch="amd64" ;;
+        aarch64) arch="arm64" ;;
+        armv7l) arch="arm" ;;
+        *) arch="amd64" ;;
+    esac
+    
+    echo -e "检测到系统架构: ${GREEN}${arch}${NC}"
+    
+    # 获取 FRP 版本
+    read -p "请输入 FRP 版本 (默认 v0.52.3): " frp_version
+    frp_version=${frp_version:-"v0.52.3"}
+    
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${YELLOW}安装配置确认：${NC}"
+    echo -e "服务端地址: ${GREEN}${server_addr}${NC}"
+    echo -e "服务端端口: ${GREEN}${server_port}${NC}"
+    if [ -n "$token" ]; then
+        echo -e "认证令牌: ${GREEN}${token}${NC}"
+    else
+        echo -e "认证令牌: ${YELLOW}无${NC}"
+    fi
+    echo -e "FRP 版本: ${GREEN}${frp_version}${NC}"
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    
+    read -p "确认以上配置并开始安装？(y/N): " confirm_install
+    if [[ ! "$confirm_install" =~ ^[yY]$ ]]; then
+        echo "安装已取消。"
+        return
+    fi
+
+    # 执行安装
+    install_frpc_binary "$frp_version" "$arch" "$server_addr" "$server_port" "$token"
+}
+
+# 隧道向导配置 FRPC
+function tunnel_wizard_frpc() {
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          FRPC 隧道向导${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    read -p "请输入 FRPS 服务端地址（例如：your_vps_ip）: " server_addr
+    read -p "请输入 FRPS 服务端端口（默认 7000）: " server_port
+    server_port=${server_port:-7000}
+    
+    read -p "请输入令牌（如果服务端设置了）: " token
+    
+    local tunnels=()
+    local tunnel_count=0
+    
+    while true; do
+        echo ""
+        echo -e "${YELLOW}隧道配置 #$((tunnel_count + 1))${NC}"
+        echo ""
+        echo "请选择隧道类型："
+        echo "1. TCP端口映射"
+        echo "2. HTTP/HTTPS网站代理"
+        echo "3. SSH远程访问"
+        echo "4. RDP远程桌面"
+        echo "5. 其他TCP服务"
+        echo "0. 完成配置"
+        echo ""
+        read -p "请选择 (0-5): " tunnel_type
+        
+        if [ "$tunnel_type" = "0" ]; then
+            break
+        fi
+        
+        if [ "$tunnel_type" -lt 1 ] || [ "$tunnel_type" -gt 5 ]; then
+            echo -e "${RED}无效的选择。${NC}"
+            continue
+        fi
+        
+        # 获取隧道名称
+        read -p "请输入隧道名称（英文，如：web, ssh, rdp）: " tunnel_name
+        
+        case "$tunnel_type" in
+            1|3|4|5)  # TCP类型
+                read -p "请输入本地服务IP（默认 127.0.0.1）: " local_ip
+                local_ip=${local_ip:-127.0.0.1}
+                
+                read -p "请输入本地服务端口: " local_port
+                read -p "请输入远程端口（在服务端监听的端口）: " remote_port
+                
+                tunnels+=("tcp:${tunnel_name}:${local_ip}:${local_port}:${remote_port}")
+                ;;
+            2)  # HTTP类型
+                read -p "请输入本地服务IP（默认 127.0.0.1）: " local_ip
+                local_ip=${local_ip:-127.0.0.1}
+                
+                read -p "请输入本地服务端口: " local_port
+                read -p "请输入自定义子域名（可选，用于访问）: " subdomain
+                read -p "请输入自定义域名（可选，留空使用子域名）: " custom_domain
+                read -p "使用HTTPS？(y/N): " use_https
+                
+                local http_type="http"
+                if [[ "$use_https" =~ ^[yY]$ ]]; then
+                    http_type="https"
+                fi
+                
+                tunnels+=("${http_type}:${tunnel_name}:${local_ip}:${local_port}:${subdomain}:${custom_domain}")
+                ;;
+        esac
+        
+        tunnel_count=$((tunnel_count + 1))
+        
+        if [ $tunnel_count -ge 10 ]; then
+            echo -e "${YELLOW}已达到最大隧道数量限制 (10)。${NC}"
+            break
+        fi
+    done
+    
+    if [ $tunnel_count -eq 0 ]; then
+        echo -e "${RED}未配置任何隧道。${NC}"
+        return
+    fi
+    
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${YELLOW}安装配置确认：${NC}"
+    echo -e "服务端地址: ${GREEN}${server_addr}${NC}"
+    echo -e "服务端端口: ${GREEN}${server_port}${NC}"
+    if [ -n "$token" ]; then
+        echo -e "认证令牌: ${GREEN}${token}${NC}"
+    fi
+    echo -e "隧道数量: ${GREEN}${tunnel_count}${NC}"
+    echo ""
+    
+    for i in "${!tunnels[@]}"; do
+        echo -e "隧道 $((i+1)): ${GREEN}${tunnels[$i]}${NC}"
+    done
+    
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    
+    read -p "确认以上配置并开始安装？(y/N): " confirm_install
+    if [[ ! "$confirm_install" =~ ^[yY]$ ]]; then
+        echo "安装已取消。"
+        return
+    fi
+    
+    # 检测系统架构
+    local arch=$(uname -m)
+    case "$arch" in
+        x86_64) arch="amd64" ;;
+        aarch64) arch="arm64" ;;
+        armv7l) arch="arm" ;;
+        *) arch="amd64" ;;
+    esac
+    
+    # 获取 FRP 版本
+    read -p "请输入 FRP 版本 (默认 v0.52.3): " frp_version
+    frp_version=${frp_version:-"v0.52.3"}
+    
+    # 执行安装
+    install_frpc_with_tunnels "$frp_version" "$arch" "$server_addr" "$server_port" "$token" "${tunnels[@]}"
+}
+
+# 安装 FRPC 二进制文件和基本配置
+function install_frpc_binary() {
+    local frp_version="$1"
+    local arch="$2"
+    local server_addr="$3"
+    local server_port="$4"
+    local token="$5"
+    
+    echo -e "${BLUE}开始安装 FRPC 客户端...${NC}"
+    
+    # 创建安装目录
+    mkdir -p /usr/local/frp
+    cd /usr/local/frp
+    
+    # 下载 FRP
+    echo "正在下载 FRP ${frp_version}..."
+    local download_url="https://github.com/fatedier/frp/releases/download/${frp_version}/frp_${frp_version#v}_linux_${arch}.tar.gz"
+    
+    if ! curl -L -o frp.tar.gz "$download_url"; then
+        echo -e "${RED}下载 FRP 失败，请检查网络连接或版本号。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+    
+    # 解压并安装
+    echo "正在解压安装包..."
+    tar -zxvf frp.tar.gz
+    cd frp_${frp_version#v}_linux_${arch}
+    
+    # 复制二进制文件
+    cp frpc /usr/local/bin/
+    chmod +x /usr/local/bin/frpc
+    
+    # 创建配置文件目录
+    mkdir -p /etc/frp
+    
+    # 生成基本配置文件
+    echo "正在生成配置文件..."
+    cat > /etc/frp/frpc.ini << EOF
+[common]
+server_addr = ${server_addr}
+server_port = ${server_port}
+EOF
+
+    if [ -n "$token" ]; then
+        echo "token = ${token}" >> /etc/frp/frpc.ini
+    fi
+    
+    cat >> /etc/frp/frpc.ini << EOF
+
+# 日志配置
+log_file = /var/log/frpc.log
+log_level = info
+log_max_days = 3
+
+# 管理配置
+admin_addr = 127.0.0.1
+admin_port = 7400
+admin_user = admin
+admin_pwd = admin
+EOF
+    
+    # 创建 systemd 服务文件
+    echo "正在创建 systemd 服务..."
+    cat > /etc/systemd/system/frpc.service << EOF
+[Unit]
+Description=FRP Client (frpc)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Restart=on-failure
+RestartSec=5s
+ExecStart=/usr/local/bin/frpc -c /etc/frp/frpc.ini
+ExecReload=/usr/local/bin/frpc reload -c /etc/frp/frpc.ini
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    # 创建日志文件
+    touch /var/log/frpc.log
+    chmod 644 /var/log/frpc.log
+    
+    # 重新加载 systemd
+    systemctl daemon-reload
+    
+    # 启用并启动服务
+    systemctl enable frpc
+    
+    echo -e "${BLUE}正在启动 FRPC 服务...${NC}"
+    systemctl start frpc
+    
+    if systemctl is-active --quiet frpc; then
+        echo -e "${GREEN}✅ FRPC 客户端安装成功！${NC}"
+        echo ""
+        echo -e "${CYAN}客户端配置信息：${NC}"
+        echo -e "服务端地址: ${GREEN}${server_addr}:${server_port}${NC}"
+        if [ -n "$token" ]; then
+            echo -e "认证令牌: ${GREEN}${token}${NC}"
+        fi
+        echo ""
+        echo -e "${CYAN}服务管理命令：${NC}"
+        echo -e "启动: ${GREEN}systemctl start frpc${NC}"
+        echo -e "停止: ${GREEN}systemctl stop frpc${NC}"
+        echo -e "重启: ${GREEN}systemctl restart frpc${NC}"
+        echo -e "状态: ${GREEN}systemctl status frpc${NC}"
+        echo ""
+        echo -e "${YELLOW}重要提示：${NC}"
+        echo "1. 请确保服务端地址和端口正确"
+        echo "2. 配置文件位置: /etc/frp/frpc.ini"
+        echo "3. 需要手动添加隧道配置后才能使用"
+        echo "4. 本地管理地址: http://127.0.0.1:7400 (用户名/密码: admin/admin)"
+        
+        # 显示服务状态
+        sleep 2
+        echo ""
+        echo -e "${BLUE}服务状态：${NC}"
+        systemctl status frpc --no-pager -l
+    else
+        echo -e "${RED}❌ FRPC 启动失败，请检查配置和日志。${NC}"
+        echo "查看日志: journalctl -u frpc -n 20"
+    fi
+    
+    # 清理临时文件
+    cd /usr/local/frp
+    rm -rf frp_${frp_version#v}_linux_${arch} frp.tar.gz
+    
+    read -p "按回车键继续..."
+}
+
+# 安装 FRPC 并配置隧道
+function install_frpc_with_tunnels() {
+    local frp_version="$1"
+    local arch="$2"
+    local server_addr="$3"
+    local server_port="$4"
+    local token="$5"
+    shift 5
+    local tunnels=("$@")
+    
+    echo -e "${BLUE}开始安装 FRPC 客户端...${NC}"
+    
+    # 创建安装目录
+    mkdir -p /usr/local/frp
+    cd /usr/local/frp
+    
+    # 下载 FRP
+    echo "正在下载 FRP ${frp_version}..."
+    local download_url="https://github.com/fatedier/frp/releases/download/${frp_version}/frp_${frp_version#v}_linux_${arch}.tar.gz"
+    
+    if ! curl -L -o frp.tar.gz "$download_url"; then
+        echo -e "${RED}下载 FRP 失败，请检查网络连接或版本号。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+    
+    # 解压并安装
+    echo "正在解压安装包..."
+    tar -zxvf frp.tar.gz
+    cd frp_${frp_version#v}_linux_${arch}
+    
+    # 复制二进制文件
+    cp frpc /usr/local/bin/
+    chmod +x /usr/local/bin/frpc
+    
+    # 创建配置文件目录
+    mkdir -p /etc/frp
+    
+    # 生成配置文件
+    echo "正在生成配置文件..."
+    cat > /etc/frp/frpc.ini << EOF
+[common]
+server_addr = ${server_addr}
+server_port = ${server_port}
+EOF
+
+    if [ -n "$token" ]; then
+        echo "token = ${token}" >> /etc/frp/frpc.ini
+    fi
+    
+    cat >> /etc/frp/frpc.ini << EOF
+
+# 日志配置
+log_file = /var/log/frpc.log
+log_level = info
+log_max_days = 3
+
+# 管理配置
+admin_addr = 127.0.0.1
+admin_port = 7400
+admin_user = admin
+admin_pwd = admin
+EOF
+    
+    # 添加隧道配置
+    local tunnel_index=0
+    for tunnel in "${tunnels[@]}"; do
+        tunnel_index=$((tunnel_index + 1))
+        
+        IFS=':' read -r tunnel_type tunnel_name local_ip local_port remote_port extra1 extra2 <<< "$tunnel"
+        
+        case "$tunnel_type" in
+            tcp)
+                cat >> /etc/frp/frpc.ini << EOF
+
+# 隧道 ${tunnel_index}: ${tunnel_name}
+[${tunnel_name}]
+type = tcp
+local_ip = ${local_ip}
+local_port = ${local_port}
+remote_port = ${remote_port}
+EOF
+                ;;
+            http)
+                cat >> /etc/frp/frpc.ini << EOF
+
+# 隧道 ${tunnel_index}: ${tunnel_name}
+[${tunnel_name}]
+type = http
+local_ip = ${local_ip}
+local_port = ${local_port}
+subdomain = ${remote_port}
+EOF
+                if [ -n "$extra2" ]; then
+                    echo "custom_domains = ${extra2}" >> /etc/frp/frpc.ini
+                fi
+                ;;
+            https)
+                cat >> /etc/frp/frpc.ini << EOF
+
+# 隧道 ${tunnel_index}: ${tunnel_name}
+[${tunnel_name}]
+type = https
+local_ip = ${local_ip}
+local_port = ${local_port}
+subdomain = ${remote_port}
+EOF
+                if [ -n "$extra2" ]; then
+                    echo "custom_domains = ${extra2}" >> /etc/frp/frpc.ini
+                fi
+                ;;
+        esac
+    done
+    
+    # 创建 systemd 服务文件
+    echo "正在创建 systemd 服务..."
+    cat > /etc/systemd/system/frpc.service << EOF
+[Unit]
+Description=FRP Client (frpc)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Restart=on-failure
+RestartSec=5s
+ExecStart=/usr/local/bin/frpc -c /etc/frp/frpc.ini
+ExecReload=/usr/local/bin/frpc reload -c /etc/frp/frpc.ini
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    # 创建日志文件
+    touch /var/log/frpc.log
+    chmod 644 /var/log/frpc.log
+    
+    # 重新加载 systemd
+    systemctl daemon-reload
+    
+    # 启用并启动服务
+    systemctl enable frpc
+    
+    echo -e "${BLUE}正在启动 FRPC 服务...${NC}"
+    systemctl start frpc
+    
+    if systemctl is-active --quiet frpc; then
+        echo -e "${GREEN}✅ FRPC 客户端安装成功！${NC}"
+        echo ""
+        echo -e "${CYAN}客户端配置信息：${NC}"
+        echo -e "服务端地址: ${GREEN}${server_addr}:${server_port}${NC}"
+        if [ -n "$token" ]; then
+            echo -e "认证令牌: ${GREEN}${token}${NC}"
+        fi
+        echo -e "隧道数量: ${GREEN}${#tunnels[@]}${NC}"
+        echo ""
+        
+        # 显示隧道信息
+        echo -e "${CYAN}隧道配置：${NC}"
+        for i in "${!tunnels[@]}"; do
+            IFS=':' read -r tunnel_type tunnel_name local_ip local_port remote_port extra1 extra2 <<< "${tunnels[$i]}"
+            echo -e "隧道 $((i+1)): ${GREEN}${tunnel_name}${NC}"
+            case "$tunnel_type" in
+                tcp)
+                    echo -e "   类型: TCP, 本地: ${local_ip}:${local_port}, 远程端口: ${remote_port}"
+                    ;;
+                http)
+                    echo -e "   类型: HTTP, 本地: ${local_ip}:${local_port}, 子域名: ${remote_port}"
+                    if [ -n "$extra2" ]; then
+                        echo -e "   自定义域名: ${extra2}"
+                    fi
+                    ;;
+                https)
+                    echo -e "   类型: HTTPS, 本地: ${local_ip}:${local_port}, 子域名: ${remote_port}"
+                    if [ -n "$extra2" ]; then
+                        echo -e "   自定义域名: ${extra2}"
+                    fi
+                    ;;
+            esac
+        done
+        
+        echo ""
+        echo -e "${CYAN}服务管理命令：${NC}"
+        echo -e "启动: ${GREEN}systemctl start frpc${NC}"
+        echo -e "停止: ${GREEN}systemctl stop frpc${NC}"
+        echo -e "重启: ${GREEN}systemctl restart frpc${NC}"
+        echo -e "状态: ${GREEN}systemctl status frpc${NC}"
+        
+        # 显示服务状态
+        sleep 2
+        echo ""
+        echo -e "${BLUE}服务状态：${NC}"
+        systemctl status frpc --no-pager -l
+    else
+        echo -e "${RED}❌ FRPC 启动失败，请检查配置和日志。${NC}"
+        echo "查看日志: journalctl -u frpc -n 20"
+    fi
+    
+    # 清理临时文件
+    cd /usr/local/frp
+    rm -rf frp_${frp_version#v}_linux_${arch} frp.tar.gz
+    
+    read -p "按回车键继续..."
+}
+
+# 手动配置 FRPC
+function manual_config_frpc() {
+    echo -e "${BLUE}手动配置 FRPC 客户端...${NC}"
+    echo "请手动编辑配置文件，完成后将自动安装。"
+    echo ""
+    
+    # 检测系统架构
+    local arch=$(uname -m)
+    case "$arch" in
+        x86_64) arch="amd64" ;;
+        aarch64) arch="arm64" ;;
+        armv7l) arch="arm" ;;
+        *) arch="amd64" ;;
+    esac
+    
+    # 获取 FRP 版本
+    read -p "请输入 FRP 版本 (默认 v0.52.3): " frp_version
+    frp_version=${frp_version:-"v0.52.3"}
+    
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${YELLOW}安装配置确认：${NC}"
+    echo -e "FRP 版本: ${GREEN}${frp_version}${NC}"
+    echo -e "系统架构: ${GREEN}${arch}${NC}"
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    
+    read -p "确认并开始安装？(y/N): " confirm_install
+    if [[ ! "$confirm_install" =~ ^[yY]$ ]]; then
+        echo "安装已取消。"
+        return
+    fi
+    
+    # 下载并安装二进制文件
+    echo -e "${BLUE}开始安装 FRPC 客户端...${NC}"
+    
+    # 创建安装目录
+    mkdir -p /usr/local/frp
+    cd /usr/local/frp
+    
+    # 下载 FRP
+    echo "正在下载 FRP ${frp_version}..."
+    local download_url="https://github.com/fatedier/frp/releases/download/${frp_version}/frp_${frp_version#v}_linux_${arch}.tar.gz"
+    
+    if ! curl -L -o frp.tar.gz "$download_url"; then
+        echo -e "${RED}下载 FRP 失败，请检查网络连接或版本号。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+    
+    # 解压并安装
+    echo "正在解压安装包..."
+    tar -zxvf frp.tar.gz
+    cd frp_${frp_version#v}_linux_${arch}
+    
+    # 复制二进制文件
+    cp frpc /usr/local/bin/
+    chmod +x /usr/local/bin/frpc
+    
+    # 创建配置文件目录
+    mkdir -p /etc/frp
+    
+    # 询问是否使用现有配置文件
+    if [ -f "/etc/frp/frpc.ini" ]; then
+        read -p "检测到现有配置文件，是否使用？(y/N): " use_existing
+        if [[ ! "$use_existing" =~ ^[yY]$ ]]; then
+            # 创建新配置文件
+            echo "请手动编辑配置文件 /etc/frp/frpc.ini"
+            cat > /etc/frp/frpc.ini << EOF
+[common]
+server_addr = 127.0.0.1
+server_port = 7000
+
+# 日志配置
+log_file = /var/log/frpc.log
+log_level = info
+log_max_days = 3
+
+# 管理配置
+admin_addr = 127.0.0.1
+admin_port = 7400
+admin_user = admin
+admin_pwd = admin
+
+# 在此添加隧道配置
+# [ssh]
+# type = tcp
+# local_ip = 127.0.0.1
+# local_port = 22
+# remote_port = 2222
+EOF
+        fi
+    else
+        # 创建新配置文件
+        echo "请手动编辑配置文件 /etc/frp/frpc.ini"
+        cat > /etc/frp/frpc.ini << EOF
+[common]
+server_addr = 127.0.0.1
+server_port = 7000
+
+# 日志配置
+log_file = /var/log/frpc.log
+log_level = info
+log_max_days = 3
+
+# 管理配置
+admin_addr = 127.0.0.1
+admin_port = 7400
+admin_user = admin
+admin_pwd = admin
+
+# 在此添加隧道配置
+# [ssh]
+# type = tcp
+# local_ip = 127.0.0.1
+# local_port = 22
+# remote_port = 2222
+EOF
+    fi
+    
+    # 使用编辑器打开配置文件
+    if command -v nano &> /dev/null; then
+        nano /etc/frp/frpc.ini
+    else
+        vi /etc/frp/frpc.ini
+    fi
+    
+    # 创建 systemd 服务文件
+    echo "正在创建 systemd 服务..."
+    cat > /etc/systemd/system/frpc.service << EOF
+[Unit]
+Description=FRP Client (frpc)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Restart=on-failure
+RestartSec=5s
+ExecStart=/usr/local/bin/frpc -c /etc/frp/frpc.ini
+ExecReload=/usr/local/bin/frpc reload -c /etc/frp/frpc.ini
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    # 创建日志文件
+    touch /var/log/frpc.log
+    chmod 644 /var/log/frpc.log
+    
+    # 重新加载 systemd
+    systemctl daemon-reload
+    
+    # 启用并启动服务
+    systemctl enable frpc
+    
+    echo -e "${BLUE}正在启动 FRPC 服务...${NC}"
+    systemctl start frpc
+    
+    if systemctl is-active --quiet frpc; then
+        echo -e "${GREEN}✅ FRPC 客户端安装成功！${NC}"
+        echo ""
+        echo -e "${CYAN}客户端配置信息：${NC}"
+        echo -e "配置文件位置: ${GREEN}/etc/frp/frpc.ini${NC}"
+        echo -e "日志文件位置: ${GREEN}/var/log/frpc.log${NC}"
+        echo ""
+        echo -e "${CYAN}服务管理命令：${NC}"
+        echo -e "启动: ${GREEN}systemctl start frpc${NC}"
+        echo -e "停止: ${GREEN}systemctl stop frpc${NC}"
+        echo -e "重启: ${GREEN}systemctl restart frpc${NC}"
+        echo -e "状态: ${GREEN}systemctl status frpc${NC}"
+        echo ""
+        echo -e "${YELLOW}重要提示：${NC}"
+        echo "1. 请确保配置文件正确无误"
+        echo "2. 本地管理地址: http://127.0.0.1:7400 (用户名/密码: admin/admin)"
+        echo "3. 可在配置文件中添加更多隧道"
+        
+        # 显示服务状态
+        sleep 2
+        echo ""
+        echo -e "${BLUE}服务状态：${NC}"
+        systemctl status frpc --no-pager -l
+    else
+        echo -e "${RED}❌ FRPC 启动失败，请检查配置和日志。${NC}"
+        echo "查看日志: journalctl -u frpc -n 20"
+    fi
+    
+    # 清理临时文件
+    cd /usr/local/frp
+    rm -rf frp_${frp_version#v}_linux_${arch} frp.tar.gz
+    
+    read -p "按回车键继续..."
+}
+
+# 启动 FRPC 客户端
+function start_frpc() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}            启动 FRPC 客户端${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/etc/systemd/system/frpc.service" ]; then
+        echo -e "${RED}未检测到 FRPC 安装，请先安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在启动 FRPC 服务...${NC}"
+    systemctl start frpc
+    
+    if systemctl is-active --quiet frpc; then
+        echo -e "${GREEN}✅ FRPC 启动成功！${NC}"
+    else
+        echo -e "${RED}❌ FRPC 启动失败。${NC}"
+        echo "查看错误信息: systemctl status frpc"
+    fi
+    read -p "按回车键继续..."
+}
+
+# 停止 FRPC 客户端
+function stop_frpc() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}            停止 FRPC 客户端${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/etc/systemd/system/frpc.service" ]; then
+        echo -e "${RED}未检测到 FRPC 安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在停止 FRPC 服务...${NC}"
+    systemctl stop frpc
+    
+    if ! systemctl is-active --quiet frpc; then
+        echo -e "${GREEN}✅ FRPC 停止成功！${NC}"
+    else
+        echo -e "${RED}❌ FRPC 停止失败。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+# 重启 FRPC 客户端
+function restart_frpc() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}            重启 FRPC 客户端${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/etc/systemd/system/frpc.service" ]; then
+        echo -e "${RED}未检测到 FRPC 安装，请先安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在重启 FRPC 服务...${NC}"
+    systemctl restart frpc
+    
+    if systemctl is-active --quiet frpc; then
+        echo -e "${GREEN}✅ FRPC 重启成功！${NC}"
+    else
+        echo -e "${RED}❌ FRPC 重启失败。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+# 查看 FRPC 状态和日志
+function view_frpc_status() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          FRPC 状态和日志${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/etc/systemd/system/frpc.service" ]; then
+        echo -e "${RED}未检测到 FRPC 安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}服务状态：${NC}"
+    systemctl status frpc --no-pager
+    
+    echo -e "\n${BLUE}最近 50 行日志：${NC}"
+    journalctl -u frpc -n 50 --no-pager
+    
+    echo -e "${CYAN}=========================================${NC}"
+    read -p "按回车键继续..."
+}
+
+# 修改 FRPC 配置
+function modify_frpc_config() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}           修改 FRPC 配置${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/etc/frp/frpc.ini" ]; then
+        echo -e "${RED}未检测到 FRPC 配置文件。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${YELLOW}当前配置信息：${NC}"
+    echo ""
+    
+    # 显示基本配置
+    local server_addr=$(grep -oP 'server_addr\s*=\s*\K[^ ]+' /etc/frp/frpc.ini 2>/dev/null | head -1)
+    local server_port=$(grep -oP 'server_port\s*=\s*\K[0-9]+' /etc/frp/frpc.ini 2>/dev/null | head -1)
+    local token=$(grep -oP 'token\s*=\s*\K[^ ]+' /etc/frp/frpc.ini 2>/dev/null | head -1)
+    
+    # 统计隧道数量
+    local tunnel_count=$(grep -c '^\[' /etc/frp/frpc.ini 2>/dev/null || echo 0)
+    tunnel_count=$((tunnel_count - 1))  # 减去 [common] 部分
+    
+    echo -e "服务端地址: ${GREEN}${server_addr:-127.0.0.1}${NC}"
+    echo -e "服务端端口: ${GREEN}${server_port:-7000}${NC}"
+    if [ -n "$token" ]; then
+        echo -e "认证令牌: ${GREEN}${token}${NC}"
+    else
+        echo -e "认证令牌: ${YELLOW}无${NC}"
+    fi
+    echo -e "隧道数量: ${GREEN}${tunnel_count}${NC}"
+    
+    echo ""
+    echo -e "${YELLOW}修改选项：${NC}"
+    echo "1. 编辑配置文件 (手动修改)"
+    echo "2. 修改服务端连接信息"
+    echo "3. 添加新的隧道"
+    echo "4. 编辑现有隧道"
+    echo "5. 删除隧道"
+    echo "6. 查看完整配置文件"
+    echo "0. 返回"
+    echo ""
+    read -p "请选择操作: " config_choice
+
+    case "$config_choice" in
+        1)
+            echo -e "${YELLOW}使用编辑器修改配置文件...${NC}"
+            echo "保存后需要重启 FRPC 服务使更改生效。"
+            read -p "按回车键继续..."
+            
+            # 使用 nano 或 vi 编辑
+            if command -v nano &> /dev/null; then
+                nano /etc/frp/frpc.ini
+            else
+                vi /etc/frp/frpc.ini
+            fi
+            
+            read -p "是否现在重启 FRPC 服务使更改生效？(y/N): " restart_now
+            if [[ "$restart_now" =~ ^[yY]$ ]]; then
+                systemctl restart frpc
+                echo -e "${GREEN}FRPC 服务已重启。${NC}"
+            fi
+            ;;
+        2)
+            read -p "请输入新的服务端地址: " new_server_addr
+            read -p "请输入新的服务端端口: " new_server_port
+            
+            if [ -z "$new_server_addr" ] || [ -z "$new_server_port" ]; then
+                echo -e "${RED}地址和端口不能为空。${NC}"
+                read -p "按回车键继续..."
+                return
+            fi
+            
+            # 停止服务
+            systemctl stop frpc
+            
+            # 更新配置文件
+            sed -i "s/^server_addr\s*=.*/server_addr = ${new_server_addr}/" /etc/frp/frpc.ini
+            sed -i "s/^server_port\s*=.*/server_port = ${new_server_port}/" /etc/frp/frpc.ini
+            
+            # 重新启动
+            systemctl start frpc
+            
+            echo -e "${GREEN}✅ 服务端连接信息已更新${NC}"
+            ;;
+        3)
+            echo -e "${BLUE}添加新隧道...${NC}"
+            echo ""
+            
+            read -p "请输入隧道名称（英文，如：web, ssh）: " tunnel_name
+            read -p "请输入隧道类型（tcp, http, https）: " tunnel_type
+            read -p "请输入本地IP地址（默认 127.0.0.1）: " local_ip
+            local_ip=${local_ip:-127.0.0.1}
+            read -p "请输入本地端口: " local_port
+            read -p "请输入远程端口（对于TCP类型）或子域名（对于HTTP/HTTPS类型）: " remote_value
+            
+            # 停止服务
+            systemctl stop frpc
+            
+            # 添加隧道配置
+            cat >> /etc/frp/frpc.ini << EOF
+
+# 新增隧道: ${tunnel_name}
+[${tunnel_name}]
+type = ${tunnel_type}
+local_ip = ${local_ip}
+local_port = ${local_port}
+EOF
+            
+            if [ "$tunnel_type" = "tcp" ]; then
+                echo "remote_port = ${remote_value}" >> /etc/frp/frpc.ini
+            elif [ "$tunnel_type" = "http" ] || [ "$tunnel_type" = "https" ]; then
+                echo "subdomain = ${remote_value}" >> /etc/frp/frpc.ini
+                read -p "请输入自定义域名（可选，留空跳过）: " custom_domain
+                if [ -n "$custom_domain" ]; then
+                    echo "custom_domains = ${custom_domain}" >> /etc/frp/frpc.ini
+                fi
+            fi
+            
+            # 重新启动
+            systemctl start frpc
+            
+            echo -e "${GREEN}✅ 隧道 ${tunnel_name} 已添加${NC}"
+            ;;
+        4)
+            echo -e "${BLUE}编辑现有隧道...${NC}"
+            echo ""
+            
+            # 列出所有隧道
+            local tunnels=($(grep -oP '^\K\[\w+\]' /etc/frp/frpc.ini 2>/dev/null | tr -d '[]' | grep -v common))
+            
+            if [ ${#tunnels[@]} -eq 0 ]; then
+                echo -e "${YELLOW}没有找到隧道配置。${NC}"
+                read -p "按回车键继续..."
+                return
+            fi
+            
+            echo "可用的隧道："
+            for i in "${!tunnels[@]}"; do
+                echo "$((i+1)). ${tunnels[$i]}"
+            done
+            
+            read -p "请选择要编辑的隧道编号: " tunnel_num
+            
+            if [ "$tunnel_num" -lt 1 ] || [ "$tunnel_num" -gt ${#tunnels[@]} ]; then
+                echo -e "${RED}无效的选择。${NC}"
+                read -p "按回车键继续..."
+                return
+            fi
+            
+            local tunnel_name="${tunnels[$((tunnel_num-1))]}"
+            
+            echo -e "${YELLOW}隧道 ${tunnel_name} 的当前配置：${NC}"
+            sed -n "/^\[${tunnel_name}\]/,/^\[/p" /etc/frp/frpc.ini | head -20
+            
+            echo ""
+            echo "请手动编辑配置文件。"
+            read -p "按回车键打开编辑器..."
+            
+            # 停止服务
+            systemctl stop frpc
+            
+            # 使用编辑器打开
+            if command -v nano &> /dev/null; then
+                nano /etc/frp/frpc.ini
+            else
+                vi /etc/frp/frpc.ini
+            fi
+            
+            # 重新启动
+            systemctl start frpc
+            
+            echo -e "${GREEN}✅ 隧道 ${tunnel_name} 配置已更新${NC}"
+            ;;
+        5)
+            echo -e "${BLUE}删除隧道...${NC}"
+            echo ""
+            
+            # 列出所有隧道
+            local tunnels=($(grep -oP '^\K\[\w+\]' /etc/frp/frpc.ini 2>/dev/null | tr -d '[]' | grep -v common))
+            
+            if [ ${#tunnels[@]} -eq 0 ]; then
+                echo -e "${YELLOW}没有找到隧道配置。${NC}"
+                read -p "按回车键继续..."
+                return
+            fi
+            
+            echo "可用的隧道："
+            for i in "${!tunnels[@]}"; do
+                echo "$((i+1)). ${tunnels[$i]}"
+            done
+            
+            read -p "请选择要删除的隧道编号: " tunnel_num
+            
+            if [ "$tunnel_num" -lt 1 ] || [ "$tunnel_num" -gt ${#tunnels[@]} ]; then
+                echo -e "${RED}无效的选择。${NC}"
+                read -p "按回车键继续..."
+                return
+            fi
+            
+            local tunnel_name="${tunnels[$((tunnel_num-1))]}"
+            
+            read -p "确定要删除隧道 ${tunnel_name} 吗？(y/N): " confirm_delete
+            if [[ ! "$confirm_delete" =~ ^[yY]$ ]]; then
+                echo "删除已取消。"
+                return
+            fi
+            
+            # 停止服务
+            systemctl stop frpc
+            
+            # 删除隧道配置
+            # 找到隧道开始的行
+            local start_line=$(grep -n "^\[${tunnel_name}\]" /etc/frp/frpc.ini | cut -d: -f1)
+            
+            if [ -n "$start_line" ]; then
+                # 找到下一个隧道开始的行
+                local next_line=$(sed -n "$((start_line+1)),$ p" /etc/frp/frpc.ini | grep -n '^\[' | head -1 | cut -d: -f1)
+                
+                if [ -n "$next_line" ]; then
+                    # 删除从 start_line 到 (start_line + next_line - 2) 的行
+                    sed -i "${start_line},$((start_line + next_line - 2))d" /etc/frp/frpc.ini
+                else
+                    # 删除从 start_line 到文件末尾的行
+                    sed -i "${start_line},$ d" /etc/frp/frpc.ini
+                fi
+                
+                # 删除可能的空行
+                sed -i '${/^$/d;}' /etc/frp/frpc.ini
+                
+                echo -e "${GREEN}✅ 隧道 ${tunnel_name} 已删除${NC}"
+            else
+                echo -e "${RED}找不到隧道配置。${NC}"
+            fi
+            
+            # 重新启动
+            systemctl start frpc
+            ;;
+        6)
+            echo -e "${BLUE}完整配置文件内容:${NC}"
+            echo ""
+            cat /etc/frp/frpc.ini
+            echo ""
+            read -p "按回车键继续..."
+            return
+            ;;
+        0) return ;;
+        *) echo -e "${RED}无效选择。${NC}" ;;
+    esac
+    
+    read -p "按回车键继续..."
+}
+
+# 管理隧道配置
+function manage_tunnels() {
+    modify_frpc_config
+}
+
+# 卸载 FRPC 客户端
+function uninstall_frpc() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}             卸载 FRPC${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/etc/systemd/system/frpc.service" ]; then
+        echo -e "${YELLOW}未检测到 FRPC 安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${RED}⚠️  警告：此操作将删除 FRPC 客户端及所有配置！${NC}"
+    echo ""
+    echo -e "将删除以下内容："
+    echo "1. FRPC 二进制文件 (/usr/local/bin/frpc)"
+    echo "2. 配置文件 (/etc/frp/frpc.ini)"
+    echo "3. 日志文件 (/var/log/frpc.log)"
+    echo "4. systemd 服务文件"
+    echo ""
+    
+    read -p "确定要卸载 FRPC 吗？(y/N): " confirm_uninstall
+    if [[ ! "$confirm_uninstall" =~ ^[yY]$ ]]; then
+        echo "卸载已取消。"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在停止服务...${NC}"
+    systemctl stop frpc
+    systemctl disable frpc
+    
+    echo -e "${BLUE}正在删除文件...${NC}"
+    rm -f /usr/local/bin/frpc
+    rm -f /etc/frp/frpc.ini
+    rm -f /var/log/frpc.log
+    rm -f /etc/systemd/system/frpc.service
+    
+    # 重新加载 systemd
+    systemctl daemon-reload
+    
+    echo -e "${GREEN}✅ FRPC 卸载完成！${NC}"
+    read -p "按回车键继续..."
+}
+
+# FRP 快速安装向导
+function frp_quick_wizard() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          FRP 快速安装向导${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    echo -e "请选择要安装的组件："
+    echo "1. 仅安装 FRPS 服务端（公网服务器）"
+    echo "2. 仅安装 FRPC 客户端（内网设备）"
+    echo "3. 同时安装 FRPS 和 FRPC（测试环境）"
+    echo "0. 返回"
+    echo ""
+    read -p "请选择 (0-3): " install_type
+    
+    case "$install_type" in
+        1)
+            echo -e "${BLUE}开始安装 FRPS 服务端...${NC}"
+            # 使用默认配置快速安装
+            quick_install_frps
+            ;;
+        2)
+            echo -e "${BLUE}开始安装 FRPC 客户端...${NC}"
+            # 使用默认配置快速安装
+            quick_install_frpc
+            ;;
+        3)
+            echo -e "${BLUE}开始同时安装 FRPS 和 FRPC...${NC}"
+            # 安装 FRPS
+            quick_install_frps
+            
+            echo ""
+            echo -e "${BLUE}继续安装 FRPC...${NC}"
+            # 安装 FRPC
+            quick_install_frpc
+            ;;
+        0) return ;;
+        *) echo -e "${RED}无效的选择。${NC}" ;;
+    esac
+    
+    read -p "按回车键继续..."
+}
+
+# 快速安装 FRPS
+function quick_install_frps() {
+    # 检测系统架构
+    local arch=$(uname -m)
+    case "$arch" in
+        x86_64) arch="amd64" ;;
+        aarch64) arch="arm64" ;;
+        armv7l) arch="arm" ;;
+        *) arch="amd64" ;;
+    esac
+    
+    # 使用默认版本
+    local frp_version="v0.52.3"
+    
+    echo -e "${BLUE}使用默认配置安装 FRPS...${NC}"
+    echo "版本: ${frp_version}"
+    echo "架构: ${arch}"
+    
+    read -p "确认安装？(y/N): " confirm
+    if [[ ! "$confirm" =~ ^[yY]$ ]]; then
+        echo "安装已取消。"
+        return
+    fi
+    
+    # 调用安装函数，使用默认配置
+    install_frps_binary "$frp_version" "$arch" "7000" "7500" "admin" "admin123" "my_token_123"
+}
+
+# 快速安装 FRPC
+function quick_install_frpc() {
+    # 检测系统架构
+    local arch=$(uname -m)
+    case "$arch" in
+        x86_64) arch="amd64" ;;
+        aarch64) arch="arm64" ;;
+        armv7l) arch="arm" ;;
+        *) arch="amd64" ;;
+    esac
+    
+    # 使用默认版本
+    local frp_version="v0.52.3"
+    
+    echo -e "${BLUE}使用默认配置安装 FRPC...${NC}"
+    echo "版本: ${frp_version}"
+    echo "架构: ${arch}"
+    
+    read -p "请输入 FRPS 服务端地址: " server_addr
+    if [ -z "$server_addr" ]; then
+        echo -e "${RED}服务端地址不能为空。${NC}"
+        return
+    fi
+    
+    read -p "确认安装？(y/N): " confirm
+    if [[ ! "$confirm" =~ ^[yY]$ ]]; then
+        echo "安装已取消。"
+        return
+    fi
+    
+    # 调用安装函数，使用默认配置
+    install_frpc_binary "$frp_version" "$arch" "$server_addr" "7000" ""
+}
+
+# FRP 信息与帮助
+function frp_info_help() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}        FRP 版本信息和帮助${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    echo -e "${YELLOW}FRP (Fast Reverse Proxy) 简介：${NC}"
+    echo "FRP 是一个高性能的反向代理应用，可以帮助您将内网服务暴露到公网"
+    echo "支持 TCP、UDP、HTTP、HTTPS 等多种协议"
+    echo ""
+    
+    echo -e "${YELLOW}版本信息：${NC}"
+    echo "当前脚本版本: 1.0"
+    echo "推荐 FRP 版本: v0.52.3"
+    echo "官方网站: https://github.com/fatedier/frp"
+    echo ""
+    
+    echo -e "${YELLOW}基本使用流程：${NC}"
+    echo "1. 在公网服务器上安装 FRPS（服务端）"
+    echo "2. 在内网设备上安装 FRPC（客户端）"
+    echo "3. 配置 FRPC 连接到 FRPS"
+    echo "4. 在 FRPC 上配置需要暴露的服务"
+    echo "5. 通过 FRPS 的公网地址访问内网服务"
+    echo ""
+    
+    echo -e "${YELLOW}常用端口：${NC}"
+    echo "FRPS 默认监听端口: 7000"
+    echo "FRPS Dashboard 端口: 7500"
+    echo "FRPC 管理端口: 7400"
+    echo ""
+    
+    echo -e "${YELLOW}配置文件位置：${NC}"
+    echo "FRPS 配置文件: /etc/frp/frps.ini"
+    echo "FRPC 配置文件: /etc/frp/frpc.ini"
+    echo ""
+    
+    echo -e "${YELLOW}服务管理命令：${NC}"
+    echo "启动服务: systemctl start frps/frpc"
+    echo "停止服务: systemctl stop frps/frpc"
+    echo "重启服务: systemctl restart frps/frpc"
+    echo "查看状态: systemctl status frps/frpc"
+    echo "查看日志: journalctl -u frps/frpc -f"
+    echo ""
+    
+    echo -e "${YELLOW}防火墙配置：${NC}"
+    echo "请确保防火墙已开放以下端口："
+    echo "- FRPS 监听端口（默认 7000）"
+    echo "- FRPS Dashboard 端口（默认 7500）"
+    echo "- 需要暴露的服务端口"
+    echo ""
+    
     echo -e "${CYAN}=========================================${NC}"
     read -p "按回车键返回..."
 }
