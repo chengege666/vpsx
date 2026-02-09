@@ -21,6 +21,7 @@ function app_center_menu() {
         echo -e " ${GREEN}10.${NC} AdGuard Home安装（vps）"
         echo -e " ${GREEN}11.${NC} Nginx Proxy Manager管理"
         echo -e " ${GREEN}12.${NC} GitHub加速站"
+        echo -e " ${GREEN}13.${NC}  MoonTV流媒体应用管理"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
@@ -39,6 +40,7 @@ function app_center_menu() {
             10) adguard_home_management ;;
             11) nginx_proxy_manager_management ;;
             12) github_proxy_management ;;
+            13) moontv_management ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -2486,4 +2488,562 @@ function uninstall_watchtower() {
     fi
 }
 
+# 在 app_center.sh 文件中添加以下代码
 
+# MoonTV 流媒体应用管理菜单
+function moontv_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}          MoonTV 流媒体应用管理${NC}"
+        
+        # 检查 Docker 是否运行
+        if ! docker info > /dev/null 2>&1; then
+            echo -e "${RED}⚠️  Docker 服务未运行或未安装！${NC}"
+        else
+            # 显示当前状态
+            if docker ps -a --format '{{.Names}}' | grep -q "^moontv-core$"; then
+                echo -e "          状态: ${GREEN}已部署${NC}"
+            else
+                echo -e "          状态: ${RED}未部署${NC}"
+            fi
+        fi
+        
+        echo -e "${CYAN}=========================================${NC}"
+        echo "MoonTV (LunaTV) 是一个现代化的流媒体应用"
+        echo "基于 Docker 容器部署，支持视频播放和管理"
+        echo ""
+        echo -e " ${GREEN}1.${NC}  安装 MoonTV (自定义配置)"
+        echo -e " ${GREEN}2.${NC}  启动 MoonTV"
+        echo -e " ${GREEN}3.${NC}  停止 MoonTV"
+        echo -e " ${GREEN}4.${NC}  重启 MoonTV"
+        echo -e " ${GREEN}5.${NC}  查看 MoonTV 状态和日志"
+        echo -e " ${GREEN}6.${NC}  修改 MoonTV 配置"
+        echo -e " ${GREEN}7.${NC}  卸载 MoonTV"
+        echo -e " ${GREEN}8.${NC}  访问 MoonTV Web 界面"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC}  返回应用中心菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 (0-8): " moontv_choice
+
+        case "$moontv_choice" in
+            1) install_moontv ;;
+            2) start_moontv ;;
+            3) stop_moontv ;;
+            4) restart_moontv ;;
+            5) view_moontv_status_logs ;;
+            6) modify_moontv_config ;;
+            7) uninstall_moontv ;;
+            8) access_moontv_web ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
+        esac
+    done
+}
+
+# 安装 MoonTV (自定义配置)
+function install_moontv() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}           安装 MoonTV 流媒体应用${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if ! command -v docker &> /dev/null; then
+        echo -e "${RED}未检测到 Docker，请先安装 Docker 环境。${NC}"
+        echo "您可以通过应用中心的 Komari 管理菜单安装 Docker。"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    # 检查容器是否已存在
+    if docker ps -a --format '{{.Names}}' | grep -q "^moontv-core$"; then
+        echo -e "${YELLOW}检测到 MoonTV 容器已存在。${NC}"
+        read -p "是否重新部署？(这将删除现有配置) (y/N): " redeploy_choice
+        if [[ ! "$redeploy_choice" =~ ^[yY]$ ]]; then
+            return
+        fi
+        echo -e "${BLUE}正在停止并移除旧容器...${NC}"
+        docker stop moontv-core moontv-kvrocks &> /dev/null
+        docker rm moontv-core moontv-kvrocks &> /dev/null
+    fi
+
+    echo -e "${YELLOW}正在配置 MoonTV 安装参数...${NC}"
+    echo ""
+
+    # 获取自定义端口
+    read -p "请输入宿主机映射端口 (默认 3000): " host_port
+    host_port=${host_port:-3000}
+    
+    # 验证端口占用
+    if command -v ss &> /dev/null; then
+        if ss -tuln | grep -q ":${host_port} "; then
+            echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
+            read -p "按回车键继续..."
+            return
+        fi
+    fi
+
+    # 获取自定义用户名
+    read -p "请输入管理员用户名 (默认 admin): " username
+    username=${username:-admin}
+
+    # 获取自定义密码
+    while true; do
+        read -sp "请输入管理员密码: " password
+        echo ""
+        if [ -z "$password" ]; then
+            echo -e "${RED}密码不能为空，请重新输入。${NC}"
+            continue
+        fi
+        
+        read -sp "请再次输入密码确认: " password_confirm
+        echo ""
+        
+        if [ "$password" != "$password_confirm" ]; then
+            echo -e "${RED}两次输入的密码不一致，请重新输入。${NC}"
+        else
+            break
+        fi
+    done
+
+    echo ""
+    read -p "请输入站点基础URL (可选，留空则使用IP): " site_base
+    read -p "请输入站点名称 (可选，默认 LunaTV Enhanced): " site_name
+    site_name=${site_name:-"LunaTV Enhanced"}
+
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${YELLOW}安装配置确认：${NC}"
+    echo -e "端口: ${GREEN}${host_port}${NC}"
+    echo -e "用户名: ${GREEN}${username}${NC}"
+    echo -e "站点名称: ${GREEN}${site_name}${NC}"
+    if [ -n "$site_base" ]; then
+        echo -e "站点URL: ${GREEN}${site_base}${NC}"
+    fi
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    
+    read -p "确认以上配置并开始安装？(y/N): " confirm_install
+    if [[ ! "$confirm_install" =~ ^[yY]$ ]]; then
+        echo "安装已取消。"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在准备安装目录...${NC}"
+    mkdir -p /opt/moontv
+    
+    echo -e "${BLUE}正在拉取镜像...${NC}"
+    docker pull ghcr.io/szemeng76/lunatv:latest
+    docker pull apache/kvrocks
+
+    echo -e "${BLUE}正在创建 Docker Compose 配置文件...${NC}"
+    
+    # 创建 docker-compose.yml
+    cat > /opt/moontv/docker-compose.yml << EOF
+version: '3.8'
+services:
+  moontv-core:
+    image: ghcr.io/szemeng76/lunatv:latest
+    container_name: moontv-core
+    restart: on-failure
+    ports:
+      - '${host_port}:3000'
+    environment:
+      - USERNAME=${username}
+      - PASSWORD=${password}
+      - NEXT_PUBLIC_STORAGE_TYPE=kvrocks
+      - KVROCKS_URL=redis://moontv-kvrocks:6666
+      - VIDEO_CACHE_DIR=/app/video-cache
+EOF
+
+    # 添加可选的站点配置
+    if [ -n "$site_base" ]; then
+        echo "      - SITE_BASE=${site_base}" >> /opt/moontv/docker-compose.yml
+    fi
+    
+    echo "      - NEXT_PUBLIC_SITE_NAME=${site_name}" >> /opt/moontv/docker-compose.yml
+    
+    # 继续写入剩余配置
+    cat >> /opt/moontv/docker-compose.yml << EOF
+    volumes:
+      - video-cache:/app/video-cache
+    networks:
+      - moontv-network
+    depends_on:
+      - moontv-kvrocks
+
+  moontv-kvrocks:
+    image: apache/kvrocks
+    container_name: moontv-kvrocks
+    restart: unless-stopped
+    volumes:
+      - kvrocks-data:/var/lib/kvrocks
+    networks:
+      - moontv-network
+
+networks:
+  moontv-network:
+    driver: bridge
+
+volumes:
+  kvrocks-data:
+  video-cache:
+EOF
+
+    echo -e "${BLUE}正在启动 MoonTV 服务...${NC}"
+    cd /opt/moontv
+    docker-compose up -d
+    
+    if [ $? -eq 0 ]; then
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        
+        echo -e "${GREEN}✅ MoonTV 安装成功！${NC}"
+        echo ""
+        echo -e "${CYAN}访问信息：${NC}"
+        [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+        [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+        echo ""
+        echo -e "${CYAN}登录凭据：${NC}"
+        echo -e "用户名: ${GREEN}${username}${NC}"
+        echo -e "密码: ${GREEN}${password}${NC}"
+        echo ""
+        echo -e "${YELLOW}重要提示：${NC}"
+        echo "1. 请妥善保管您的登录密码"
+        echo "2. 首次访问可能需要等待几分钟容器完全启动"
+        echo "3. 配置文件位置: /opt/moontv/docker-compose.yml"
+    else
+        echo -e "${RED}❌ MoonTV 安装失败，请检查 Docker 日志。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+# 启动 MoonTV
+function start_moontv() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}            启动 MoonTV${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/opt/moontv/docker-compose.yml" ]; then
+        echo -e "${RED}未检测到 MoonTV 安装，请先安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在启动 MoonTV 服务...${NC}"
+    cd /opt/moontv
+    docker-compose start
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ MoonTV 启动成功！${NC}"
+    else
+        echo -e "${RED}❌ MoonTV 启动失败。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+# 停止 MoonTV
+function stop_moontv() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}            停止 MoonTV${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/opt/moontv/docker-compose.yml" ]; then
+        echo -e "${RED}未检测到 MoonTV 安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在停止 MoonTV 服务...${NC}"
+    cd /opt/moontv
+    docker-compose stop
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ MoonTV 停止成功！${NC}"
+    else
+        echo -e "${RED}❌ MoonTV 停止失败。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+# 重启 MoonTV
+function restart_moontv() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}            重启 MoonTV${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/opt/moontv/docker-compose.yml" ]; then
+        echo -e "${RED}未检测到 MoonTV 安装，请先安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在重启 MoonTV 服务...${NC}"
+    cd /opt/moontv
+    docker-compose restart
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ MoonTV 重启成功！${NC}"
+    else
+        echo -e "${RED}❌ MoonTV 重启失败。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+# 查看 MoonTV 状态和日志
+function view_moontv_status_logs() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          MoonTV 状态和日志${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/opt/moontv/docker-compose.yml" ]; then
+        echo -e "${RED}未检测到 MoonTV 安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}容器状态:${NC}"
+    cd /opt/moontv
+    docker-compose ps
+    
+    echo -e "\n${BLUE}最近 20 行日志 (moontv-core):${NC}"
+    docker-compose logs --tail 20 moontv-core
+    
+    echo -e "${CYAN}=========================================${NC}"
+    read -p "按回车键继续..."
+}
+
+# 修改 MoonTV 配置
+function modify_moontv_config() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}           修改 MoonTV 配置${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/opt/moontv/docker-compose.yml" ]; then
+        echo -e "${RED}未检测到 MoonTV 安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${YELLOW}当前配置信息：${NC}"
+    echo ""
+    
+    # 提取当前配置
+    local current_port=$(grep -oP "ports:\s*-\s*'\K[0-9]+(?=:3000)" /opt/moontv/docker-compose.yml | head -1)
+    local current_username=$(grep -oP "USERNAME=\K[^ ]+" /opt/moontv/docker-compose.yml | head -1)
+    local current_sitename=$(grep -oP "NEXT_PUBLIC_SITE_NAME=\K[^ ]+" /opt/moontv/docker-compose.yml | head -1)
+    
+    echo -e "当前端口: ${GREEN}${current_port}${NC}"
+    echo -e "当前用户名: ${GREEN}${current_username}${NC}"
+    echo -e "当前站点名称: ${GREEN}${current_sitename}${NC}"
+    
+    echo ""
+    echo -e "${YELLOW}修改选项：${NC}"
+    echo "1. 修改端口"
+    echo "2. 修改用户名和密码"
+    echo "3. 修改站点配置"
+    echo "4. 查看完整配置文件"
+    echo "0. 返回"
+    echo ""
+    read -p "请选择操作: " config_choice
+
+    case "$config_choice" in
+        1)
+            read -p "请输入新的宿主机端口: " new_port
+            if [[ ! "$new_port" =~ ^[0-9]+$ ]] || [ "$new_port" -lt 1 ] || [ "$new_port" -gt 65535 ]; then
+                echo -e "${RED}端口号无效。请输入 1-65535 之间的数字。${NC}"
+                read -p "按回车键继续..."
+                return
+            fi
+            
+            # 验证端口占用
+            if command -v ss &> /dev/null; then
+                if ss -tuln | grep -q ":${new_port} "; then
+                    echo -e "${RED}端口 ${new_port} 已被占用，请选择其他端口。${NC}"
+                    read -p "按回车键继续..."
+                    return
+                fi
+            fi
+            
+            # 停止容器
+            cd /opt/moontv
+            docker-compose stop
+            
+            # 更新配置文件
+            sed -i "s/- '${current_port}:3000'/- '${new_port}:3000'/g" docker-compose.yml
+            
+            # 重新启动
+            docker-compose up -d
+            
+            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+            
+            echo -e "${GREEN}✅ 端口已修改为 ${new_port}${NC}"
+            [ -n "$ipv4" ] && echo -e "新访问地址: ${YELLOW}http://${ipv4}:${new_port}${NC}"
+            ;;
+        2)
+            read -p "请输入新的用户名 (当前: ${current_username}): " new_username
+            new_username=${new_username:-$current_username}
+            
+            while true; do
+                read -sp "请输入新的密码: " new_password
+                echo ""
+                if [ -z "$new_password" ]; then
+                    echo -e "${RED}密码不能为空，请重新输入。${NC}"
+                    continue
+                fi
+                
+                read -sp "请再次输入密码确认: " new_password_confirm
+                echo ""
+                
+                if [ "$new_password" != "$new_password_confirm" ]; then
+                    echo -e "${RED}两次输入的密码不一致，请重新输入。${NC}"
+                else
+                    break
+                fi
+            done
+            
+            # 停止容器
+            cd /opt/moontv
+            docker-compose stop
+            
+            # 更新配置文件
+            sed -i "s/USERNAME=${current_username}/USERNAME=${new_username}/g" docker-compose.yml
+            sed -i "s/PASSWORD=.*/PASSWORD=${new_password}/g" docker-compose.yml
+            
+            # 重新启动
+            docker-compose up -d
+            
+            echo -e "${GREEN}✅ 用户名和密码已更新${NC}"
+            echo -e "新用户名: ${GREEN}${new_username}${NC}"
+            ;;
+        3)
+            read -p "请输入新的站点名称 (当前: ${current_sitename}): " new_sitename
+            new_sitename=${new_sitename:-$current_sitename}
+            
+            read -p "请输入新的站点基础URL (可选，留空则使用IP): " new_sitebase
+            
+            # 停止容器
+            cd /opt/moontv
+            docker-compose stop
+            
+            # 更新站点名称
+            sed -i "s/NEXT_PUBLIC_SITE_NAME=${current_sitename}/NEXT_PUBLIC_SITE_NAME=${new_sitename}/g" docker-compose.yml
+            
+            # 更新站点URL
+            if grep -q "SITE_BASE=" docker-compose.yml; then
+                if [ -n "$new_sitebase" ]; then
+                    sed -i "s|SITE_BASE=.*|SITE_BASE=${new_sitebase}|g" docker-compose.yml
+                else
+                    # 删除SITE_BASE行
+                    sed -i "/SITE_BASE=/d" docker-compose.yml
+                fi
+            elif [ -n "$new_sitebase" ]; then
+                # 添加SITE_BASE行
+                sed -i "/NEXT_PUBLIC_SITE_NAME=/a \ \ \ \ \ \ - SITE_BASE=${new_sitebase}" docker-compose.yml
+            fi
+            
+            # 重新启动
+            docker-compose up -d
+            
+            echo -e "${GREEN}✅ 站点配置已更新${NC}"
+            echo -e "新站点名称: ${GREEN}${new_sitename}${NC}"
+            if [ -n "$new_sitebase" ]; then
+                echo -e "新站点URL: ${GREEN}${new_sitebase}${NC}"
+            fi
+            ;;
+        4)
+            echo -e "${BLUE}完整配置文件内容:${NC}"
+            echo ""
+            cat /opt/moontv/docker-compose.yml
+            echo ""
+            read -p "按回车键继续..."
+            return
+            ;;
+        0) return ;;
+        *) echo -e "${RED}无效选择。${NC}" ;;
+    esac
+    
+    echo -e "${YELLOW}提示：配置更改可能需要几分钟生效。${NC}"
+    read -p "按回车键继续..."
+}
+
+# 卸载 MoonTV
+function uninstall_moontv() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}             卸载 MoonTV${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/opt/moontv/docker-compose.yml" ]; then
+        echo -e "${YELLOW}未检测到 MoonTV 安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${RED}⚠️  警告：此操作将删除 MoonTV 容器及数据！${NC}"
+    echo ""
+    echo -e "将删除以下内容："
+    echo "1. MoonTV 容器 (moontv-core, moontv-kvrocks)"
+    echo "2. Docker 网络 (moontv-network)"
+    echo "3. 数据卷 (kvrocks-data, video-cache)"
+    echo "4. 配置文件目录 (/opt/moontv)"
+    echo ""
+    
+    read -p "确定要卸载 MoonTV 吗？(y/N): " confirm_uninstall
+    if [[ ! "$confirm_uninstall" =~ ^[yY]$ ]]; then
+        echo "卸载已取消。"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在停止并移除容器...${NC}"
+    cd /opt/moontv
+    docker-compose down -v
+    
+    echo -e "${BLUE}正在清理安装目录...${NC}"
+    cd / && rm -rf /opt/moontv
+    
+    echo -e "${GREEN}✅ MoonTV 卸载完成！${NC}"
+    read -p "按回车键继续..."
+}
+
+# 访问 MoonTV Web 界面
+function access_moontv_web() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}        访问 MoonTV Web 界面${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if [ ! -f "/opt/moontv/docker-compose.yml" ]; then
+        echo -e "${RED}❌ MoonTV 未安装，请先安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+    
+    # 获取当前端口
+    local host_port=$(grep -oP "ports:\s*-\s*'\K[0-9]+(?=:3000)" /opt/moontv/docker-compose.yml | head -1)
+    host_port=${host_port:-3000}
+    
+    # 获取用户名
+    local username=$(grep -oP "USERNAME=\K[^ ]+" /opt/moontv/docker-compose.yml | head -1)
+    username=${username:-admin}
+    
+    IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+    
+    echo -e "您的 MoonTV 访问地址为："
+    [ -n "$ipv4" ] && echo -e "IPv4 地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+    [ -n "$ipv6" ] && echo -e "IPv6 地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+    echo ""
+    echo -e "${CYAN}登录凭据：${NC}"
+    echo -e "用户名: ${GREEN}${username}${NC}"
+    echo -e "密码: ${YELLOW}(安装时设置，可在修改配置中查看)${NC}"
+    echo ""
+    echo -e "${YELLOW}提示：${NC}"
+    echo "1. 如果忘记密码，可通过修改配置功能重置"
+    echo "2. 首次访问可能需要等待容器完全启动"
+    echo -e "${CYAN}=========================================${NC}"
+    read -p "按回车键返回..."
+}
