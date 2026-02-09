@@ -101,9 +101,9 @@ function uninstall_tools_menu() {
         
         echo -e " ${GREEN}7.${NC} 批量卸载"
         echo -e "${CYAN}-----------------------------------------${NC}"
-        echo -e " ${RED}8.${NC} 返回上一级"
+        echo -e " ${RED}0.${NC} 返回上一级"  
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择(1-8): " uninstall_choice
+        read -p "请输入你的选择(0-7): " uninstall_choice  
 
         case "$uninstall_choice" in
             1)
@@ -127,7 +127,7 @@ function uninstall_tools_menu() {
             7)
                 batch_uninstall
                 ;;
-            8)
+            0)  # 修改这里：8改为0
                 break
                 ;;
             *)
