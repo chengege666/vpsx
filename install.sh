@@ -48,7 +48,8 @@ if [ ! -f "$INSTALL_PATH/vpsx.sh" ]; then
     exit 1
 fi
 
-# 4. 设置执行权限并启动
-echo -e "${GREEN}环境准备就绪，正在启动 VPSX...${NC}"
+# 4. 修复换行符并设置执行权限
+echo -e "${GREEN}正在优化脚本格式...${NC}"
+find "$INSTALL_PATH" -name "*.sh" -exec sed -i 's/\r$//' {} +
 chmod +x "$INSTALL_PATH/vpsx.sh"
 cd "$INSTALL_PATH" && ./vpsx.sh

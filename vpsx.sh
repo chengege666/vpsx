@@ -73,6 +73,7 @@ main() {
     while true; do
         show_menu
         read -p "请输入选项: " choice
+        choice=$(echo $choice | tr -d '\r')
         case $choice in
             1)
                 system_info_query
