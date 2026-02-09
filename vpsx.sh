@@ -72,16 +72,8 @@ main() {
     
     while true; do
         show_menu
-        # 强制从终端读取输入，不受 curl | bash 影响
-        read -p "请输入选项: " choice < /dev/tty
-        # 只保留数字
-        choice=$(echo "$choice" | tr -cd '0-9')
-        
-        if [ -z "$choice" ]; then
-            continue
-        fi
-        
-        case "$choice" in
+        read -p "请输入选项: " choice
+        case $choice in
             1)
                 system_info_query
                 ;;
@@ -138,10 +130,11 @@ main() {
             *)
                 echo -e "${RED}输入错误，请输入正确的数字选项！${NC}"
                 sleep 2
+                continue
                 ;;
         esac
         echo -e "${YELLOW}按任意键返回主菜单...${NC}"
-        read -n 1 < /dev/tty
+        read -n 1
     done
 }
 
