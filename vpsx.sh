@@ -72,17 +72,9 @@ main() {
     
     while true; do
         show_menu
-        # 使用 printf 代替 read -p，防止某些终端不显示提示符
-        printf "${YELLOW}请输入选项并回车: ${NC}"
-        read -r raw_choice
-        
-        # 终极清理：只保留数字，过滤掉所有空格、回车、换行、特殊控制符
-        choice=$(echo "$raw_choice" | tr -cd '0-9')
-        
-        # 如果输入为空，直接跳过
-        if [ -z "$choice" ]; then
-            continue
-        fi
+        read -p "请输入选项: " choice
+        # 只保留数字，去掉所有干扰项
+        choice=$(echo "$choice" | tr -cd '0-9')
         
         case "$choice" in
             1)
@@ -139,11 +131,8 @@ main() {
                 exit_script
                 ;;
             *)
-                echo -e "${RED}输入错误！您输入的是: [${raw_choice}]${NC}"
-                echo -n "诊断信息 (Hex): "
-                echo -n "$raw_choice" | od -An -tx1
+                echo -e "${RED}输入错误，请输入正确的数字选项！${NC}"
                 sleep 2
-                continue
                 ;;
         esac
         echo -e "${YELLOW}按任意键返回主菜单...${NC}"
