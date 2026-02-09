@@ -2637,9 +2637,8 @@ function install_moontv() {
 
     echo -e "${BLUE}正在创建 Docker Compose 配置文件...${NC}"
     
-    # 创建 docker-compose.yml
+    # 创建 docker-compose.yml - 修复版本和网络问题
     cat > /opt/moontv/docker-compose.yml << EOF
-version: '3.8'
 services:
   moontv-core:
     image: ghcr.io/szemeng76/lunatv:latest
@@ -2666,10 +2665,12 @@ EOF
     cat >> /opt/moontv/docker-compose.yml << EOF
     volumes:
       - video-cache:/app/video-cache
-    networks:
-      - moontv-network
     depends_on:
       - moontv-kvrocks
+    networks:
+      moontv-network:
+        aliases:
+          - moontv-core
 
   moontv-kvrocks:
     image: apache/kvrocks
@@ -2678,20 +2679,40 @@ EOF
     volumes:
       - kvrocks-data:/var/lib/kvrocks
     networks:
-      - moontv-network
+      moontv-network:
+        aliases:
+          - moontv-kvrocks
 
 networks:
   moontv-network:
+    name: moontv-network
     driver: bridge
 
 volumes:
   kvrocks-data:
+    name: kvrocks-data
   video-cache:
+    name: video-cache
 EOF
+
+    echo -e "${BLUE}正在检查并清理旧的网络...${NC}"
+    # 检查并清理旧的网络
+    if docker network ls | grep -q "moontv_moontv-network"; then
+        echo "发现旧的网络，正在清理..."
+        docker network rm moontv_moontv-network 2>/dev/null || true
+    fi
 
     echo -e "${BLUE}正在启动 MoonTV 服务...${NC}"
     cd /opt/moontv
-    docker-compose up -d
+    
+    # 使用兼容的 Docker Compose 命令
+    if docker compose version &> /dev/null; then
+        docker_compose_cmd="docker compose"
+    else
+        docker_compose_cmd="docker-compose"
+    fi
+    
+    $docker_compose_cmd up -d
     
     if [ $? -eq 0 ]; then
         IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
@@ -2710,13 +2731,25 @@ EOF
         echo "1. 请妥善保管您的登录密码"
         echo "2. 首次访问可能需要等待几分钟容器完全启动"
         echo "3. 配置文件位置: /opt/moontv/docker-compose.yml"
+        
+        # 显示状态
+        sleep 3
+        echo ""
+        echo -e "${BLUE}容器启动状态：${NC}"
+        $docker_compose_cmd ps
     else
-        echo -e "${RED}❌ MoonTV 安装失败，请检查 Docker 日志。${NC}"
+        echo -e "${RED}❌ MoonTV 安装失败，请检查以下内容：${NC}"
+        echo "1. 检查 Docker 服务是否正常运行"
+        echo "2. 检查端口 ${host_port} 是否被占用"
+        echo "3. 查看详细错误日志:"
+        $docker_compose_cmd logs --tail 20
     fi
     read -p "按回车键继续..."
 }
 
-# 启动 MoonTV
+# 同时需要修改其他函数中的 docker-compose 调用
+# 修改 start_moontv, stop_moontv, restart_moontv, view_moontv_status_logs, uninstall_moontv 函数
+
 function start_moontv() {
     clear
     echo -e "${CYAN}=========================================${NC}"
@@ -2731,7 +2764,14 @@ function start_moontv() {
 
     echo -e "${BLUE}正在启动 MoonTV 服务...${NC}"
     cd /opt/moontv
-    docker-compose start
+    
+    if docker compose version &> /dev/null; then
+        docker_compose_cmd="docker compose"
+    else
+        docker_compose_cmd="docker-compose"
+    fi
+    
+    $docker_compose_cmd start
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✅ MoonTV 启动成功！${NC}"
@@ -2741,7 +2781,6 @@ function start_moontv() {
     read -p "按回车键继续..."
 }
 
-# 停止 MoonTV
 function stop_moontv() {
     clear
     echo -e "${CYAN}=========================================${NC}"
@@ -2756,7 +2795,14 @@ function stop_moontv() {
 
     echo -e "${BLUE}正在停止 MoonTV 服务...${NC}"
     cd /opt/moontv
-    docker-compose stop
+    
+    if docker compose version &> /dev/null; then
+        docker_compose_cmd="docker compose"
+    else
+        docker_compose_cmd="docker-compose"
+    fi
+    
+    $docker_compose_cmd stop
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✅ MoonTV 停止成功！${NC}"
@@ -2766,7 +2812,6 @@ function stop_moontv() {
     read -p "按回车键继续..."
 }
 
-# 重启 MoonTV
 function restart_moontv() {
     clear
     echo -e "${CYAN}=========================================${NC}"
@@ -2781,7 +2826,14 @@ function restart_moontv() {
 
     echo -e "${BLUE}正在重启 MoonTV 服务...${NC}"
     cd /opt/moontv
-    docker-compose restart
+    
+    if docker compose version &> /dev/null; then
+        docker_compose_cmd="docker compose"
+    else
+        docker_compose_cmd="docker-compose"
+    fi
+    
+    $docker_compose_cmd restart
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✅ MoonTV 重启成功！${NC}"
@@ -2791,7 +2843,6 @@ function restart_moontv() {
     read -p "按回车键继续..."
 }
 
-# 查看 MoonTV 状态和日志
 function view_moontv_status_logs() {
     clear
     echo -e "${CYAN}=========================================${NC}"
@@ -2804,173 +2855,24 @@ function view_moontv_status_logs() {
         return
     fi
 
-    echo -e "${BLUE}容器状态:${NC}"
     cd /opt/moontv
-    docker-compose ps
+    
+    if docker compose version &> /dev/null; then
+        docker_compose_cmd="docker compose"
+    else
+        docker_compose_cmd="docker-compose"
+    fi
+    
+    echo -e "${BLUE}容器状态:${NC}"
+    $docker_compose_cmd ps
     
     echo -e "\n${BLUE}最近 20 行日志 (moontv-core):${NC}"
-    docker-compose logs --tail 20 moontv-core
+    $docker_compose_cmd logs --tail 20 moontv-core
     
     echo -e "${CYAN}=========================================${NC}"
     read -p "按回车键继续..."
 }
 
-# 修改 MoonTV 配置
-function modify_moontv_config() {
-    clear
-    echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}           修改 MoonTV 配置${NC}"
-    echo -e "${CYAN}=========================================${NC}"
-
-    if [ ! -f "/opt/moontv/docker-compose.yml" ]; then
-        echo -e "${RED}未检测到 MoonTV 安装。${NC}"
-        read -p "按回车键继续..."
-        return
-    fi
-
-    echo -e "${YELLOW}当前配置信息：${NC}"
-    echo ""
-    
-    # 提取当前配置
-    local current_port=$(grep -oP "ports:\s*-\s*'\K[0-9]+(?=:3000)" /opt/moontv/docker-compose.yml | head -1)
-    local current_username=$(grep -oP "USERNAME=\K[^ ]+" /opt/moontv/docker-compose.yml | head -1)
-    local current_sitename=$(grep -oP "NEXT_PUBLIC_SITE_NAME=\K[^ ]+" /opt/moontv/docker-compose.yml | head -1)
-    
-    echo -e "当前端口: ${GREEN}${current_port}${NC}"
-    echo -e "当前用户名: ${GREEN}${current_username}${NC}"
-    echo -e "当前站点名称: ${GREEN}${current_sitename}${NC}"
-    
-    echo ""
-    echo -e "${YELLOW}修改选项：${NC}"
-    echo "1. 修改端口"
-    echo "2. 修改用户名和密码"
-    echo "3. 修改站点配置"
-    echo "4. 查看完整配置文件"
-    echo "0. 返回"
-    echo ""
-    read -p "请选择操作: " config_choice
-
-    case "$config_choice" in
-        1)
-            read -p "请输入新的宿主机端口: " new_port
-            if [[ ! "$new_port" =~ ^[0-9]+$ ]] || [ "$new_port" -lt 1 ] || [ "$new_port" -gt 65535 ]; then
-                echo -e "${RED}端口号无效。请输入 1-65535 之间的数字。${NC}"
-                read -p "按回车键继续..."
-                return
-            fi
-            
-            # 验证端口占用
-            if command -v ss &> /dev/null; then
-                if ss -tuln | grep -q ":${new_port} "; then
-                    echo -e "${RED}端口 ${new_port} 已被占用，请选择其他端口。${NC}"
-                    read -p "按回车键继续..."
-                    return
-                fi
-            fi
-            
-            # 停止容器
-            cd /opt/moontv
-            docker-compose stop
-            
-            # 更新配置文件
-            sed -i "s/- '${current_port}:3000'/- '${new_port}:3000'/g" docker-compose.yml
-            
-            # 重新启动
-            docker-compose up -d
-            
-            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
-            
-            echo -e "${GREEN}✅ 端口已修改为 ${new_port}${NC}"
-            [ -n "$ipv4" ] && echo -e "新访问地址: ${YELLOW}http://${ipv4}:${new_port}${NC}"
-            ;;
-        2)
-            read -p "请输入新的用户名 (当前: ${current_username}): " new_username
-            new_username=${new_username:-$current_username}
-            
-            while true; do
-                read -sp "请输入新的密码: " new_password
-                echo ""
-                if [ -z "$new_password" ]; then
-                    echo -e "${RED}密码不能为空，请重新输入。${NC}"
-                    continue
-                fi
-                
-                read -sp "请再次输入密码确认: " new_password_confirm
-                echo ""
-                
-                if [ "$new_password" != "$new_password_confirm" ]; then
-                    echo -e "${RED}两次输入的密码不一致，请重新输入。${NC}"
-                else
-                    break
-                fi
-            done
-            
-            # 停止容器
-            cd /opt/moontv
-            docker-compose stop
-            
-            # 更新配置文件
-            sed -i "s/USERNAME=${current_username}/USERNAME=${new_username}/g" docker-compose.yml
-            sed -i "s/PASSWORD=.*/PASSWORD=${new_password}/g" docker-compose.yml
-            
-            # 重新启动
-            docker-compose up -d
-            
-            echo -e "${GREEN}✅ 用户名和密码已更新${NC}"
-            echo -e "新用户名: ${GREEN}${new_username}${NC}"
-            ;;
-        3)
-            read -p "请输入新的站点名称 (当前: ${current_sitename}): " new_sitename
-            new_sitename=${new_sitename:-$current_sitename}
-            
-            read -p "请输入新的站点基础URL (可选，留空则使用IP): " new_sitebase
-            
-            # 停止容器
-            cd /opt/moontv
-            docker-compose stop
-            
-            # 更新站点名称
-            sed -i "s/NEXT_PUBLIC_SITE_NAME=${current_sitename}/NEXT_PUBLIC_SITE_NAME=${new_sitename}/g" docker-compose.yml
-            
-            # 更新站点URL
-            if grep -q "SITE_BASE=" docker-compose.yml; then
-                if [ -n "$new_sitebase" ]; then
-                    sed -i "s|SITE_BASE=.*|SITE_BASE=${new_sitebase}|g" docker-compose.yml
-                else
-                    # 删除SITE_BASE行
-                    sed -i "/SITE_BASE=/d" docker-compose.yml
-                fi
-            elif [ -n "$new_sitebase" ]; then
-                # 添加SITE_BASE行
-                sed -i "/NEXT_PUBLIC_SITE_NAME=/a \ \ \ \ \ \ - SITE_BASE=${new_sitebase}" docker-compose.yml
-            fi
-            
-            # 重新启动
-            docker-compose up -d
-            
-            echo -e "${GREEN}✅ 站点配置已更新${NC}"
-            echo -e "新站点名称: ${GREEN}${new_sitename}${NC}"
-            if [ -n "$new_sitebase" ]; then
-                echo -e "新站点URL: ${GREEN}${new_sitebase}${NC}"
-            fi
-            ;;
-        4)
-            echo -e "${BLUE}完整配置文件内容:${NC}"
-            echo ""
-            cat /opt/moontv/docker-compose.yml
-            echo ""
-            read -p "按回车键继续..."
-            return
-            ;;
-        0) return ;;
-        *) echo -e "${RED}无效选择。${NC}" ;;
-    esac
-    
-    echo -e "${YELLOW}提示：配置更改可能需要几分钟生效。${NC}"
-    read -p "按回车键继续..."
-}
-
-# 卸载 MoonTV
 function uninstall_moontv() {
     clear
     echo -e "${CYAN}=========================================${NC}"
@@ -3001,7 +2903,19 @@ function uninstall_moontv() {
 
     echo -e "${BLUE}正在停止并移除容器...${NC}"
     cd /opt/moontv
-    docker-compose down -v
+    
+    if docker compose version &> /dev/null; then
+        docker_compose_cmd="docker compose"
+    else
+        docker_compose_cmd="docker-compose"
+    fi
+    
+    $docker_compose_cmd down -v
+    
+    echo -e "${BLUE}正在清理网络...${NC}"
+    # 尝试清理网络
+    docker network rm moontv_moontv-network 2>/dev/null || true
+    docker network rm moontv-network 2>/dev/null || true
     
     echo -e "${BLUE}正在清理安装目录...${NC}"
     cd / && rm -rf /opt/moontv
@@ -3010,7 +2924,6 @@ function uninstall_moontv() {
     read -p "按回车键继续..."
 }
 
-# 访问 MoonTV Web 界面
 function access_moontv_web() {
     clear
     echo -e "${CYAN}=========================================${NC}"
