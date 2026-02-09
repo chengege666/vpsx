@@ -72,9 +72,11 @@ main() {
     
     while true; do
         show_menu
-        read -p "请输入选项: " choice
-        choice=$(echo $choice | tr -d '\r')
-        case $choice in
+        read -r -p "请输入选项: " choice
+        # 暴力清理：只保留数字、字母，去掉所有不可见字符（如 \r, 空格, 制表符）
+        choice=$(echo "$choice" | sed 's/[^0-9a-zA-Z]//g')
+        
+        case "$choice" in
             1)
                 system_info_query
                 ;;

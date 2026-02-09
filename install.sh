@@ -48,8 +48,11 @@ if [ ! -f "$INSTALL_PATH/vpsx.sh" ]; then
     exit 1
 fi
 
-# 4. 修复换行符并设置执行权限
-echo -e "${GREEN}正在优化脚本格式...${NC}"
-find "$INSTALL_PATH" -name "*.sh" -exec sed -i 's/\r$//' {} +
+# 4. 彻底修复换行符并设置执行权限
+echo -e "${GREEN}正在进行系统级优化与格式修复...${NC}"
+# 使用 tr 命令清理回车符，这比 sed 更稳定
+find "$INSTALL_PATH" -name "*.sh" -type f | while read -r file; do
+    tr -d '\r' < "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+done
 chmod +x "$INSTALL_PATH/vpsx.sh"
 cd "$INSTALL_PATH" && ./vpsx.sh
