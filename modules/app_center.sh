@@ -22,10 +22,11 @@ function app_center_menu() {
         echo -e " ${GREEN}11.${NC} Nginx Proxy Manager管理"
         echo -e " ${GREEN}12.${NC} GitHub加速站"
         echo -e " ${GREEN}13.${NC} MoonTV流媒体应用管理"
+        echo -e " ${GREEN}14.${NC}  LibreTV流媒体应用管理"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-13): " app_choice
+        read -p "请输入你的选择 (0-14): " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
@@ -41,7 +42,8 @@ function app_center_menu() {
             11) nginx_proxy_manager_management ;;
             12) github_proxy_management ;;
             13) moontv_management ;;
-            0) break ;;
+            14) libretv_management ;;
+            0) break ;; 
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
     done
@@ -2957,6 +2959,597 @@ function access_moontv_web() {
     echo -e "${YELLOW}提示：${NC}"
     echo "1. 如果忘记密码，可通过修改配置功能重置"
     echo "2. 首次访问可能需要等待容器完全启动"
+    echo -e "${CYAN}=========================================${NC}"
+    read -p "按回车键返回..."
+}
+
+# LibreTV 流媒体应用管理菜单
+function libretv_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}          LibreTV 流媒体应用管理${NC}"
+        
+        # 检查 Docker 是否运行
+        if ! docker info > /dev/null 2>&1; then
+            echo -e "${RED}⚠️  Docker 服务未运行或未安装！${NC}"
+        else
+            # 显示当前状态
+            if docker ps -a --format '{{.Names}}' | grep -q "^libretv$"; then
+                echo -e "          状态: ${GREEN}已部署${NC}"
+            else
+                echo -e "          状态: ${RED}未部署${NC}"
+            fi
+        fi
+        
+        echo -e "${CYAN}=========================================${NC}"
+        echo "LibreTV 是一个轻量级的流媒体应用"
+        echo "基于 Docker 容器部署，支持视频播放"
+        echo ""
+        echo -e " ${GREEN}1.${NC}  安装 LibreTV (自定义配置)"
+        echo -e " ${GREEN}2.${NC}  启动 LibreTV"
+        echo -e " ${GREEN}3.${NC}  停止 LibreTV"
+        echo -e " ${GREEN}4.${NC}  重启 LibreTV"
+        echo -e " ${GREEN}5.${NC}  查看 LibreTV 状态和日志"
+        echo -e " ${GREEN}6.${NC}  修改 LibreTV 配置"
+        echo -e " ${GREEN}7.${NC}  卸载 LibreTV"
+        echo -e " ${GREEN}8.${NC}  访问 LibreTV Web 界面"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC}  返回应用中心菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 (0-8): " libretv_choice
+
+        case "$libretv_choice" in
+            1) install_libretv ;;
+            2) start_libretv ;;
+            3) stop_libretv ;;
+            4) restart_libretv ;;
+            5) view_libretv_status_logs ;;
+            6) modify_libretv_config ;;
+            7) uninstall_libretv ;;
+            8) access_libretv_web ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
+        esac
+    done
+}
+
+# 安装 LibreTV (自定义配置)
+function install_libretv() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}           安装 LibreTV 流媒体应用${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if ! command -v docker &> /dev/null; then
+        echo -e "${RED}未检测到 Docker，请先安装 Docker 环境。${NC}"
+        echo "您可以通过应用中心的 Komari 管理菜单安装 Docker。"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    # 检查容器是否已存在
+    if docker ps -a --format '{{.Names}}' | grep -q "^libretv$"; then
+        echo -e "${YELLOW}检测到 LibreTV 容器已存在。${NC}"
+        read -p "是否重新部署？(这将删除现有配置) (y/N): " redeploy_choice
+        if [[ ! "$redeploy_choice" =~ ^[yY]$ ]]; then
+            return
+        fi
+        echo -e "${BLUE}正在停止并移除旧容器...${NC}"
+        docker stop libretv &> /dev/null
+        docker rm libretv &> /dev/null
+    fi
+
+    echo -e "${YELLOW}正在配置 LibreTV 安装参数...${NC}"
+    echo ""
+
+    # 获取自定义端口
+    read -p "请输入宿主机映射端口 (默认 8899): " host_port
+    host_port=${host_port:-8899}
+    
+    # 验证端口占用
+    if command -v ss &> /dev/null; then
+        if ss -tuln | grep -q ":${host_port} "; then
+            echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
+            read -p "按回车键继续..."
+            return
+        fi
+    fi
+
+    # 获取自定义密码
+    while true; do
+        read -sp "请输入管理员密码 (默认 111111): " password
+        echo ""
+        password=${password:-111111}
+        
+        read -sp "请再次输入密码确认: " password_confirm
+        echo ""
+        
+        if [ "$password" != "$password_confirm" ]; then
+            echo -e "${RED}两次输入的密码不一致，请重新输入。${NC}"
+        else
+            break
+        fi
+    done
+
+    echo ""
+    read -p "是否启用自动更新？(y/N): " enable_auto_update
+    auto_update="unless-stopped"
+    if [[ "$enable_auto_update" =~ ^[yY]$ ]]; then
+        echo -e "${GREEN}已启用自动更新${NC}"
+    else
+        auto_update="no"
+        echo -e "${YELLOW}已禁用自动更新${NC}"
+    fi
+
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${YELLOW}安装配置确认：${NC}"
+    echo -e "端口: ${GREEN}${host_port}${NC}"
+    echo -e "密码: ${GREEN}********${NC}"
+    echo -e "自动更新: ${GREEN}$([ "$auto_update" = "unless-stopped" ] && echo "是" || echo "否")${NC}"
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    
+    read -p "确认以上配置并开始安装？(y/N): " confirm_install
+    if [[ ! "$confirm_install" =~ ^[yY]$ ]]; then
+        echo "安装已取消。"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在准备安装目录...${NC}"
+    mkdir -p /opt/libretv
+    
+    echo -e "${BLUE}正在拉取镜像...${NC}"
+    docker pull bestzwei/libretv:latest
+
+    echo -e "${BLUE}正在创建 Docker Compose 配置文件...${NC}"
+    
+    # 创建 docker-compose.yml
+    cat > /opt/libretv/docker-compose.yml << EOF
+services:
+  libretv:
+    image: bestzwei/libretv:latest
+    container_name: libretv
+    ports:
+      - "${host_port}:8080"
+    environment:
+      - PASSWORD=${password}
+    restart: ${auto_update}
+EOF
+
+    echo -e "${BLUE}正在启动 LibreTV 服务...${NC}"
+    cd /opt/libretv
+    
+    # 使用兼容的 Docker Compose 命令
+    if docker compose version &> /dev/null; then
+        docker_compose_cmd="docker compose"
+    else
+        docker_compose_cmd="docker-compose"
+    fi
+    
+    $docker_compose_cmd up -d
+    
+    if [ $? -eq 0 ]; then
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        
+        echo -e "${GREEN}✅ LibreTV 安装成功！${NC}"
+        echo ""
+        echo -e "${CYAN}访问信息：${NC}"
+        [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+        [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+        echo ""
+        echo -e "${CYAN}登录凭据：${NC}"
+        echo -e "密码: ${GREEN}${password}${NC}"
+        echo ""
+        echo -e "${YELLOW}重要提示：${NC}"
+        echo "1. 请妥善保管您的登录密码"
+        echo "2. 首次访问可能需要等待容器完全启动"
+        echo "3. 配置文件位置: /opt/libretv/docker-compose.yml"
+        
+        # 显示状态
+        sleep 3
+        echo ""
+        echo -e "${BLUE}容器启动状态：${NC}"
+        $docker_compose_cmd ps
+    else
+        echo -e "${RED}❌ LibreTV 安装失败，请检查以下内容：${NC}"
+        echo "1. 检查 Docker 服务是否正常运行"
+        echo "2. 检查端口 ${host_port} 是否被占用"
+        echo "3. 查看详细错误日志:"
+        $docker_compose_cmd logs --tail 20
+    fi
+    read -p "按回车键继续..."
+}
+
+# 启动 LibreTV
+function start_libretv() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}            启动 LibreTV${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/opt/libretv/docker-compose.yml" ]; then
+        echo -e "${RED}未检测到 LibreTV 安装，请先安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在启动 LibreTV 服务...${NC}"
+    cd /opt/libretv
+    
+    if docker compose version &> /dev/null; then
+        docker_compose_cmd="docker compose"
+    else
+        docker_compose_cmd="docker-compose"
+    fi
+    
+    $docker_compose_cmd start
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ LibreTV 启动成功！${NC}"
+    else
+        echo -e "${RED}❌ LibreTV 启动失败。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+# 停止 LibreTV
+function stop_libretv() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}            停止 LibreTV${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/opt/libretv/docker-compose.yml" ]; then
+        echo -e "${RED}未检测到 LibreTV 安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在停止 LibreTV 服务...${NC}"
+    cd /opt/libretv
+    
+    if docker compose version &> /dev/null; then
+        docker_compose_cmd="docker compose"
+    else
+        docker_compose_cmd="docker-compose"
+    fi
+    
+    $docker_compose_cmd stop
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ LibreTV 停止成功！${NC}"
+    else
+        echo -e "${RED}❌ LibreTV 停止失败。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+# 重启 LibreTV
+function restart_libretv() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}            重启 LibreTV${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/opt/libretv/docker-compose.yml" ]; then
+        echo -e "${RED}未检测到 LibreTV 安装，请先安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在重启 LibreTV 服务...${NC}"
+    cd /opt/libretv
+    
+    if docker compose version &> /dev/null; then
+        docker_compose_cmd="docker compose"
+    else
+        docker_compose_cmd="docker-compose"
+    fi
+    
+    $docker_compose_cmd restart
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ LibreTV 重启成功！${NC}"
+    else
+        echo -e "${RED}❌ LibreTV 重启失败。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+# 查看 LibreTV 状态和日志
+function view_libretv_status_logs() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          LibreTV 状态和日志${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/opt/libretv/docker-compose.yml" ]; then
+        echo -e "${RED}未检测到 LibreTV 安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    cd /opt/libretv
+    
+    if docker compose version &> /dev/null; then
+        docker_compose_cmd="docker compose"
+    else
+        docker_compose_cmd="docker-compose"
+    fi
+    
+    echo -e "${BLUE}容器状态:${NC}"
+    $docker_compose_cmd ps
+    
+    echo -e "\n${BLUE}最近 30 行日志:${NC}"
+    $docker_compose_cmd logs --tail 30
+    
+    echo -e "${CYAN}=========================================${NC}"
+    read -p "按回车键继续..."
+}
+
+# 修改 LibreTV 配置
+function modify_libretv_config() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}           修改 LibreTV 配置${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/opt/libretv/docker-compose.yml" ]; then
+        echo -e "${RED}未检测到 LibreTV 安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${YELLOW}当前配置信息：${NC}"
+    echo ""
+    
+    # 提取当前配置
+    local current_port=$(grep -oP "ports:\s*-\s*\"\K[0-9]+(?=:8080)" /opt/libretv/docker-compose.yml | head -1)
+    local current_restart=$(grep -oP "restart:\s*\K[^\s]+" /opt/libretv/docker-compose.yml | head -1)
+    
+    echo -e "当前端口: ${GREEN}${current_port}${NC}"
+    echo -e "当前自动更新: ${GREEN}$([ "$current_restart" = "unless-stopped" ] && echo "启用" || echo "禁用")${NC}"
+    
+    echo ""
+    echo -e "${YELLOW}修改选项：${NC}"
+    echo "1. 修改端口"
+    echo "2. 修改密码"
+    echo "3. 切换自动更新状态"
+    echo "4. 查看完整配置文件"
+    echo "0. 返回"
+    echo ""
+    read -p "请选择操作: " config_choice
+
+    case "$config_choice" in
+        1)
+            read -p "请输入新的宿主机端口: " new_port
+            if [[ ! "$new_port" =~ ^[0-9]+$ ]] || [ "$new_port" -lt 1 ] || [ "$new_port" -gt 65535 ]; then
+                echo -e "${RED}端口号无效。请输入 1-65535 之间的数字。${NC}"
+                read -p "按回车键继续..."
+                return
+            fi
+            
+            # 验证端口占用
+            if command -v ss &> /dev/null; then
+                if ss -tuln | grep -q ":${new_port} "; then
+                    echo -e "${RED}端口 ${new_port} 已被占用，请选择其他端口。${NC}"
+                    read -p "按回车键继续..."
+                    return
+                fi
+            fi
+            
+            # 停止容器
+            cd /opt/libretv
+            if docker compose version &> /dev/null; then
+                docker_compose_cmd="docker compose"
+            else
+                docker_compose_cmd="docker-compose"
+            fi
+            $docker_compose_cmd stop
+            
+            # 更新配置文件
+            sed -i "s/- \"${current_port}:8080\"/- \"${new_port}:8080\"/g" docker-compose.yml
+            
+            # 重新启动
+            $docker_compose_cmd up -d
+            
+            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+            
+            echo -e "${GREEN}✅ 端口已修改为 ${new_port}${NC}"
+            [ -n "$ipv4" ] && echo -e "新访问地址: ${YELLOW}http://${ipv4}:${new_port}${NC}"
+            
+            read -p "按回车键继续..."
+            ;;
+        2)
+            while true; do
+                read -sp "请输入新的密码: " new_password
+                echo ""
+                if [ -z "$new_password" ]; then
+                    echo -e "${RED}密码不能为空，请重新输入。${NC}"
+                    continue
+                fi
+                
+                read -sp "请再次输入密码确认: " new_password_confirm
+                echo ""
+                
+                if [ "$new_password" != "$new_password_confirm" ]; then
+                    echo -e "${RED}两次输入的密码不一致，请重新输入。${NC}"
+                else
+                    break
+                fi
+            done
+            
+            # 停止容器
+            cd /opt/libretv
+            if docker compose version &> /dev/null; then
+                docker_compose_cmd="docker compose"
+            else
+                docker_compose_cmd="docker-compose"
+            fi
+            $docker_compose_cmd stop
+            
+            # 更新配置文件
+            sed -i "s/PASSWORD=.*/PASSWORD=${new_password}/g" docker-compose.yml
+            
+            # 重新启动
+            $docker_compose_cmd up -d
+            
+            echo -e "${GREEN}✅ 密码已更新${NC}"
+            echo -e "新密码: ${GREEN}${new_password}${NC}"
+            
+            read -p "按回车键继续..."
+            ;;
+        3)
+            # 获取当前重启策略
+            local new_restart="unless-stopped"
+            if [ "$current_restart" = "unless-stopped" ]; then
+                new_restart="no"
+                echo -e "${YELLOW}当前已启用自动更新，将切换为禁用${NC}"
+            else
+                echo -e "${YELLOW}当前已禁用自动更新，将切换为启用${NC}"
+            fi
+            
+            read -p "确认切换？(y/N): " confirm_switch
+            if [[ ! "$confirm_switch" =~ ^[yY]$ ]]; then
+                echo "操作已取消。"
+                read -p "按回车键继续..."
+                return
+            fi
+            
+            # 停止容器
+            cd /opt/libretv
+            if docker compose version &> /dev/null; then
+                docker_compose_cmd="docker compose"
+            else
+                docker_compose_cmd="docker-compose"
+            fi
+            $docker_compose_cmd stop
+            
+            # 更新配置文件
+            sed -i "s/restart: ${current_restart}/restart: ${new_restart}/g" docker-compose.yml
+            
+            # 重新启动
+            $docker_compose_cmd up -d
+            
+            echo -e "${GREEN}✅ 自动更新已${([ "$new_restart" = "unless-stopped" ] && echo "启用" || echo "禁用")}${NC}"
+            
+            read -p "按回车键继续..."
+            ;;
+        4)
+            echo -e "${BLUE}完整配置文件内容:${NC}"
+            echo ""
+            cat /opt/libretv/docker-compose.yml
+            echo ""
+            read -p "按回车键继续..."
+            return
+            ;;
+        0) return ;;
+        *) echo -e "${RED}无效选择。${NC}"; read -p "按回车键继续..." ;;
+    esac
+}
+
+# 卸载 LibreTV
+function uninstall_libretv() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}             卸载 LibreTV${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/opt/libretv/docker-compose.yml" ]; then
+        echo -e "${YELLOW}未检测到 LibreTV 安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${RED}⚠️  警告：此操作将删除 LibreTV 容器及配置！${NC}"
+    echo ""
+    echo -e "将删除以下内容："
+    echo "1. LibreTV 容器 (libretv)"
+    echo "2. 配置文件目录 (/opt/libretv)"
+    echo ""
+    
+    read -p "确定要卸载 LibreTV 吗？(y/N): " confirm_uninstall
+    if [[ ! "$confirm_uninstall" =~ ^[yY]$ ]]; then
+        echo "卸载已取消。"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在停止并移除容器...${NC}"
+    cd /opt/libretv
+    
+    if docker compose version &> /dev/null; then
+        docker_compose_cmd="docker compose"
+    else
+        docker_compose_cmd="docker-compose"
+    fi
+    
+    $docker_compose_cmd down
+    
+    echo -e "${BLUE}正在清理安装目录...${NC}"
+    cd / && rm -rf /opt/libretv
+    
+    echo -e "${GREEN}✅ LibreTV 卸载完成！${NC}"
+    read -p "按回车键继续..."
+}
+
+# 访问 LibreTV Web 界面
+function access_libretv_web() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}        访问 LibreTV Web 界面${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if [ ! -f "/opt/libretv/docker-compose.yml" ]; then
+        echo -e "${RED}❌ LibreTV 未安装，请先安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+    
+    # 获取当前端口
+    local host_port=$(grep -oP "ports:\s*-\s*\"\K[0-9]+(?=:8080)" /opt/libretv/docker-compose.yml | head -1)
+    host_port=${host_port:-8899}
+    
+    # 检查容器状态
+    local container_status=$(docker inspect -f '{{.State.Status}}' libretv 2>/dev/null || echo "未运行")
+    local container_running=""
+    if [ "$container_status" = "running" ]; then
+        container_running="${GREEN}运行中${NC}"
+        
+        # 获取运行时间
+        local start_time=$(docker inspect -f '{{.State.StartedAt}}' libretv 2>/dev/null)
+        if [ -n "$start_time" ]; then
+            local now=$(date +%s)
+            local start=$(date -d "$start_time" +%s)
+            local diff=$((now - start))
+            local days=$((diff / 86400))
+            local hours=$(((diff % 86400) / 3600))
+            local minutes=$(((diff % 3600) / 60))
+            local running_time=""
+            [ $days -gt 0 ] && running_time="${days}天 "
+            [ $hours -gt 0 ] && running_time="${running_time}${hours}小时 "
+            running_time="${running_time}${minutes}分钟"
+        fi
+    else
+        container_running="${RED}未运行${NC}"
+    fi
+    
+    IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+    
+    echo -e "您的 LibreTV 访问地址为："
+    [ -n "$ipv4" ] && echo -e "IPv4 地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+    [ -n "$ipv6" ] && echo -e "IPv6 地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+    echo ""
+    echo -e "${CYAN}容器状态：${NC}"
+    echo -e "状态: ${container_running}"
+    if [ -n "$running_time" ] && [ "$container_status" = "running" ]; then
+        echo -e "已运行时间: ${GREEN}${running_time}${NC}"
+    fi
+    echo ""
+    echo -e "${YELLOW}提示：${NC}"
+    echo "1. 如果忘记密码，可通过修改配置功能重置"
+    echo "2. 容器未运行时请先启动服务"
     echo -e "${CYAN}=========================================${NC}"
     read -p "按回车键返回..."
 }
