@@ -21,11 +21,11 @@ function app_center_menu() {
         echo -e " ${GREEN}10.${NC} AdGuard Home安装（vps）"
         echo -e " ${GREEN}11.${NC} Nginx Proxy Manager管理"
         echo -e " ${GREEN}12.${NC} GitHub加速站"
-        echo -e " ${GREEN}13.${NC}  MoonTV流媒体应用管理"
+        echo -e " ${GREEN}13.${NC} MoonTV流媒体应用管理"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-12): " app_choice
+        read -p "请输入你的选择 (0-13): " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
