@@ -1073,7 +1073,7 @@ function docker_menu() {
         echo -e "  ${GREEN}13.${NC} 备份/迁移/还原             ${GREEN}14.${NC} 系统一键深度清理"
         echo ""
         echo -e "  ${CYAN}[ 系统操作 ]${NC}"
-        echo -e "  ${RED}15.${NC} 彻底卸载 Docker 环境      ${RED}0.${NC} 返回主菜单"
+        echo -e "  ${RED}15.${NC} 彻底卸载 Docker 环境        ${RED}0.${NC} 返回主菜单"
         echo -e "${CYAN}================================================${NC}"
         read -p "请输入操作代码: " docker_choice
 
