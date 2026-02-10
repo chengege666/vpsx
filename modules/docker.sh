@@ -1060,20 +1060,20 @@ function docker_menu() {
         check_docker_status
         
         echo -e "  ${CYAN}[ 基础维护 ]${NC}"
-        echo -e "  ${GREEN}1.${NC}  安装/更新 Docker 环境      ${GREEN}2.${NC} 查看 Docker 全局状态"
-        echo -e "  ${GREEN}3.${NC}  更换 Docker 国内镜像源     ${GREEN}4.${NC} Docker 启动故障修复"
-        echo -e "  ${GREEN}13.${NC} 重启 Docker 服务          ${GREEN}14.${NC} 停止 Docker 服务"
+        echo -e "  ${GREEN}1.${NC} 安装/更新 Docker 环境     ${GREEN}2.${NC} 查看 Docker 全局状态"
+        echo -e "  ${GREEN}3.${NC} 更换 Docker 国内镜像源     ${GREEN}4.${NC} Docker 启动故障修复"
+        echo -e "  ${GREEN}5.${NC} 重启 Docker 服务          ${GREEN}6.${NC} 停止 Docker 服务"
         echo ""
         echo -e "  ${CYAN}[ 资源管理 ]${NC}"
-        echo -e "  ${GREEN}5.${NC}  容器管理                  ${GREEN}6.${NC}  镜像管理 "
-        echo -e "  ${GREEN}7.${NC}  网络管理                  ${GREEN}8.${NC}  数据卷管理 "
+        echo -e "  ${GREEN}7.${NC} 容器管理 (交互式)          ${GREEN}8.${NC} 镜像管理 (交互式)"
+        echo -e "  ${GREEN}9.${NC} 网络管理 (交互式)          ${GREEN}10.${NC} 数据卷管理 (交互式)"
         echo ""
         echo -e "  ${CYAN}[ 高级配置 ]${NC}"
-        echo -e "  ${GREEN}9.${NC}  编辑 daemon.json          ${GREEN}10.${NC} IPv6 访问控制"
-        echo -e "  ${GREEN}11.${NC} 备份/迁移/还原            ${GREEN}12.${NC} 系统一键深度清理"
+        echo -e "  ${GREEN}11.${NC} 编辑 daemon.json           ${GREEN}12.${NC} IPv6 访问控制"
+        echo -e "  ${GREEN}13.${NC} 备份/迁移/还原             ${GREEN}14.${NC} 系统一键深度清理"
         echo ""
         echo -e "  ${CYAN}[ 系统操作 ]${NC}"
-        echo -e "  ${RED}20.${NC} 彻底卸载 Docker 环境      ${RED}0.${NC} 返回主菜单"
+        echo -e "  ${RED}15.${NC} 彻底卸载 Docker 环境      ${RED}0.${NC} 返回主菜单"
         echo -e "${CYAN}================================================${NC}"
         read -p "请输入操作代码: " docker_choice
 
@@ -1082,17 +1082,17 @@ function docker_menu() {
             2) view_docker_global_status ;;
             3) change_docker_source ;;
             4) fix_docker_iptables ;;
-            5) docker_container_management ;;
-            6) docker_image_management ;;
-            7) docker_network_management ;;
-            8) docker_volume_management ;;
-            9) edit_daemon_json ;;
-            10) docker_ipv6_management ;;
-            11) backup_migrate_restore_docker ;;
-            12) clean_docker_resources ;;
-            13) restart_docker_service ;;
-            14) stop_docker_service ;;
-            20) uninstall_docker ;;
+            5) restart_docker_service ;;
+            6) stop_docker_service ;;
+            7) docker_container_management ;;
+            8) docker_image_management ;;
+            9) docker_network_management ;;
+            10) docker_volume_management ;;
+            11) edit_daemon_json ;;
+            12) docker_ipv6_management ;;
+            13) backup_migrate_restore_docker ;;
+            14) clean_docker_resources ;;
+            15) uninstall_docker ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
