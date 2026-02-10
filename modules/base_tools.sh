@@ -11,13 +11,14 @@ function basic_tools_menu() {
         echo -e " ${GREEN}2.${NC} 安装 wget"
         echo -e " ${GREEN}3.${NC} 安装 curl"
         echo -e " ${GREEN}4.${NC} 安装 git"
-        echo -e " ${GREEN}5.${NC} 安装 bzip2"
-        echo -e " ${GREEN}6.${NC} 安装 sudo"
-        echo -e " ${GREEN}7.${NC} 卸载工具菜单"
+        echo -e " ${GREEN}5.${NC} 安装 unzip"
+        echo -e " ${GREEN}6.${NC} 安装 bzip2"
+        echo -e " ${GREEN}7.${NC} 安装 sudo"
+        echo -e " ${GREEN}8.${NC} 卸载工具菜单"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC} 返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择(0-7): " basic_tool_choice
+        read -p "请输入你的选择(0-8): " basic_tool_choice
 
         case "$basic_tool_choice" in
             1)
@@ -33,12 +34,15 @@ function basic_tools_menu() {
                 install_package "git"
                 ;;
             5)
-                install_bzip2
+                install_package "unzip"
                 ;;
             6)
-                install_sudo
+                install_bzip2
                 ;;
             7)
+                install_sudo
+                ;;
+            8)
                 uninstall_tools_menu
                 ;;
             0)
@@ -86,24 +90,30 @@ function uninstall_tools_menu() {
         else
             echo -e " ${GRAY}4.${NC} 卸载 git ${RED}✗ 未安装${NC}"
         fi
+
+        if command -v unzip &> /dev/null; then
+            echo -e " ${GREEN}5.${NC} 卸载 unzip ${GREEN}✓ 已安装${NC}"
+        else
+            echo -e " ${GRAY}5.${NC} 卸载 unzip ${RED}✗ 未安装${NC}"
+        fi
         
         if command -v bzip2 &> /dev/null; then
-            echo -e " ${GREEN}5.${NC} 卸载 bzip2 ${GREEN}✓ 已安装${NC}"
+            echo -e " ${GREEN}6.${NC} 卸载 bzip2 ${GREEN}✓ 已安装${NC}"
         else
-            echo -e " ${GRAY}5.${NC} 卸载 bzip2 ${RED}✗ 未安装${NC}"
+            echo -e " ${GRAY}6.${NC} 卸载 bzip2 ${RED}✗ 未安装${NC}"
         fi
         
         if command -v sudo &> /dev/null; then
-            echo -e " ${GREEN}6.${NC} 卸载 sudo ${GREEN}✓ 已安装${NC}"
+            echo -e " ${GREEN}7.${NC} 卸载 sudo ${GREEN}✓ 已安装${NC}"
         else
-            echo -e " ${GRAY}6.${NC} 卸载 sudo ${RED}✗ 未安装${NC}"
+            echo -e " ${GRAY}7.${NC} 卸载 sudo ${RED}✗ 未安装${NC}"
         fi
         
-        echo -e " ${GREEN}7.${NC} 批量卸载"
+        echo -e " ${GREEN}8.${NC} 批量卸载"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC} 返回上一级"  
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择(0-7): " uninstall_choice  
+        read -p "请输入你的选择(0-8): " uninstall_choice  
 
         case "$uninstall_choice" in
             1)
@@ -119,12 +129,15 @@ function uninstall_tools_menu() {
                 uninstall_git
                 ;;
             5)
-                uninstall_bzip2
+                uninstall_package "unzip"
                 ;;
             6)
-                uninstall_sudo
+                uninstall_bzip2
                 ;;
             7)
+                uninstall_sudo
+                ;;
+            8)
                 batch_uninstall
                 ;;
             0)  # 修改这里：8改为0
@@ -544,12 +557,13 @@ function uninstall_sudo() {
 # 批量卸载函数
 function batch_uninstall() {
     local selected_tools=()
-    local tool_names=("htop" "wget" "curl" "git" "bzip2" "sudo")
+    local tool_names=("htop" "wget" "curl" "git" "unzip" "bzip2" "sudo")
     local tool_descriptions=(
         "交互式系统进程查看器"
         "命令行下载工具"
         "数据传输工具"
         "分布式版本控制系统"
+        "压缩包解压工具"
         "块排序文件压缩器"
         "系统权限管理工具"
     )
@@ -615,7 +629,7 @@ function batch_uninstall() {
             " ")
                 # 处理空格键选择
                 echo -e -n "\033[1A\033[2K" # 清除上一行
-                read -p "请选择编号(1-6): " -n1 index
+                read -p "请选择编号(1-7): " -n1 index
                 echo
                 
                 local idx=$((index-1))
