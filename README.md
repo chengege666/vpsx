@@ -36,7 +36,7 @@ git clone https://github.com/chengege666/vpsx.git /root/vpsx && chmod +x /root/v
 ```
 ### 方式三：短链接
 ```bash
-bash <(curl -sL vps.cc66.eu.cc)
+bash <(curl -sL vpsx.1231818.xyz)
 ```
 
 ## ⌨️ 常用命令
