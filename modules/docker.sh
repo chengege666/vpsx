@@ -230,6 +230,35 @@ EOF
     read -p "按任意键继续..."
 }
 
+# 重启 Docker 服务
+function restart_docker_service() {
+    echo -e "${BLUE}正在重启 Docker 服务...${NC}"
+    if systemctl restart docker; then
+        echo -e "${GREEN}Docker 服务重启成功。${NC}"
+    else
+        echo -e "${RED}Docker 服务重启失败！${NC}"
+    fi
+    sleep 1
+}
+
+# 停止 Docker 服务
+function stop_docker_service() {
+    echo -e "${YELLOW}警告: 停止 Docker 服务将导致所有容器停止运行。${NC}"
+    read -p "确定要停止 Docker 服务吗？(y/N): " confirm
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}正在停止 Docker 服务...${NC}"
+        if systemctl stop docker; then
+            echo -e "${GREEN}Docker 服务已成功停止。${NC}"
+        else
+            echo -e "${RED}停止 Docker 服务失败！${NC}"
+        fi
+    else
+        echo -e "${CYAN}操作已取消。${NC}"
+    fi
+    sleep 1
+}
+
+
 
 function view_docker_global_status() {
     clear
@@ -1031,8 +1060,9 @@ function docker_menu() {
         check_docker_status
         
         echo -e "  ${CYAN}[ 基础维护 ]${NC}"
-        echo -e "  ${GREEN}1.${NC}  安装/更新 Docker 环境     ${GREEN}2.${NC}  查看 Docker 全局状态"
-        echo -e "  ${GREEN}3.${NC}  更换 Docker 国内镜像源    ${GREEN}4.${NC}  Docker 启动故障修复"
+        echo -e "  ${GREEN}1.${NC} 安装/更新 Docker 环境     ${GREEN}2.${NC} 查看 Docker 全局状态"
+        echo -e "  ${GREEN}3.${NC} 更换 Docker 国内镜像源     ${GREEN}4.${NC} Docker 启动故障修复"
+        echo -e "  ${GREEN}13.${NC} 重启 Docker 服务          ${GREEN}14.${NC} 停止 Docker 服务"
         echo ""
         echo -e "  ${CYAN}[ 资源管理 ]${NC}"
         echo -e "  ${GREEN}5.${NC}  容器管理                  ${GREEN}6.${NC}  镜像管理 "
@@ -1060,6 +1090,8 @@ function docker_menu() {
             10) docker_ipv6_management ;;
             11) backup_migrate_restore_docker ;;
             12) clean_docker_resources ;;
+            13) restart_docker_service ;;
+            14) stop_docker_service ;;
             20) uninstall_docker ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
