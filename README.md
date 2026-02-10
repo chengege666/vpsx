@@ -25,7 +25,7 @@
 直接运行以下命令，自动完成依赖安装、项目部署及快捷键配置：
 
 ```bash
-wget -P /root -N https://raw.githubusercontent.com/chengege666/vpsx/main/install.sh && bash /root/install.sh
+wget -N https://raw.githubusercontent.com/chengege666/vpsx/main/install.sh && bash install.sh
 ```
 
 ### 方式二：手动克隆安装
@@ -35,12 +35,6 @@ wget -P /root -N https://raw.githubusercontent.com/chengege666/vpsx/main/install
 git clone https://github.com/chengege666/vpsx.git /root/vpsx && chmod +x /root/vpsx/vpsx.sh && /root/vpsx/vpsx.sh
 ```
 
-### 方式三：使用 curl 直接运行 (不保存文件)
-适合临时使用，不下载完整项目：
-
-```bash
-curl -sSL https://raw.githubusercontent.com/chengege666/vpsx/main/install.sh | bash
-```
 
 ## ⌨️ 常用命令
 
