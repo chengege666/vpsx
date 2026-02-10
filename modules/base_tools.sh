@@ -574,7 +574,8 @@ function batch_uninstall() {
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${RED}           批量卸载选择${NC}"
         echo -e "${CYAN}=========================================${NC}"
-        echo -e "${YELLOW}请输入要卸载的工具编号（多个编号用空格隔开，如: 1 2 3）：${NC}"
+        echo -e "${YELLOW}说明：支持输入多个编号，使用空格或逗号分隔${NC}"
+        echo -e "${YELLOW}示例：'1 2 3' 或 '1,2,3'${NC}"
         echo ""
         
         for i in "${!tool_names[@]}"; do
