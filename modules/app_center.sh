@@ -333,17 +333,27 @@ function install_github_proxy() {
     mkdir -p /opt/ghproxy/log/caddy
     mkdir -p /opt/ghproxy/config
 
-    echo -e "${BLUE}正在拉取镜像并创建容器...${NC}"
-    docker run -d \
-        --name="github-proxy" \
-        --restart=always \
-        -p ${host_port}:8080 \
-        -v /opt/ghproxy/log/run:/data/ghproxy/log \
-        -v /opt/ghproxy/log/caddy:/data/caddy/log \
-        -v /opt/ghproxy/config:/data/ghproxy/config \
-        wjqserver/ghproxy
+    echo -e "${BLUE}正在拉取镜像并通过 Docker Compose 创建容器...${NC}"
+    
+    cat <<EOF > /opt/ghproxy/docker-compose.yml
+services:
+  github-proxy:
+    image: wjqserver/ghproxy
+    container_name: github-proxy
+    restart: always
+    ports:
+      - "${host_port}:8080"
+    volumes:
+      - /opt/ghproxy/log/run:/data/ghproxy/log
+      - /opt/ghproxy/log/caddy:/data/caddy/log
+      - /opt/ghproxy/config:/data/ghproxy/config
+EOF
 
-    if [ $? -eq 0 ]; then
+    cd /opt/ghproxy && docker compose up -d
+    local compose_status=$?
+    cd - > /dev/null
+
+    if [ $compose_status -eq 0 ]; then
         IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
 
         echo -e "${GREEN}GitHub 加速站安装成功！${NC}"
@@ -370,23 +380,16 @@ function update_github_proxy() {
     # 获取当前映射端口
     local old_port=$(docker inspect github-proxy --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}' 2>/dev/null)
     
-    echo -e "${BLUE}正在拉取最新镜像...${NC}"
-    docker pull wjqserver/ghproxy
-    
-    echo -e "${BLUE}正在重启容器...${NC}"
-    docker stop github-proxy &>/dev/null
-    docker rm github-proxy &>/dev/null
-    
-    docker run -d \
-        --name="github-proxy" \
-        --restart=always \
-        -p ${old_port}:8080 \
-        -v /opt/ghproxy/log/run:/data/ghproxy/log \
-        -v /opt/ghproxy/log/caddy:/data/caddy/log \
-        -v /opt/ghproxy/config:/data/ghproxy/config \
-        wjqserver/ghproxy
+    echo -e "${BLUE}正在更新镜像并重启服务...${NC}"
+    cd /opt/ghproxy && docker compose pull && docker compose up -d
+    local update_status=$?
+    cd - > /dev/null
 
-    echo -e "${GREEN}更新完成！${NC}"
+    if [ $update_status -eq 0 ]; then
+        echo -e "${GREEN}更新完成！${NC}"
+    else
+        echo -e "${RED}更新失败，请检查网络或日志。${NC}"
+    fi
     read -p "按回车键继续..."
 }
 
@@ -398,8 +401,14 @@ function uninstall_github_proxy() {
 
     read -p "确定要卸载 GitHub 加速站吗？(y/N): " confirm
     if [[ "$confirm" =~ ^[yY]$ ]]; then
-        docker stop github-proxy &>/dev/null
-        docker rm github-proxy &>/dev/null
+        if [ -f "/opt/ghproxy/docker-compose.yml" ]; then
+            cd /opt/ghproxy && docker compose down
+            cd - > /dev/null
+            rm -rf /opt/ghproxy
+        else
+            docker stop github-proxy &>/dev/null
+            docker rm github-proxy &>/dev/null
+        fi
         echo -e "${GREEN}卸载完成。${NC}"
     else
         echo "操作已取消。"
@@ -424,18 +433,37 @@ function manage_github_proxy_container() {
     echo -e " 3. 重启"
     echo -e " 0. 返回"
     read -p "请选择: " op
+    
+    local is_compose=false
+    [ -f "/opt/ghproxy/docker-compose.yml" ] && is_compose=true
+
     case "$op" in
         1)
             echo -e "${BLUE}正在启动 GitHub 加速站...${NC}"
-            docker start github-proxy
+            if [ "$is_compose" = true ]; then
+                cd /opt/ghproxy && docker compose start
+                cd - > /dev/null
+            else
+                docker start github-proxy
+            fi
             ;;
         2)
             echo -e "${BLUE}正在停止 GitHub 加速站...${NC}"
-            docker stop github-proxy
+            if [ "$is_compose" = true ]; then
+                cd /opt/ghproxy && docker compose stop
+                cd - > /dev/null
+            else
+                docker stop github-proxy
+            fi
             ;;
         3)
             echo -e "${BLUE}正在重启 GitHub 加速站...${NC}"
-            docker restart github-proxy
+            if [ "$is_compose" = true ]; then
+                cd /opt/ghproxy && docker compose restart
+                cd - > /dev/null
+            else
+                docker restart github-proxy
+            fi
             ;;
         0) return ;;
         *) echo -e "${RED}无效选择。${NC}" ;;
@@ -992,17 +1020,26 @@ function deploy_komari_panel() {
         fi
     fi
 
-    echo -e "${BLUE}正在创建并运行 Komari 容器 (端口: ${host_port})...${NC}"
+    echo -e "${BLUE}正在创建并通过 Docker Compose 部署 Komari 容器 (端口: ${host_port})...${NC}"
     mkdir -p /home/docker/komari
     
-    docker run -d \
-        --name komari \
-        --restart always \
-        -p ${host_port}:25774 \
-        -v /home/docker/komari:/app/data \
-        ghcr.io/komari-monitor/komari:latest
+    cat <<EOF > /home/docker/komari/docker-compose.yml
+services:
+  komari:
+    image: ghcr.io/komari-monitor/komari:latest
+    container_name: komari
+    restart: always
+    ports:
+      - "${host_port}:25774"
+    volumes:
+      - /home/docker/komari:/app/data
+EOF
 
-    if [ $? -eq 0 ]; then
+    cd /home/docker/komari && docker compose up -d
+    local compose_status=$?
+    cd - > /dev/null
+
+    if [ $compose_status -eq 0 ]; then
         IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
         
         echo -e "${GREEN}Komari 监控面板部署成功！${NC}"
@@ -1042,17 +1079,38 @@ function manage_komari_container() {
     echo -e " ${RED}0.${NC} 返回"
     read -p "请选择: " manage_choice
 
+    local is_compose=false
+    [ -f "/home/docker/komari/docker-compose.yml" ] && is_compose=true
+
     case "$manage_choice" in
         1)
-            docker start komari
+            echo -e "${BLUE}正在启动 Komari...${NC}"
+            if [ "$is_compose" = true ]; then
+                cd /home/docker/komari && docker compose start
+                cd - > /dev/null
+            else
+                docker start komari
+            fi
             echo -e "${GREEN}启动指令已发送。${NC}"
             ;;
         2)
-            docker stop komari
+            echo -e "${BLUE}正在停止 Komari...${NC}"
+            if [ "$is_compose" = true ]; then
+                cd /home/docker/komari && docker compose stop
+                cd - > /dev/null
+            else
+                docker stop komari
+            fi
             echo -e "${GREEN}停止指令已发送。${NC}"
             ;;
         3)
-            docker restart komari
+            echo -e "${BLUE}正在重启 Komari...${NC}"
+            if [ "$is_compose" = true ]; then
+                cd /home/docker/komari && docker compose restart
+                cd - > /dev/null
+            else
+                docker restart komari
+            fi
             echo -e "${GREEN}重启指令已发送。${NC}"
             ;;
         0) return ;;
@@ -1140,8 +1198,13 @@ function uninstall_komari_panel() {
     read -p "确定要移除 Komari 容器吗？(y/N): " confirm_rm
     if [[ "$confirm_rm" =~ ^[yY]$ ]]; then
         echo -e "${BLUE}正在停止并移除容器...${NC}"
-        docker stop komari &> /dev/null
-        docker rm komari &> /dev/null
+        if [ -f "/home/docker/komari/docker-compose.yml" ]; then
+            cd /home/docker/komari && docker compose down
+            cd - > /dev/null
+        else
+            docker stop komari &> /dev/null
+            docker rm komari &> /dev/null
+        fi
         
         read -p "是否删除所有数据目录 (/home/docker/komari)？(y/N): " confirm_del_data
         if [[ "$confirm_del_data" =~ ^[yY]$ ]]; then
