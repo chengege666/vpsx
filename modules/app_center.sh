@@ -24,10 +24,11 @@ function app_center_menu() {
         echo -e " ${GREEN}13.${NC} MoonTV流媒体应用管理"
         echo -e " ${GREEN}14.${NC} LibreTV流媒体应用管理"
         echo -e " ${GREEN}15.${NC} FRP内网穿透管理"
+        echo -e " ${GREEN}16.${NC} Nginx 重定向配置"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-15): " app_choice
+        read -p "请输入你的选择 (0-16): " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
@@ -45,6 +46,7 @@ function app_center_menu() {
             13) moontv_management ;;
             14) libretv_management ;;
             15) frp_management ;;
+            16) nginx_redirect_management ;;
             0) break ;; 
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -5677,4 +5679,2896 @@ function frp_info_help() {
     
     echo -e "${CYAN}=========================================${NC}"
     read -p "按回车键返回..."
+}
+
+
+function nginx_redirect_manager() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}          Nginx 重定向配置管理${NC}"
+        echo -e "${CYAN}=========================================${NC}"
+        echo "提供各种 Nginx 重定向配置的一键生成和部署"
+        echo ""
+        
+        # 检查 Nginx 状态
+        if command -v nginx &> /dev/null; then
+            nginx_status=$(systemctl is-active nginx 2>/dev/null || echo "unknown")
+            if [ "$nginx_status" = "active" ]; then
+                echo -e "Nginx 状态: ${GREEN}运行中${NC}"
+            else
+                echo -e "Nginx 状态: ${YELLOW}未运行${NC}"
+            fi
+        else
+            echo -e "Nginx 状态: ${RED}未安装${NC}"
+        fi
+        
+        echo ""
+        echo -e "${YELLOW}可用的重定向类型：${NC}"
+        echo "1.  HTTP -> HTTPS 强制重定向"
+        echo "2.  www 与非 www 标准化"
+        echo "3.  域名永久重定向 (301)"
+        echo "4.  域名临时重定向 (302)"
+        echo "5.  路径重定向 (URL Rewrite)"
+        echo "6.  多域名重定向到主域名"
+        echo "7.  旧网站迁移到新网站"
+        echo "8.  移动设备重定向"
+        echo "9.  国家/地区重定向"
+        echo "10. 文件扩展名重定向"
+        echo ""
+        echo -e "${GREEN}管理功能：${NC}"
+        echo "11. 查看当前重定向配置"
+        echo "12. 备份 Nginx 配置"
+        echo "13. 恢复 Nginx 配置"
+        echo "14. 测试重定向规则"
+        echo "15. 批量重定向生成器"
+        echo ""
+        echo -e "${CYAN}工具功能：${NC}"
+        echo "16. 安装/更新 Nginx"
+        echo "17. 查看 Nginx 错误日志"
+        echo "18. 验证 Nginx 配置"
+        echo "19. 重载 Nginx 配置"
+        echo "20. Nginx 配置文件编辑器"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC} 返回应用中心菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 (0-20): " redirect_choice
+
+        case "$redirect_choice" in
+            1) nginx_http_to_https ;;
+            2) nginx_www_redirect ;;
+            3) nginx_301_redirect ;;
+            4) nginx_302_redirect ;;
+            5) nginx_path_redirect ;;
+            6) nginx_multi_domain_redirect ;;
+            7) nginx_site_migration ;;
+            8) nginx_mobile_redirect ;;
+            9) nginx_geo_redirect ;;
+            10) nginx_extension_redirect ;;
+            11) view_nginx_redirects ;;
+            12) backup_nginx_config ;;
+            13) restore_nginx_config ;;
+            14) test_redirect_rules ;;
+            15) batch_redirect_generator ;;
+            16) install_update_nginx ;;
+            17) view_nginx_logs ;;
+            18) verify_nginx_config ;;
+            19) reload_nginx ;;
+            20) edit_nginx_config ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择！${NC}"; sleep 2 ;;
+        esac
+    done
+}
+
+# =========================================
+# 具体功能实现
+# =========================================
+
+# 1. HTTP -> HTTPS 强制重定向
+function nginx_http_to_https() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}      HTTP 强制跳转到 HTTPS${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if ! check_nginx_installed; then
+        return
+    fi
+    
+    echo -e "${YELLOW}此功能将为您的网站配置 HTTPS 强制重定向${NC}"
+    echo ""
+    
+    read -p "请输入您的域名 (例如: example.com): " domain
+    if [ -z "$domain" ]; then
+        echo -e "${RED}域名不能为空${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+    
+    # 检查域名是否已经配置了SSL
+    echo -e "${BLUE}正在检查 SSL 证书...${NC}"
+    
+    # 确定Nginx配置目录
+    local nginx_conf_dir="/etc/nginx"
+    local sites_available="/etc/nginx/sites-available"
+    local sites_enabled="/etc/nginx/sites-enabled"
+    local conf_d="/etc/nginx/conf.d"
+    
+    local config_file=""
+    
+    # 查找域名配置文件
+    if [ -d "$sites_available" ]; then
+        config_file=$(find "$sites_available" -type f -name "*$domain*" | head -1)
+        if [ -n "$config_file" ]; then
+            echo -e "找到配置文件: ${GREEN}$config_file${NC}"
+        fi
+    fi
+    
+    if [ -z "$config_file" ] && [ -d "$conf_d" ]; then
+        config_file=$(find "$conf_d" -type f -name "*$domain*" | head -1)
+        if [ -n "$config_file" ]; then
+            echo -e "找到配置文件: ${GREEN}$config_file${NC}"
+        fi
+    fi
+    
+    if [ -z "$config_file" ]; then
+        read -p "未找到域名配置文件，是否创建新的配置文件？(y/N): " create_new
+        if [[ ! "$create_new" =~ ^[yY]$ ]]; then
+            return
+        fi
+        
+        read -p "请输入配置文件名称 (默认: $domain): " config_name
+        config_name=${config_name:-"$domain"}
+        
+        if [ -d "$sites_available" ]; then
+            config_file="$sites_available/$config_name"
+        else
+            config_file="$conf_d/$config_name.conf"
+        fi
+    fi
+    
+    # 创建HTTP到HTTPS重定向配置
+    local temp_file=$(mktemp)
+    
+    cat > "$temp_file" << EOF
+# HTTP to HTTPS redirect for $domain
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $domain www.$domain;
+    
+    # 记录访问日志
+    access_log /var/log/nginx/${domain}_http_access.log;
+    error_log /var/log/nginx/${domain}_http_error.log;
+    
+    # 永久重定向到HTTPS (301)
+    return 301 https://\$host\$request_uri;
+}
+
+# HTTPS 配置
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name $domain www.$domain;
+    
+    # SSL证书配置（请根据实际情况修改）
+    ssl_certificate /etc/ssl/certs/${domain}.crt;
+    ssl_certificate_key /etc/ssl/private/${domain}.key;
+    
+    # SSL优化配置
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    
+    # HSTS (可选，谨慎启用)
+    # add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    
+    # 记录访问日志
+    access_log /var/log/nginx/${domain}_https_access.log;
+    error_log /var/log/nginx/${domain}_https_error.log;
+    
+    # 网站根目录（请根据实际情况修改）
+    root /var/www/$domain;
+    index index.html index.htm;
+    
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
+}
+EOF
+    
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${YELLOW}生成的配置内容：${NC}"
+    echo ""
+    cat "$temp_file"
+    echo ""
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    
+    read -p "是否应用此配置？(y/N): " apply_config
+    if [[ "$apply_config" =~ ^[yY]$ ]]; then
+        # 备份原始配置
+        backup_nginx_single_config "$config_file"
+        
+        # 写入新配置
+        cp "$temp_file" "$config_file"
+        chmod 644 "$config_file"
+        
+        # 启用站点（如果是sites-available结构）
+        if [ -d "$sites_enabled" ] && [ -f "$sites_available/$config_name" ]; then
+            ln -sf "$sites_available/$config_name" "$sites_enabled/$config_name" 2>/dev/null
+        fi
+        
+        # 测试配置
+        if verify_nginx_config_silent; then
+            read -p "配置验证成功，是否立即重载 Nginx？(y/N): " reload_now
+            if [[ "$reload_now" =~ ^[yY]$ ]]; then
+                reload_nginx_silent
+                echo -e "${GREEN}✅ HTTP到HTTPS重定向已启用！${NC}"
+            else
+                echo -e "${YELLOW}配置已保存但未重载，请手动重载Nginx生效${NC}"
+            fi
+        else
+            echo -e "${RED}配置验证失败，已恢复备份${NC}"
+            restore_nginx_single_config "$config_file"
+        fi
+    else
+        echo "配置未应用。"
+    fi
+    
+    rm -f "$temp_file"
+    read -p "按回车键继续..."
+}
+
+# 2. www 与非 www 标准化
+function nginx_www_redirect() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}      www 与非 www 域名标准化${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if ! check_nginx_installed; then
+        return
+    fi
+    
+    echo -e "${YELLOW}请选择重定向方向：${NC}"
+    echo "1. 将 www 重定向到非 www (推荐)"
+    echo "2. 将非 www 重定向到 www"
+    echo ""
+    read -p "请选择 (1-2): " www_choice
+    
+    case "$www_choice" in
+        1)
+            redirect_from="www"
+            redirect_to="non-www"
+            ;;
+        2)
+            redirect_from="non-www"
+            redirect_to="www"
+            ;;
+        *)
+            echo -e "${RED}无效的选择${NC}"
+            return
+            ;;
+    esac
+    
+    read -p "请输入您的域名 (例如: example.com): " domain
+    if [ -z "$domain" ]; then
+        echo -e "${RED}域名不能为空${NC}"
+        return
+    fi
+    
+    # 创建配置
+    local temp_file=$(mktemp)
+    
+    if [ "$www_choice" = "1" ]; then
+        # www -> non-www
+        cat > "$temp_file" << EOF
+# Redirect www to non-www for $domain
+server {
+    listen 80;
+    listen [::]:80;
+    server_name www.$domain;
+    
+    # 记录访问日志
+    access_log /var/log/nginx/www_${domain}_redirect.log;
+    
+    # 永久重定向到非www (301)
+    return 301 http://$domain\$request_uri;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $domain;
+    
+    # 主站点配置
+    root /var/www/$domain;
+    index index.html index.htm;
+    
+    # 日志配置
+    access_log /var/log/nginx/${domain}_access.log;
+    error_log /var/log/nginx/${domain}_error.log;
+    
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
+}
+EOF
+    else
+        # non-www -> www
+        cat > "$temp_file" << EOF
+# Redirect non-www to www for $domain
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $domain;
+    
+    # 记录访问日志
+    access_log /var/log/nginx/${domain}_redirect.log;
+    
+    # 永久重定向到www (301)
+    return 301 http://www.$domain\$request_uri;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name www.$domain;
+    
+    # 主站点配置
+    root /var/www/$domain;
+    index index.html index.htm;
+    
+    # 日志配置
+    access_log /var/log/nginx/www_${domain}_access.log;
+    error_log /var/log/nginx/www_${domain}_error.log;
+    
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
+}
+EOF
+    fi
+    
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${YELLOW}生成的配置内容：${NC}"
+    echo ""
+    cat "$temp_file"
+    echo ""
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    
+    read -p "是否保存此配置到文件？(y/N): " save_config
+    if [[ "$save_config" =~ ^[yY]$ ]]; then
+        local config_dir="/etc/nginx/conf.d"
+        local config_file="$config_dir/www_redirect_$domain.conf"
+        
+        # 备份
+        backup_nginx_single_config "$config_file"
+        
+        # 保存
+        cp "$temp_file" "$config_file"
+        chmod 644 "$config_file"
+        
+        echo -e "${GREEN}配置已保存到: $config_file${NC}"
+        echo -e "${YELLOW}请手动将此配置包含到您的Nginx主配置中${NC}"
+    fi
+    
+    rm -f "$temp_file"
+    read -p "按回车键继续..."
+}
+
+# 3. 域名永久重定向 (301)
+function nginx_301_redirect() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}        域名永久重定向 (301)${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if ! check_nginx_installed; then
+        return
+    fi
+    
+    echo -e "${YELLOW}配置永久重定向 (301)${NC}"
+    echo ""
+    
+    read -p "请输入源域名 (旧域名): " from_domain
+    read -p "请输入目标域名 (新域名): " to_domain
+    read -p "是否保留路径？(Y/n): " keep_path
+    keep_path=${keep_path:-"Y"}
+    
+    local temp_file=$(mktemp)
+    
+    cat > "$temp_file" << EOF
+# 301 Permanent Redirect: $from_domain -> $to_domain
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $from_domain www.$from_domain;
+    
+    # 访问日志
+    access_log /var/log/nginx/${from_domain}_redirect.log;
+    
+    # 301 永久重定向
+EOF
+    
+    if [[ "$keep_path" =~ ^[yY]$ ]]; then
+        echo "    return 301 http://$to_domain\$request_uri;" >> "$temp_file"
+    else
+        echo "    return 301 http://$to_domain;" >> "$temp_file"
+    fi
+    
+    cat >> "$temp_file" << EOF
+}
+
+# 可选: HTTPS 重定向配置
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name $from_domain www.$from_domain;
+    
+    # SSL证书（如果旧域名有证书）
+    ssl_certificate /etc/ssl/certs/${from_domain}.crt;
+    ssl_certificate_key /etc/ssl/private/${from_domain}.key;
+    
+    # 301 永久重定向到HTTPS版本
+EOF
+    
+    if [[ "$keep_path" =~ ^[yY]$ ]]; then
+        echo "    return 301 https://$to_domain\$request_uri;" >> "$temp_file"
+    else
+        echo "    return 301 https://$to_domain;" >> "$temp_file"
+    fi
+    
+    echo "}" >> "$temp_file"
+    
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${YELLOW}生成的配置内容：${NC}"
+    echo ""
+    cat "$temp_file"
+    echo ""
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    
+    read -p "是否应用此配置？(y/N): " apply_config
+    if [[ "$apply_config" =~ ^[yY]$ ]]; then
+        local config_file="/etc/nginx/conf.d/301_redirect_${from_domain//./_}.conf"
+        
+        # 备份
+        backup_nginx_single_config "$config_file"
+        
+        # 保存
+        cp "$temp_file" "$config_file"
+        chmod 644 "$config_file"
+        
+        # 测试并重载
+        if verify_nginx_config_silent; then
+            read -p "配置验证成功，是否立即重载 Nginx？(y/N): " reload_now
+            if [[ "$reload_now" =~ ^[yY]$ ]]; then
+                reload_nginx_silent
+                echo -e "${GREEN}✅ 301永久重定向已启用！${NC}"
+                echo -e "${YELLOW}测试命令: curl -I http://$from_domain${NC}"
+            fi
+        else
+            echo -e "${RED}配置验证失败${NC}"
+        fi
+    fi
+    
+    rm -f "$temp_file"
+    read -p "按回车键继续..."
+}
+
+# 4. 域名临时重定向 (302)
+function nginx_302_redirect() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}        域名临时重定向 (302)${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if ! check_nginx_installed; then
+        return
+    fi
+    
+    echo -e "${YELLOW}配置临时重定向 (302)，适用于临时维护或A/B测试${NC}"
+    echo ""
+    
+    read -p "请输入源域名: " from_domain
+    read -p "请输入目标域名: " to_domain
+    read -p "请输入重定向原因 (可选): " reason
+    read -p "是否保留查询参数？(Y/n): " keep_query
+    keep_query=${keep_query:-"Y"}
+    
+    local temp_file=$(mktemp)
+    
+    cat > "$temp_file" << EOF
+# 302 Temporary Redirect: $from_domain -> $to_domain
+# 原因: ${reason:-"临时重定向"}
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $from_domain www.$from_domain;
+    
+    # 添加重定向原因头部
+    add_header X-Redirect-Reason "${reason:-"Temporary Redirect"}" always;
+    
+    # 访问日志
+    access_log /var/log/nginx/${from_domain}_temp_redirect.log;
+    
+    # 302 临时重定向
+EOF
+    
+    if [[ "$keep_query" =~ ^[yY]$ ]]; then
+        echo "    return 302 http://$to_domain\$request_uri;" >> "$temp_file"
+    else
+        echo "    return 302 http://$to_domain;" >> "$temp_file"
+    fi
+    
+    echo "}" >> "$temp_file"
+    
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${YELLOW}生成的配置内容：${NC}"
+    echo ""
+    cat "$temp_file"
+    echo ""
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    
+    read -p "是否应用此配置？(y/N): " apply_config
+    if [[ "$apply_config" =~ ^[yY]$ ]]; then
+        local config_file="/etc/nginx/conf.d/302_redirect_${from_domain//./_}.conf"
+        
+        backup_nginx_single_config "$config_file"
+        cp "$temp_file" "$config_file"
+        chmod 644 "$config_file"
+        
+        if verify_nginx_config_silent; then
+            read -p "配置验证成功，是否立即重载 Nginx？(y/N): " reload_now
+            if [[ "$reload_now" =~ ^[yY]$ ]]; then
+                reload_nginx_silent
+                echo -e "${GREEN}✅ 302临时重定向已启用！${NC}"
+                echo -e "${YELLOW}临时重定向将在浏览器中显示为302状态码${NC}"
+            fi
+        fi
+    fi
+    
+    rm -f "$temp_file"
+    read -p "按回车键继续..."
+}
+
+# 5. 路径重定向 (URL Rewrite)
+function nginx_path_redirect() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}        路径重定向 (URL Rewrite)${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if ! check_nginx_installed; then
+        return
+    fi
+    
+    echo -e "${YELLOW}配置URL路径重定向，支持正则表达式${NC}"
+    echo ""
+    
+    read -p "请输入域名: " domain
+    read -p "请输入源路径 (例如: /old/path 或 ~ ^/users/(.*)$): " from_path
+    read -p "请输入目标路径 (例如: /new/path 或 /profile/\$1): " to_path
+    read -p "重定向类型 (1=301永久, 2=302临时, 默认1): " redirect_type
+    redirect_type=${redirect_type:-"1"}
+    
+    local redirect_code="301"
+    if [ "$redirect_type" = "2" ]; then
+        redirect_code="302"
+    fi
+    
+    local temp_file=$(mktemp)
+    
+    cat > "$temp_file" << EOF
+# Path Redirect for $domain
+# $from_path -> $to_path
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $domain www.$domain;
+    
+    location $from_path {
+        return $redirect_code $to_path;
+    }
+    
+    # 或者使用 rewrite 指令
+    # rewrite $from_path $to_path $redirect_code;
+    
+    # 主站点配置
+    location / {
+        # 您的常规配置
+        root /var/www/$domain;
+        index index.html index.htm;
+        try_files \$uri \$uri/ =404;
+    }
+}
+EOF
+    
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${YELLOW}生成的配置内容：${NC}"
+    echo ""
+    cat "$temp_file"
+    echo ""
+    echo ""
+    echo -e "${GREEN}高级示例：${NC}"
+    echo "1. 重写规则: rewrite ^/old/(.*)$ /new/\$1 permanent;"
+    echo "2. 重定向带参数: rewrite ^/product/([0-9]+)$ /item.php?id=\$1? last;"
+    echo "3. 删除尾部斜杠: rewrite ^/(.*)/$ /\$1 permanent;"
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    
+    read -p "是否保存此配置？(y/N): " save_config
+    if [[ "$save_config" =~ ^[yY]$ ]]; then
+        local config_file="/etc/nginx/conf.d/path_redirect_${domain//./_}.conf"
+        
+        backup_nginx_single_config "$config_file"
+        cp "$temp_file" "$config_file"
+        chmod 644 "$config_file"
+        
+        echo -e "${GREEN}配置已保存到: $config_file${NC}"
+        echo -e "${YELLOW}请将此配置包含到您的域名配置中${NC}"
+    fi
+    
+    rm -f "$temp_file"
+    read -p "按回车键继续..."
+}
+
+# 6. 多域名重定向到主域名
+function nginx_multi_domain_redirect() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}      多域名重定向到主域名${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if ! check_nginx_installed; then
+        return
+    fi
+    
+    echo -e "${YELLOW}将多个域名重定向到一个主域名${NC}"
+    echo ""
+    
+    read -p "请输入主域名 (目标域名): " main_domain
+    echo ""
+    echo -e "请输入多个源域名 (每行一个，输入空行结束):"
+    echo -e "${CYAN}示例:${NC}"
+    echo "old-domain1.com"
+    echo "old-domain2.com"
+    echo "www.old-domain3.com"
+    echo ""
+    
+    local domains=()
+    local i=1
+    
+    while true; do
+        read -p "源域名 $i (留空结束): " input_domain
+        if [ -z "$input_domain" ]; then
+            break
+        fi
+        domains+=("$input_domain")
+        i=$((i+1))
+    done
+    
+    if [ ${#domains[@]} -eq 0 ]; then
+        echo -e "${RED}未输入任何源域名${NC}"
+        return
+    fi
+    
+    read -p "重定向类型 (1=301永久, 2=302临时, 默认1): " redirect_type
+    redirect_type=${redirect_type:-"1"}
+    
+    local redirect_code="301"
+    if [ "$redirect_type" = "2" ]; then
+        redirect_code="302"
+    fi
+    
+    local temp_file=$(mktemp)
+    
+    # 生成服务器块
+    cat > "$temp_file" << EOF
+# Multi-domain redirect to $main_domain
+# Generated on $(date)
+EOF
+    
+    for domain in "${domains[@]}"; do
+        cat >> "$temp_file" << EOF
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $domain;
+    
+    # 访问日志
+    access_log /var/log/nginx/redirect_${domain//./_}.log;
+    
+    # 重定向到主域名
+    return $redirect_code http://$main_domain\$request_uri;
+}
+EOF
+    done
+    
+    # 主域名配置（示例）
+    cat >> "$temp_file" << EOF
+
+# 主域名服务器配置 (示例)
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $main_domain www.$main_domain;
+    
+    root /var/www/$main_domain;
+    index index.html index.htm;
+    
+    access_log /var/log/nginx/${main_domain}_access.log;
+    error_log /var/log/nginx/${main_domain}_error.log;
+    
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
+}
+EOF
+    
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${YELLOW}生成的配置内容：${NC}"
+    echo ""
+    cat "$temp_file"
+    echo ""
+    echo -e "${GREEN}总共配置了 ${#domains[@]} 个域名的重定向${NC}"
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    
+    read -p "是否应用此配置？(y/N): " apply_config
+    if [[ "$apply_config" =~ ^[yY]$ ]]; then
+        local config_file="/etc/nginx/conf.d/multi_redirect_${main_domain//./_}.conf"
+        
+        backup_nginx_single_config "$config_file"
+        cp "$temp_file" "$config_file"
+        chmod 644 "$config_file"
+        
+        if verify_nginx_config_silent; then
+            read -p "配置验证成功，是否立即重载 Nginx？(y/N): " reload_now
+            if [[ "$reload_now" =~ ^[yY]$ ]]; then
+                reload_nginx_silent
+                echo -e "${GREEN}✅ 多域名重定向已启用！${NC}"
+            fi
+        fi
+    fi
+    
+    rm -f "$temp_file"
+    read -p "按回车键继续..."
+}
+
+# 7. 网站迁移重定向
+function nginx_site_migration() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}         网站迁移重定向${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if ! check_nginx_installed; then
+        return
+    fi
+    
+    echo -e "${YELLOW}为网站迁移创建全面的重定向规则${NC}"
+    echo ""
+    
+    echo -e "请选择迁移类型："
+    echo "1. 更换域名 (完整迁移)"
+    echo "2. 更改URL结构"
+    echo "3. 内容管理系统迁移 (如WordPress)"
+    echo "4. 平台迁移 (如Discuz到新系统)"
+    read -p "请选择 (1-4): " migration_type
+    
+    case "$migration_type" in
+        1)
+            echo -e "${BLUE}域名更换迁移${NC}"
+            read -p "旧域名: " old_domain
+            read -p "新域名: " new_domain
+            read -p "是否保留URL路径结构？(Y/n): " keep_structure
+            keep_structure=${keep_structure:-"Y"}
+            
+            local temp_file=$(mktemp)
+            cat > "$temp_file" << EOF
+# 域名迁移重定向: $old_domain -> $new_domain
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $old_domain www.$old_domain;
+    
+    # 301 永久重定向
+EOF
+            if [[ "$keep_structure" =~ ^[yY]$ ]]; then
+                echo "    return 301 http://$new_domain\$request_uri;" >> "$temp_file"
+            else
+                echo "    return 301 http://$new_domain;" >> "$temp_file"
+            fi
+            echo "}" >> "$temp_file"
+            ;;
+        2)
+            echo -e "${BLUE}URL结构更改${NC}"
+            read -p "域名: " domain
+            echo -e "示例："
+            echo "  /old-page.html -> /new-page.html"
+            echo "  /category/old/ -> /new-category/"
+            echo "  /article/(.*) -> /post/\$1"
+            echo ""
+            
+            echo "请输入重定向规则（每行一条，格式: 旧路径 新路径）："
+            echo "输入空行结束"
+            
+            local rules=()
+            while true; do
+                read -p "规则: " rule
+                if [ -z "$rule" ]; then
+                    break
+                fi
+                rules+=("$rule")
+            done
+            
+            if [ ${#rules[@]} -eq 0 ]; then
+                echo -e "${RED}未输入任何规则${NC}"
+                return
+            fi
+            
+            local temp_file=$(mktemp)
+            cat > "$temp_file" << EOF
+# URL结构迁移重定向
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $domain www.$domain;
+    
+    # 重定向规则
+EOF
+            
+            for rule in "${rules[@]}"; do
+                read -r old_path new_path <<< "$rule"
+                echo "    rewrite ^${old_path}$ ${new_path} permanent;" >> "$temp_file"
+            done
+            
+            cat >> "$temp_file" << EOF
+    
+    # 主配置
+    root /var/www/$domain;
+    index index.html index.htm;
+    
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
+}
+EOF
+            ;;
+        3)
+            echo -e "${BLUE}WordPress 迁移重定向${NC}"
+            read -p "旧网站域名: " old_domain
+            read -p "新网站域名: " new_domain
+            
+            local temp_file=$(mktemp)
+            cat > "$temp_file" << EOF
+# WordPress 迁移重定向规则
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $old_domain www.$old_domain;
+    
+    # WordPress 永久链接重定向
+    rewrite ^/(.*)$ http://$new_domain/\$1 permanent;
+    
+    # 特定重定向示例
+    rewrite ^/wp-content/uploads/(.*)$ http://$new_domain/wp-content/uploads/\$1 permanent;
+    rewrite ^/feed/?$ http://$new_domain/feed permanent;
+    rewrite ^/sitemap.xml$ http://$new_domain/sitemap.xml permanent;
+}
+EOF
+            ;;
+        4)
+            echo -e "${BLUE}论坛系统迁移${NC}"
+            read -p "旧网站域名: " old_domain
+            read -p "新网站域名: " new_domain
+            
+            local temp_file=$(mktemp)
+            cat > "$temp_file" << EOF
+# 论坛系统迁移重定向
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $old_domain www.$old_domain;
+    
+    # 论坛帖子重定向
+    rewrite ^/thread-([0-9]+)-([0-9]+)-([0-9]+).html$ http://$new_domain/topic/\$1 permanent;
+    rewrite ^/forum-([0-9]+)-([0-9]+).html$ http://$new_domain/category/\$1 permanent;
+    rewrite ^/space-username-([^\.]+).html$ http://$new_domain/user/\$1 permanent;
+    
+    # 通用重定向
+    rewrite ^/(.*)$ http://$new_domain/\$1 permanent;
+}
+EOF
+            ;;
+        *)
+            echo -e "${RED}无效的选择${NC}"
+            return
+            ;;
+    esac
+    
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${YELLOW}生成的配置内容：${NC}"
+    echo ""
+    cat "$temp_file"
+    echo ""
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    
+    read -p "是否保存配置？(y/N): " save_config
+    if [[ "$save_config" =~ ^[yY]$ ]]; then
+        local timestamp=$(date +%Y%m%d_%H%M%S)
+        local config_file="/etc/nginx/conf.d/migration_${timestamp}.conf"
+        
+        backup_nginx_single_config "$config_file"
+        cp "$temp_file" "$config_file"
+        chmod 644 "$config_file"
+        
+        echo -e "${GREEN}配置已保存到: $config_file${NC}"
+    fi
+    
+    rm -f "$temp_file"
+    read -p "按回车键继续..."
+}
+
+# 8. 移动设备重定向
+function nginx_mobile_redirect() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}        移动设备重定向${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if ! check_nginx_installed; then
+        return
+    fi
+    
+    echo -e "${YELLOW}为移动设备创建重定向规则${NC}"
+    echo ""
+    
+    echo -e "请选择设备检测方式："
+    echo "1. User-Agent 检测 (推荐)"
+    echo "2. 移动子域名 (如 m.example.com)"
+    echo "3. 移动专用路径 (如 example.com/mobile)"
+    read -p "请选择 (1-3): " mobile_type
+    
+    read -p "请输入主域名: " domain
+    
+    local temp_file=$(mktemp)
+    
+    case "$mobile_type" in
+        1)
+            cat > "$temp_file" << EOF
+# 移动设备重定向 - User-Agent检测
+map \$http_user_agent \$is_mobile {
+    default 0;
+    
+    # 移动设备 User-Agent 正则表达式
+    ~*(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino) 1;
+    ~*^(1207|6310|6590|3gso|4thp|50[1-6]i|770s|802s|a wa|abac|ac(er|oo|s\-)|ai(ko|rn)|al(av|ca|co)|amoi|an(ex|ny|yw)|aptu|ar(ch|go)|as(te|us)|attw|au(di|\-m|r |s )|avan|be(ck|ll|nq)|bi(lb|rd)|bl(ac|az)|br(e|v)w|bumb|bw\-(n|u)|c55\/|capi|ccwa|cdm\-|cell|chtm|cldc|cmd\-|co(mp|nd)|craw|da(it|ll|ng)|dbte|dc\-s|devi|dica|dmob|do(c|p)o|ds(12|\-d)|el(49|ai)|em(l2|ul)|er(ic|k0)|esl8|ez([4-7]0|os|wa|ze)|fetc|fly(\-|_)|g1 u|g560|gene|gf\-5|g\-mo|go(\.w|od)|gr(ad|un)|haie|hcit|hd\-(m|p|t)|hei\-|hi(pt|ta)|hp( i|ip)|hs\-c|ht(c(\-| |_|a|g|p|s|t)|tp)|hu(aw|tc)|i\-(20|go|ma)|i230|iac( |\-|\/)|ibro|idea|ig01|ikom|im1k|inno|ipaq|iris|ja(t|v)a|jbro|jemu|jigs|kddi|keji|kgt( |\/)|klon|kpt |kwc\-|kyo(c|k)|le(no|xi)|lg( g|\/(k|l|u)|50|54|\-[a-w])|libw|lynx|m1\-w|m3ga|m50\/|ma(te|ui|xo)|mc(01|21|ca)|m\-cr|me(rc|ri)|mi(o8|oa|ts)|mmef|mo(01|02|bi|de|do|t(\-| |o|v)|zz)|mt(50|p1|v )|mwbp|mywa|n10[0-2]|n20[2-3]|n30(0|2)|n50(0|2|5)|n7(0(0|1)|10)|ne((c|m)\-|on|tf|wf|wg|wt)|nok(6|i)|nzph|o2im|op(ti|wv)|oran|owg1|p800|pan(a|d|t)|pdxg|pg(13|\-([1-8]|c))|phil|pire|pl(ay|uc)|pn\-2|po(ck|rt|se)|prox|psio|pt\-g|qa\-a|qc(07|12|21|32|60|\-[2-7]|i\-)|qtek|r380|r600|raks|rim9|ro(ve|zo)|s55\/|sa(ge|ma|mm|ms|ny|va)|sc(01|h\-|oo|p\-)|sdk\/|se(c(\-|0|1)|47|mc|nd|ri)|sgh\-|shar|sie(\-|m)|sk\-0|sl(45|id)|sm(al|ar|b3|it|t5)|so(ft|ny)|sp(01|h\-|v\-|v )|sy(01|mb)|t2(18|50)|t6(00|10|18)|ta(gt|lk)|tcl\-|tdg\-|tel(i|m)|tim\-|t\-mo|to(pl|sh)|ts(70|m\-|m3|m5)|tx\-9|up(\.b|g1|si)|utst|v400|v750|veri|vi(rg|te)|vk(40|5[0-3]|\-v)|vm40|voda|vulc|vx(52|53|60|61|70|80|81|83|85|98)|w3c(\-| )|webc|whit|wi(g |nc|nw)|wmlb|wonu|x700|yas\-|your|zeto|zte\-) 1;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $domain www.$domain;
+    
+    # 移动设备重定向
+    if (\$is_mobile = 1) {
+        # 重定向到移动版本网站
+        return 301 http://m.$domain\$request_uri;
+        
+        # 或者使用移动专用路径
+        # rewrite ^ /mobile\$request_uri;
+    }
+    
+    # 桌面版网站配置
+    root /var/www/$domain;
+    index index.html index.htm;
+    
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
+}
+
+# 移动版网站配置
+server {
+    listen 80;
+    listen [::]:80;
+    server_name m.$domain;
+    
+    # 移动版网站
+    root /var/www/mobile.$domain;
+    index index.html index.htm;
+    
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
+}
+EOF
+            ;;
+        2)
+            cat > "$temp_file" << EOF
+# 移动子域名重定向
+server {
+    listen 80;
+    listen [::]:80;
+    server_name m.$domain;
+    
+    # 移动版网站
+    root /var/www/mobile.$domain;
+    index index.html index.htm;
+    
+    # 移动设备优化
+    location / {
+        try_files \$uri \$uri/ =404;
+        
+        # 添加移动设备优化的响应头
+        add_header X-Mobile-Site "true" always;
+    }
+}
+
+# 主网站重定向到移动版（可选）
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $domain www.$domain;
+    
+    # 检测移动设备
+    if (\$http_user_agent ~* '(android|iphone|ipod|ipad|mobile)') {
+        return 301 http://m.$domain\$request_uri;
+    }
+    
+    # 桌面版配置
+    root /var/www/$domain;
+    index index.html index.htm;
+    
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
+}
+EOF
+            ;;
+        3)
+            cat > "$temp_file" << EOF
+# 移动路径重定向
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $domain www.$domain;
+    
+    # 移动设备检测
+    set \$mobile_rewrite do_not_perform;
+    
+    if (\$http_user_agent ~* "(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino") {
+        set \$mobile_rewrite perform;
+    }
+    
+    if (\$mobile_rewrite = perform) {
+        # 重定向到移动路径
+        rewrite ^ /mobile\$request_uri last;
+    }
+    
+    # 桌面版配置
+    location / {
+        root /var/www/$domain;
+        index index.html index.htm;
+        try_files \$uri \$uri/ =404;
+    }
+    
+    # 移动版配置
+    location /mobile {
+        alias /var/www/$domain/mobile;
+        index index.html index.htm;
+        
+        try_files \$uri \$uri/ /mobile/index.html;
+        
+        # 防止循环重定向
+        if (\$request_uri ~ "^/mobile/mobile") {
+            rewrite ^/mobile/(.*) /\$1 permanent;
+        }
+    }
+}
+EOF
+            ;;
+        *)
+            echo -e "${RED}无效的选择${NC}"
+            return
+            ;;
+    esac
+    
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${YELLOW}生成的配置内容：${NC}"
+    echo ""
+    cat "$temp_file"
+    echo ""
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    
+    read -p "是否保存配置？(y/N): " save_config
+    if [[ "$save_config" =~ ^[yY]$ ]]; then
+        local config_file="/etc/nginx/conf.d/mobile_redirect_${domain//./_}.conf"
+        
+        backup_nginx_single_config "$config_file")
+        cp "$temp_file" "$config_file"
+        chmod 644 "$config_file"
+        
+        echo -e "${GREEN}配置已保存到: $config_file${NC}"
+    fi
+    
+    rm -f "$temp_file"
+    read -p "按回车键继续..."
+}
+
+# 9. 国家/地区重定向
+function nginx_geo_redirect() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}        国家/地区重定向${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if ! check_nginx_installed; then
+        return
+    fi
+    
+    echo -e "${YELLOW}根据访问者地理位置进行重定向${NC}"
+    echo ""
+    
+    echo -e "此功能需要 GeoIP 数据库。是否安装？"
+    echo "1. 安装 GeoIP2 数据库（推荐）"
+    echo "2. 我已经有 GeoIP 数据库"
+    echo "3. 仅生成配置，稍后手动安装数据库"
+    read -p "请选择 (1-3): " geo_choice
+    
+    if [ "$geo_choice" = "1" ]; then
+        install_geoip_database
+    fi
+    
+    read -p "请输入主域名: " domain
+    echo ""
+    echo -e "请配置重定向规则（格式: 国家代码 目标域名）"
+    echo -e "示例:"
+    echo "  US  us.example.com"
+    echo "  CN  cn.example.com"
+    echo "  GB  uk.example.com"
+    echo ""
+    echo "输入空行结束"
+    
+    local geo_rules=()
+    while true; do
+        read -p "规则 (国家 域名): " rule
+        if [ -z "$rule" ]; then
+            break
+        fi
+        geo_rules+=("$rule")
+    done
+    
+    if [ ${#geo_rules[@]} -eq 0 ]; then
+        echo -e "${RED}未输入任何规则${NC}"
+        return
+    fi
+    
+    local temp_file=$(mktemp)
+    
+    # 生成 GeoIP 配置文件
+    cat > "$temp_file" << EOF
+# 国家/地区重定向配置
+# 需要 GeoIP2 模块支持
+
+# 加载 GeoIP2 模块
+# load_module modules/ngx_http_geoip2_module.so;
+
+# GeoIP2 数据库路径（请根据实际情况修改）
+geoip2 /usr/share/GeoIP/GeoLite2-Country.mmdb {
+    \$geoip2_country_code country iso_code;
+}
+
+# 国家代码映射
+map \$geoip2_country_code \$country_redirect {
+    default "";
+EOF
+    
+    for rule in "${geo_rules[@]}"; do
+        read -r country_code redirect_domain <<< "$rule"
+        echo "    $country_code $redirect_domain;" >> "$temp_file"
+    done
+    
+    cat >> "$temp_file" << EOF
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $domain www.$domain;
+    
+    # 根据国家重定向
+    if (\$country_redirect != "") {
+        return 301 http://\$country_redirect\$request_uri;
+    }
+    
+    # 默认网站配置
+    root /var/www/$domain;
+    index index.html index.htm;
+    
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
+    
+    # 记录访问者国家信息
+    location /geo-info {
+        add_header Content-Type text/plain;
+        return 200 "Country: \$geoip2_country_code\nIP: \$remote_addr\n";
+    }
+}
+EOF
+    
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${YELLOW}生成的配置内容：${NC}"
+    echo ""
+    cat "$temp_file"
+    echo ""
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    
+    echo -e "${YELLOW}安装说明：${NC}"
+    echo "1. 安装 Nginx GeoIP2 模块："
+    echo "   Ubuntu: sudo apt install libnginx-mod-http-geoip2"
+    echo "   CentOS: sudo yum install nginx-mod-http-geoip2"
+    echo ""
+    echo "2. 下载 GeoIP2 数据库："
+    echo "   sudo mkdir -p /usr/share/GeoIP"
+    echo "   sudo wget -O /usr/share/GeoIP/GeoLite2-Country.mmdb https://raw.githubusercontent.com/P3TERX/GeoLite.mmdb/download/GeoLite2-Country.mmdb"
+    echo ""
+    
+    read -p "是否保存配置？(y/N): " save_config
+    if [[ "$save_config" =~ ^[yY]$ ]]; then
+        local config_file="/etc/nginx/conf.d/geo_redirect_${domain//./_}.conf"
+        
+        backup_nginx_single_config "$config_file"
+        cp "$temp_file" "$config_file"
+        chmod 644 "$config_file"
+        
+        echo -e "${GREEN}配置已保存到: $config_file${NC}"
+        echo -e "${YELLOW}请按照上述说明安装必要的模块和数据库${NC}"
+    fi
+    
+    rm -f "$temp_file"
+    read -p "按回车键继续..."
+}
+
+# 10. 文件扩展名重定向
+function nginx_extension_redirect() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}        文件扩展名重定向${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if ! check_nginx_installed; then
+        return
+    fi
+    
+    echo -e "${YELLOW}重定向特定文件扩展名的请求${NC}"
+    echo ""
+    
+    read -p "请输入域名: " domain
+    
+    echo -e "请选择重定向类型："
+    echo "1. 旧扩展名重定向到新扩展名"
+    echo "2. 删除扩展名重定向"
+    echo "3. 添加扩展名重定向"
+    echo "4. 阻止特定扩展名访问"
+    read -p "请选择 (1-4): " ext_choice
+    
+    local temp_file=$(mktemp)
+    
+    case "$ext_choice" in
+        1)
+            echo -e "${BLUE}旧扩展名重定向到新扩展名${NC}"
+            read -p "旧扩展名 (如: .htm): " old_ext
+            read -p "新扩展名 (如: .html): " new_ext
+            
+            cat > "$temp_file" << EOF
+# 文件扩展名重定向: $old_ext -> $new_ext
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $domain www.$domain;
+    
+    # 重定向旧扩展名到新扩展名
+    rewrite "^/(.*)\\.${old_ext#.}$" /\$1.$new_ext permanent;
+    
+    # 主配置
+    root /var/www/$domain;
+    index index.html index.htm;
+    
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
+}
+EOF
+            ;;
+        2)
+            echo -e "${BLUE}删除扩展名重定向${NC}"
+            read -p "要删除的扩展名 (如: .php): " remove_ext
+            
+            cat > "$temp_file" << EOF
+# 删除文件扩展名重定向
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $domain www.$domain;
+    
+    # 删除扩展名重定向
+    rewrite "^/(.*)\\.${remove_ext#.}$" /\$1 permanent;
+    
+    # 主配置
+    root /var/www/$domain;
+    index index.html index.htm;
+    
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
+}
+EOF
+            ;;
+        3)
+            echo -e "${BLUE}添加扩展名重定向${NC}"
+            read -p "要添加的扩展名 (如: .html): " add_ext
+            
+            cat > "$temp_file" << EOF
+# 添加文件扩展名重定向
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $domain www.$domain;
+    
+    # 添加扩展名重定向
+    rewrite "^/([^\.]+)$" /\$1.$add_ext permanent;
+    
+    # 主配置
+    root /var/www/$domain;
+    index index.html index.htm;
+    
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
+}
+EOF
+            ;;
+        4)
+            echo -e "${BLUE}阻止特定扩展名访问${NC}"
+            read -p "要阻止的扩展名 (如: .exe,.dll): " block_exts
+            
+            cat > "$temp_file" << EOF
+# 阻止特定文件扩展名访问
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $domain www.$domain;
+    
+    # 阻止特定扩展名访问
+    location ~* \\.(${block_exts//,/|})$ {
+        deny all;
+        return 403;
+    }
+    
+    # 主配置
+    root /var/www/$domain;
+    index index.html index.htm;
+    
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
+}
+EOF
+            ;;
+        *)
+            echo -e "${RED}无效的选择${NC}"
+            return
+            ;;
+    esac
+    
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${YELLOW}生成的配置内容：${NC}"
+    echo ""
+    cat "$temp_file"
+    echo ""
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    
+    read -p "是否保存配置？(y/N): " save_config
+    if [[ "$save_config" =~ ^[yY]$ ]]; then
+        local config_file="/etc/nginx/conf.d/extension_redirect_${domain//./_}.conf"
+        
+        backup_nginx_single_config "$config_file"
+        cp "$temp_file" "$config_file"
+        chmod 644 "$config_file"
+        
+        echo -e "${GREEN}配置已保存到: $config_file${NC}"
+    fi
+    
+    rm -f "$temp_file"
+    read -p "按回车键继续..."
+}
+
+# =========================================
+# 管理功能实现
+# =========================================
+
+# 11. 查看当前重定向配置
+function view_nginx_redirects() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}      查看当前 Nginx 重定向配置${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if ! check_nginx_installed; then
+        return
+    fi
+    
+    local nginx_conf_dir="/etc/nginx"
+    local conf_files=()
+    
+    echo -e "${YELLOW}正在扫描 Nginx 配置文件...${NC}"
+    echo ""
+    
+    # 查找所有配置文件
+    find "$nginx_conf_dir" -name "*.conf" -type f | while read -r conf_file; do
+        echo -e "${BLUE}=== 文件: $conf_file ===${NC}"
+        
+        # 提取重定向相关配置
+        local redirect_lines=$(grep -n -E "(return 30[12]|rewrite.*permanent|rewrite.*redirect)" "$conf_file" 2>/dev/null)
+        
+        if [ -n "$redirect_lines" ]; then
+            echo "$redirect_lines" | while IFS= read -r line; do
+                echo -e "  ${GREEN}第 ${line%%:*} 行: ${line#*:}${NC}"
+            done
+        else
+            echo -e "  ${YELLOW}未找到重定向配置${NC}"
+        fi
+        
+        echo ""
+    done
+    
+    # 检查活跃的重定向规则
+    echo -e "${CYAN}活跃的重定向规则：${NC}"
+    echo ""
+    
+    # 查找 return 指令
+    local active_returns=$(grep -r "return 30[12]" /etc/nginx/ 2>/dev/null | head -20)
+    if [ -n "$active_returns" ]; then
+        echo "$active_returns" | while IFS= read -r rule; do
+            echo -e "  ${GREEN}$rule${NC}"
+        done
+    fi
+    
+    echo ""
+    echo -e "${CYAN}重写规则：${NC}"
+    echo ""
+    
+    # 查找 rewrite 指令
+    local rewrite_rules=$(grep -r "rewrite.*permanent\|rewrite.*redirect" /etc/nginx/ 2>/dev/null | head -20)
+    if [ -n "$rewrite_rules" ]; then
+        echo "$rewrite_rules" | while IFS= read -r rule; do
+            echo -e "  ${GREEN}$rule${NC}"
+        done
+    fi
+    
+    read -p "按回车键继续..."
+}
+
+# 12. 备份 Nginx 配置
+function backup_nginx_config() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}      备份 Nginx 配置${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if ! check_nginx_installed; then
+        return
+    fi
+    
+    local backup_dir="/etc/nginx/backups"
+    local timestamp=$(date +%Y%m%d_%H%M%S)
+    local backup_path="$backup_dir/nginx_backup_$timestamp"
+    
+    echo -e "${YELLOW}正在备份 Nginx 配置...${NC}"
+    echo ""
+    
+    # 创建备份目录
+    mkdir -p "$backup_dir"
+    mkdir -p "$backup_path"
+    
+    # 备份主要配置
+    local config_files=(
+        "/etc/nginx/nginx.conf"
+        "/etc/nginx/conf.d/"
+        "/etc/nginx/sites-available/"
+        "/etc/nginx/sites-enabled/"
+    )
+    
+    local total_files=0
+    for item in "${config_files[@]}"; do
+        if [ -e "$item" ]; then
+            if [ -d "$item" ]; then
+                echo -e "备份目录: ${GREEN}$item${NC}"
+                cp -r "$item" "$backup_path/" 2>/dev/null
+                total_files=$((total_files + $(find "$item" -type f | wc -l)))
+            else
+                echo -e "备份文件: ${GREEN}$item${NC}"
+                cp "$item" "$backup_path/" 2>/dev/null
+                total_files=$((total_files + 1))
+            fi
+        fi
+    done
+    
+    # 创建备份信息文件
+    cat > "$backup_path/backup_info.txt" << EOF
+备份时间: $(date)
+备份路径: $backup_path
+文件数量: $total_files
+Nginx 版本: $(nginx -v 2>&1 | cut -d'/' -f2)
+系统信息: $(uname -a)
+EOF
+    
+    # 压缩备份
+    echo -e "\n${YELLOW}正在压缩备份文件...${NC}"
+    tar -czf "$backup_path.tar.gz" -C "$backup_path" . 2>/dev/null
+    rm -rf "$backup_path"
+    
+    # 显示备份信息
+    local backup_size=$(du -h "$backup_path.tar.gz" | cut -f1)
+    
+    echo -e "${GREEN}✅ 备份完成！${NC}"
+    echo ""
+    echo -e "${CYAN}备份信息：${NC}"
+    echo -e "备份文件: ${GREEN}$backup_path.tar.gz${NC}"
+    echo -e "文件大小: ${GREEN}$backup_size${NC}"
+    echo -e "备份时间: ${GREEN}$(date '+%Y-%m-%d %H:%M:%S')${NC}"
+    echo ""
+    echo -e "${YELLOW}备份内容：${NC}"
+    tar -tzf "$backup_path.tar.gz" 2>/dev/null | head -20
+    
+    # 清理旧备份（保留最近10个）
+    echo -e "\n${YELLOW}清理旧备份文件...${NC}"
+    ls -t "$backup_dir"/*.tar.gz 2>/dev/null | tail -n +11 | xargs -r rm -f
+    
+    read -p "按回车键继续..."
+}
+
+# 13. 恢复 Nginx 配置
+function restore_nginx_config() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}      恢复 Nginx 配置${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if ! check_nginx_installed; then
+        return
+    fi
+    
+    local backup_dir="/etc/nginx/backups"
+    
+    if [ ! -d "$backup_dir" ]; then
+        echo -e "${RED}备份目录不存在！${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+    
+    # 列出可用备份
+    local backups=($(ls -t "$backup_dir"/*.tar.gz 2>/dev/null))
+    
+    if [ ${#backups[@]} -eq 0 ]; then
+        echo -e "${RED}没有找到备份文件！${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+    
+    echo -e "${YELLOW}可用的备份文件：${NC}"
+    echo ""
+    
+    for i in "${!backups[@]}"; do
+        local backup_file="${backups[$i]}"
+        local file_size=$(du -h "$backup_file" | cut -f1)
+        local file_date=$(stat -c %y "$backup_file" 2>/dev/null | cut -d' ' -f1)
+        
+        echo -e "$((i+1)). ${GREEN}$(basename "$backup_file")${NC}"
+        echo -e "   大小: $file_size, 日期: $file_date"
+        
+        # 显示备份信息
+        if tar -tzf "$backup_file" 2>/dev/null | grep -q "backup_info.txt"; then
+            echo -e "   信息:"
+            tar -xzf "$backup_file" -O backup_info.txt 2>/dev/null | head -3 | sed 's/^/      /'
+        fi
+        echo ""
+    done
+    
+    read -p "请选择要恢复的备份编号 (1-${#backups[@]}): " restore_choice
+    
+    if [ "$restore_choice" -lt 1 ] || [ "$restore_choice" -gt ${#backups[@]} ]; then
+        echo -e "${RED}无效的选择！${NC}"
+        return
+    fi
+    
+    local selected_backup="${backups[$((restore_choice-1))]}"
+    
+    echo -e "\n${RED}⚠️  警告：这将覆盖当前的 Nginx 配置！${NC}"
+    echo -e "选择的备份文件: ${GREEN}$(basename "$selected_backup")${NC}"
+    read -p "确定要恢复吗？(y/N): " confirm_restore
+    
+    if [[ ! "$confirm_restore" =~ ^[yY]$ ]]; then
+        echo "恢复已取消。"
+        return
+    fi
+    
+    # 创建当前配置的临时备份
+    local temp_backup="/tmp/nginx_pre_restore_$(date +%s).tar.gz"
+    echo -e "${YELLOW}创建临时备份...${NC}"
+    tar -czf "$temp_backup" -C /etc/nginx nginx.conf conf.d sites-available sites-enabled 2>/dev/null
+    
+    # 停止 Nginx 服务
+    echo -e "${YELLOW}停止 Nginx 服务...${NC}"
+    systemctl stop nginx 2>/dev/null
+    
+    # 清空配置目录
+    echo -e "${YELLOW}清理配置目录...${NC}"
+    rm -rf /etc/nginx/conf.d/* 2>/dev/null
+    rm -rf /etc/nginx/sites-available/* 2>/dev/null
+    rm -rf /etc/nginx/sites-enabled/* 2>/dev/null
+    
+    # 恢复备份
+    echo -e "${YELLOW}恢复配置...${NC}"
+    tar -xzf "$selected_backup" -C /etc/nginx --strip-components=1 2>/dev/null
+    
+    # 验证配置
+    echo -e "${YELLOW}验证配置...${NC}"
+    if nginx -t 2>/dev/null; then
+        echo -e "${GREEN}✅ 配置验证成功${NC}"
+        
+        # 启动 Nginx
+        echo -e "${YELLOW}启动 Nginx 服务...${NC}"
+        systemctl start nginx 2>/dev/null
+        
+        if systemctl is-active --quiet nginx; then
+            echo -e "${GREEN}✅ Nginx 服务启动成功${NC}"
+        else
+            echo -e "${RED}❌ Nginx 服务启动失败${NC}"
+            echo -e "${YELLOW}正在恢复之前的配置...${NC}"
+            tar -xzf "$temp_backup" -C /etc/nginx --strip-components=1 2>/dev/null
+            systemctl start nginx 2>/dev/null
+        fi
+    else
+        echo -e "${RED}❌ 配置验证失败${NC}"
+        echo -e "${YELLOW}正在恢复之前的配置...${NC}"
+        tar -xzf "$temp_backup" -C /etc/nginx --strip-components=1 2>/dev/null
+        systemctl start nginx 2>/dev/null
+    fi
+    
+    # 清理临时文件
+    rm -f "$temp_backup"
+    
+    echo -e "\n${GREEN}✅ 恢复完成！${NC}"
+    read -p "按回车键继续..."
+}
+
+# 14. 测试重定向规则
+function test_redirect_rules() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}      测试重定向规则${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    echo -e "${YELLOW}测试 Nginx 重定向规则${NC}"
+    echo ""
+    
+    echo "请选择测试方式："
+    echo "1. 使用 curl 测试单个 URL"
+    echo "2. 批量测试 URL 列表"
+    echo "3. 模拟不同 User-Agent"
+    echo "4. 测试重定向链"
+    read -p "请选择 (1-4): " test_method
+    
+    case "$test_method" in
+        1)
+            read -p "请输入要测试的 URL (例如: http://example.com/old): " test_url
+            read -p "请输入预期的目标 URL (可选): " expected_url
+            
+            echo -e "\n${BLUE}测试结果：${NC}"
+            
+            # 使用 curl 测试
+            local response=$(curl -sI "$test_url" 2>/dev/null)
+            local status_code=$(echo "$response" | grep -i "HTTP/" | head -1 | awk '{print $2}')
+            local location=$(echo "$response" | grep -i "location:" | head -1 | cut -d' ' -f2-)
+            
+            echo -e "请求 URL: ${GREEN}$test_url${NC}"
+            echo -e "状态码: ${GREEN}$status_code${NC}"
+            
+            if [ -n "$location" ]; then
+                echo -e "重定向到: ${GREEN}$location${NC}"
+                
+                if [ -n "$expected_url" ] && [ "$location" != "$expected_url" ]; then
+                    echo -e "${RED}⚠️  警告: 重定向目标与预期不符${NC}"
+                    echo -e "预期: $expected_url"
+                    echo -e "实际: $location"
+                fi
+            else
+                echo -e "${YELLOW}未发生重定向${NC}"
+            fi
+            
+            # 显示响应头
+            echo -e "\n${BLUE}完整响应头：${NC}"
+            echo "$response"
+            ;;
+        2)
+            echo -e "${BLUE}批量测试 URL 列表${NC}"
+            echo "请将 URL 列表保存到文件（每行一个URL）"
+            read -p "请输入文件路径: " url_file
+            
+            if [ ! -f "$url_file" ]; then
+                echo -e "${RED}文件不存在！${NC}"
+                return
+            fi
+            
+            echo -e "\n${BLUE}测试结果：${NC}"
+            echo "---------------------------------------------------"
+            printf "%-40s %-10s %-30s\n" "URL" "状态码" "重定向目标"
+            echo "---------------------------------------------------"
+            
+            while IFS= read -r test_url || [ -n "$test_url" ]; do
+                [ -z "$test_url" ] && continue
+                
+                local response=$(curl -sI "$test_url" 2>/dev/null)
+                local status_code=$(echo "$response" | grep -i "HTTP/" | head -1 | awk '{print $2}')
+                local location=$(echo "$response" | grep -i "location:" | head -1 | cut -d' ' -f2- | tr -d '\r')
+                
+                # 截断长URL显示
+                local display_url="$test_url"
+                if [ ${#display_url} -gt 38 ]; then
+                    display_url="${display_url:0:35}..."
+                fi
+                
+                if [ ${#location} -gt 28 ]; then
+                    location="${location:0:25}..."
+                fi
+                
+                if [ -n "$status_code" ]; then
+                    if [ "$status_code" = "301" ] || [ "$status_code" = "302" ]; then
+                        printf "%-40s ${GREEN}%-10s${NC} %-30s\n" "$display_url" "$status_code" "$location"
+                    else
+                        printf "%-40s ${YELLOW}%-10s${NC} %-30s\n" "$display_url" "$status_code" "$location"
+                    fi
+                else
+                    printf "%-40s ${RED}%-10s${NC} %-30s\n" "$display_url" "ERROR" "请求失败"
+                fi
+            done < "$url_file"
+            ;;
+        3)
+            echo -e "${BLUE}模拟不同 User-Agent${NC}"
+            read -p "请输入测试 URL: " test_url
+            
+            echo -e "\n${BLUE}测试结果：${NC}"
+            
+            # 定义不同的 User-Agent
+            declare -A user_agents=(
+                ["桌面 Chrome"]="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+                ["移动 iPhone"]="Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1"
+                ["移动 Android"]="Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36"
+                ["Google 爬虫"]="Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+                ["命令行工具"]="curl/7.68.0"
+            )
+            
+            for agent_name in "${!user_agents[@]}"; do
+                echo -e "\n${YELLOW}$agent_name：${NC}"
+                
+                local response=$(curl -sI -A "${user_agents[$agent_name]}" "$test_url" 2>/dev/null)
+                local status_code=$(echo "$response" | grep -i "HTTP/" | head -1 | awk '{print $2}')
+                local location=$(echo "$response" | grep -i "location:" | head -1 | cut -d' ' -f2-)
+                
+                echo -e "状态码: ${GREEN}$status_code${NC}"
+                if [ -n "$location" ]; then
+                    echo -e "重定向到: ${GREEN}$location${NC}"
+                fi
+            done
+            ;;
+        4)
+            echo -e "${BLUE}测试重定向链${NC}"
+            read -p "请输入起始 URL: " start_url
+            read -p "最大重定向次数 (默认 5): " max_redirects
+            max_redirects=${max_redirects:-5}
+            
+            echo -e "\n${BLUE}重定向链：${NC}"
+            
+            local current_url="$start_url"
+            local redirect_count=0
+            local visited_urls=()
+            
+            while [ "$redirect_count" -lt "$max_redirects" ]; do
+                visited_urls+=("$current_url")
+                
+                echo -e "第 $((redirect_count+1)) 次请求: ${GREEN}$current_url${NC}"
+                
+                local response=$(curl -sI "$current_url" 2>/dev/null)
+                local status_code=$(echo "$response" | grep -i "HTTP/" | head -1 | awk '{print $2}')
+                local location=$(echo "$response" | grep -i "location:" | head -1 | cut -d' ' -f2- | tr -d '\r')
+                
+                echo -e "  状态码: ${GREEN}$status_code${NC}"
+                
+                if [ "$status_code" = "301" ] || [ "$status_code" = "302" ]; then
+                    if [ -z "$location" ]; then
+                        echo -e "${RED}  错误: 重定向状态码但没有 Location 头${NC}"
+                        break
+                    fi
+                    
+                    # 检查是否循环重定向
+                    for visited in "${visited_urls[@]}"; do
+                        if [ "$visited" = "$location" ]; then
+                            echo -e "${RED}  检测到循环重定向！${NC}"
+                            break 2
+                        fi
+                    done
+                    
+                    echo -e "  重定向到: ${GREEN}$location${NC}"
+                    current_url="$location"
+                    redirect_count=$((redirect_count+1))
+                else
+                    echo -e "${YELLOW}  重定向链结束${NC}"
+                    break
+                fi
+                
+                echo ""
+            done
+            
+            if [ "$redirect_count" -ge "$max_redirects" ]; then
+                echo -e "${RED}达到最大重定向次数限制${NC}"
+            fi
+            
+            echo -e "\n${GREEN}总共发生 $redirect_count 次重定向${NC}"
+            ;;
+        *)
+            echo -e "${RED}无效的选择${NC}"
+            return
+            ;;
+    esac
+    
+    read -p "按回车键继续..."
+}
+
+# 15. 批量重定向生成器
+function batch_redirect_generator() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}      批量重定向生成器${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    echo -e "${YELLOW}批量生成重定向规则${NC}"
+    echo ""
+    
+    echo "请选择数据源："
+    echo "1. 手动输入"
+    echo "2. CSV 文件"
+    echo "3. Excel 文件 (需要转换)"
+    echo "4. 网站地图 (sitemap.xml)"
+    echo "5. 旧网站日志"
+    read -p "请选择 (1-5): " data_source
+    
+    case "$data_source" in
+        1)
+            echo -e "${BLUE}手动输入重定向规则${NC}"
+            echo "格式: 旧URL 新URL [状态码]"
+            echo "示例: /old-page.html /new-page.html 301"
+            echo "输入空行结束"
+            echo ""
+            
+            local rules_file=$(mktemp)
+            echo "# 批量重定向规则" > "$rules_file"
+            echo "# 生成时间: $(date)" >> "$rules_file"
+            
+            local rule_count=0
+            while true; do
+                read -p "规则 $((rule_count+1)): " rule
+                if [ -z "$rule" ]; then
+                    break
+                fi
+                echo "$rule" >> "$rules_file"
+                rule_count=$((rule_count+1))
+            done
+            
+            echo -e "\n${GREEN}总共输入了 $rule_count 条规则${NC}"
+            process_batch_rules "$rules_file"
+            ;;
+        2)
+            echo -e "${BLUE}从 CSV 文件导入${NC}"
+            read -p "请输入 CSV 文件路径: " csv_file
+            
+            if [ ! -f "$csv_file" ]; then
+                echo -e "${RED}文件不存在！${NC}"
+                return
+            fi
+            
+            # 显示前几行
+            echo -e "\n${YELLOW}文件预览：${NC}"
+            head -5 "$csv_file"
+            
+            read -p "请指定列号 (旧URL,新URL,状态码): " col_numbers
+            process_csv_file "$csv_file" "$col_numbers"
+            ;;
+        3)
+            echo -e "${BLUE}Excel 文件处理${NC}"
+            echo -e "${YELLOW}注意: 需要安装 libreoffice 或使用在线转换工具${NC}"
+            echo ""
+            echo "1. 转换为 CSV"
+            echo "2. 转换为 TXT"
+            read -p "请选择: " excel_choice
+            
+            read -p "请输入 Excel 文件路径: " excel_file
+            
+            if [ ! -f "$excel_file" ]; then
+                echo -e "${RED}文件不存在！${NC}"
+                return
+            fi
+            
+            if [ "$excel_choice" = "1" ]; then
+                echo -e "${YELLOW}正在转换为 CSV...${NC}"
+                local csv_output="${excel_file%.*}.csv"
+                
+                if command -v libreoffice &> /dev/null; then
+                    libreoffice --headless --convert-to csv "$excel_file" --outdir "$(dirname "$excel_file")"
+                    echo -e "${GREEN}转换完成: $csv_output${NC}"
+                else
+                    echo -e "${RED}未找到 libreoffice，请手动转换${NC}"
+                    return
+                fi
+            fi
+            ;;
+        4)
+            echo -e "${BLUE}从网站地图生成重定向规则${NC}"
+            read -p "请输入 sitemap.xml URL: " sitemap_url
+            
+            echo -e "${YELLOW}正在下载网站地图...${NC}"
+            local sitemap_content=$(curl -s "$sitemap_url" 2>/dev/null)
+            
+            if [ -z "$sitemap_content" ]; then
+                echo -e "${RED}无法下载网站地图${NC}"
+                return
+            fi
+            
+            # 提取URL
+            local urls=$(echo "$sitemap_content" | grep -o '<loc>[^<]*</loc>' | sed 's/<\/\?loc>//g')
+            local url_count=$(echo "$urls" | wc -l)
+            
+            echo -e "找到 $url_count 个 URL"
+            
+            read -p "请输入旧域名前缀: " old_prefix
+            read -p "请输入新域名前缀: " new_prefix
+            
+            generate_redirects_from_urls "$urls" "$old_prefix" "$new_prefix"
+            ;;
+        5)
+            echo -e "${BLUE}从日志文件生成重定向规则${NC}"
+            read -p "请输入日志文件路径: " log_file
+            
+            if [ ! -f "$log_file" ]; then
+                echo -e "${RED}文件不存在！${NC}"
+                return
+            fi
+            
+            echo -e "${YELLOW}正在分析日志文件...${NC}"
+            
+            # 提取404错误的URL
+            local not_found_urls=$(grep " 404 " "$log_file" | grep -o '"[^"]*"' | grep -o '/[^ ]*' | sort | uniq -c | sort -rn | head -20)
+            
+            echo -e "\n${BLUE}最常见的 404 URL：${NC}"
+            echo "$not_found_urls"
+            
+            read -p "是否基于这些URL生成重定向规则？(y/N): " generate_from_logs
+            
+            if [[ "$generate_from_logs" =~ ^[yY]$ ]]; then
+                generate_redirects_from_logs "$not_found_urls"
+            fi
+            ;;
+        *)
+            echo -e "${RED}无效的选择${NC}"
+            return
+            ;;
+    esac
+    
+    read -p "按回车键继续..."
+}
+
+# =========================================
+# 工具功能实现
+# =========================================
+
+# 16. 安装/更新 Nginx
+function install_update_nginx() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}       安装/更新 Nginx${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    echo -e "${YELLOW}检测系统发行版...${NC}"
+    
+    # 检测发行版
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        local os_name=$ID
+        local os_version=$VERSION_ID
+    else
+        os_name=$(uname -s)
+    fi
+    
+    echo -e "操作系统: ${GREEN}$os_name $os_version${NC}"
+    
+    # 检查是否已安装 Nginx
+    if command -v nginx &> /dev/null; then
+        local current_version=$(nginx -v 2>&1 | cut -d'/' -f2)
+        echo -e "当前 Nginx 版本: ${GREEN}$current_version${NC}"
+        
+        read -p "是否更新 Nginx？(y/N): " update_nginx
+        if [[ ! "$update_nginx" =~ ^[yY]$ ]]; then
+            echo "操作已取消。"
+            return
+        fi
+    else
+        echo -e "${YELLOW}未检测到 Nginx 安装${NC}"
+        read -p "是否安装 Nginx？(y/N): " install_nginx
+        if [[ ! "$install_nginx" =~ ^[yY]$ ]]; then
+            echo "操作已取消。"
+            return
+        fi
+    fi
+    
+    # 安装/更新 Nginx
+    case "$os_name" in
+        ubuntu|debian)
+            echo -e "${BLUE}使用 apt 安装/更新 Nginx...${NC}"
+            
+            # 更新包列表
+            apt update
+            
+            if command -v nginx &> /dev/null; then
+                apt upgrade -y nginx
+            else
+                apt install -y nginx
+            fi
+            ;;
+        centos|rhel|fedora|rocky|almalinux)
+            echo -e "${BLUE}使用 yum/dnf 安装/更新 Nginx...${NC}"
+            
+            # 安装 EPEL 仓库
+            if [ "$os_name" = "centos" ] || [ "$os_name" = "rhel" ]; then
+                yum install -y epel-release
+                yum update -y nginx
+            elif command -v dnf &> /dev/null; then
+                dnf install -y nginx
+            else
+                yum install -y nginx
+            fi
+            ;;
+        *)
+            echo -e "${RED}不支持的操作系统${NC}"
+            echo "请手动安装 Nginx："
+            echo "官方文档: https://nginx.org/en/linux_packages.html"
+            return
+            ;;
+    esac
+    
+    # 检查安装结果
+    if command -v nginx &> /dev/null; then
+        local new_version=$(nginx -v 2>&1 | cut -d'/' -f2)
+        echo -e "${GREEN}✅ Nginx 安装/更新成功！${NC}"
+        echo -e "当前版本: ${GREEN}$new_version${NC}"
+        
+        # 启动并启用开机启动
+        systemctl start nginx
+        systemctl enable nginx
+        
+        # 显示状态
+        echo -e "\n${BLUE}Nginx 服务状态：${NC}"
+        systemctl status nginx --no-pager -l | head -20
+    else
+        echo -e "${RED}❌ Nginx 安装/更新失败${NC}"
+    fi
+    
+    read -p "按回车键继续..."
+}
+
+# 17. 查看 Nginx 日志
+function view_nginx_logs() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}       查看 Nginx 日志${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if ! check_nginx_installed; then
+        return
+    fi
+    
+    echo -e "${YELLOW}选择日志类型：${NC}"
+    echo "1. 错误日志 (error.log)"
+    echo "2. 访问日志 (access.log)"
+    echo "3. 特定虚拟主机日志"
+    echo "4. 实时监控日志"
+    echo "5. 搜索日志内容"
+    echo "6. 分析日志统计"
+    read -p "请选择 (1-6): " log_choice
+    
+    local log_dir="/var/log/nginx"
+    
+    case "$log_choice" in
+        1)
+            echo -e "${BLUE}错误日志：${NC}"
+            echo ""
+            
+            # 查找错误日志
+            local error_logs=$(find "$log_dir" -name "*error*.log" -type f 2>/dev/null)
+            
+            if [ -n "$error_logs" ]; then
+                echo -e "${GREEN}找到错误日志文件：${NC}"
+                echo "$error_logs" | nl
+                echo ""
+                
+                read -p "选择日志文件编号 (默认 1): " log_num
+                log_num=${log_num:-1}
+                
+                local selected_log=$(echo "$error_logs" | sed -n "${log_num}p")
+                
+                if [ -f "$selected_log" ]; then
+                    echo -e "${YELLOW}最后 50 行错误日志：${NC}"
+                    tail -50 "$selected_log"
+                else
+                    echo -e "${RED}文件不存在！${NC}"
+                fi
+            else
+                echo -e "${RED}未找到错误日志${NC}"
+            fi
+            ;;
+        2)
+            echo -e "${BLUE}访问日志：${NC}"
+            echo ""
+            
+            local access_logs=$(find "$log_dir" -name "*access*.log" -type f 2>/dev/null)
+            
+            if [ -n "$access_logs" ]; then
+                echo -e "${GREEN}找到访问日志文件：${NC}"
+                echo "$access_logs" | nl
+                echo ""
+                
+                read -p "选择日志文件编号 (默认 1): " log_num
+                log_num=${log_num:-1}
+                
+                local selected_log=$(echo "$access_logs" | sed -n "${log_num}p")
+                
+                if [ -f "$selected_log" ]; then
+                    echo -e "${YELLOW}最后 20 条访问记录：${NC}"
+                    tail -20 "$selected_log"
+                fi
+            else
+                echo -e "${RED}未找到访问日志${NC}"
+            fi
+            ;;
+        3)
+            echo -e "${BLUE}虚拟主机日志${NC}"
+            echo ""
+            
+            read -p "请输入域名: " domain
+            
+            local domain_logs=$(find "$log_dir" -name "*$domain*.log" -type f 2>/dev/null)
+            
+            if [ -n "$domain_logs" ]; then
+                echo -e "${GREEN}找到的日志文件：${NC}"
+                echo "$domain_logs"
+                echo ""
+                
+                for log_file in $domain_logs; do
+                    echo -e "${YELLOW}=== $(basename "$log_file") ===${NC}"
+                    tail -10 "$log_file"
+                    echo ""
+                done
+            else
+                echo -e "${RED}未找到该域名的日志${NC}"
+            fi
+            ;;
+        4)
+            echo -e "${BLUE}实时监控日志${NC}"
+            echo ""
+            
+            local log_files=$(find "$log_dir" -name "*.log" -type f 2>/dev/null | head -5)
+            
+            if [ -n "$log_files" ]; then
+                echo -e "${GREEN}可监控的日志文件：${NC}"
+                echo "$log_files" | nl
+                echo ""
+                
+                read -p "选择日志文件编号: " log_num
+                local selected_log=$(echo "$log_files" | sed -n "${log_num}p")
+                
+                if [ -f "$selected_log" ]; then
+                    echo -e "${YELLOW}开始实时监控 (按 Ctrl+C 退出)...${NC}"
+                    tail -f "$selected_log"
+                fi
+            fi
+            ;;
+        5)
+            echo -e "${BLUE}搜索日志内容${NC}"
+            echo ""
+            
+            read -p "请输入搜索关键词: " search_term
+            read -p "搜索最近多少行的日志？(默认 1000): " lines
+            lines=${lines:-1000}
+            
+            local all_logs=$(find "$log_dir" -name "*.log" -type f 2>/dev/null)
+            
+            echo -e "${YELLOW}搜索结果：${NC}"
+            echo ""
+            
+            for log_file in $all_logs; do
+                local matches=$(grep -n "$search_term" "$log_file" 2>/dev/null | tail -5)
+                if [ -n "$matches" ]; then
+                    echo -e "${GREEN}=== $(basename "$log_file") ===${NC}"
+                    echo "$matches"
+                    echo ""
+                fi
+            done
+            ;;
+        6)
+            echo -e "${BLUE}日志统计分析${NC}"
+            echo ""
+            
+            read -p "分析最近多少行的日志？(默认 10000): " lines
+            lines=${lines:-10000}
+            
+            local access_log=$(find "$log_dir" -name "*access*.log" -type f 2>/dev/null | head -1)
+            
+            if [ -f "$access_log" ]; then
+                echo -e "${YELLOW}正在分析日志: $(basename "$access_log")${NC}"
+                echo ""
+                
+                # 统计状态码
+                echo -e "${BLUE}HTTP 状态码统计：${NC}"
+                tail -n "$lines" "$access_log" | awk '{print $9}' | sort | uniq -c | sort -rn
+                echo ""
+                
+                # 统计访问最多的IP
+                echo -e "${BLUE}访问最多的 IP 地址：${NC}"
+                tail -n "$lines" "$access_log" | awk '{print $1}' | sort | uniq -c | sort -rn | head -10
+                echo ""
+                
+                # 统计访问最多的URL
+                echo -e "${BLUE}访问最多的 URL：${NC}"
+                tail -n "$lines" "$access_log" | awk '{print $7}' | sort | uniq -c | sort -rn | head -10
+                echo ""
+                
+                # 统计流量来源
+                echo -e "${BLUE}流量来源统计：${NC}"
+                tail -n "$lines" "$access_log" | awk -F'"' '{print $4}' | cut -d' ' -f2 | sort | uniq -c | sort -rn | head -10
+            else
+                echo -e "${RED}未找到访问日志${NC}"
+            fi
+            ;;
+        *)
+            echo -e "${RED}无效的选择${NC}"
+            return
+            ;;
+    esac
+    
+    read -p "按回车键继续..."
+}
+
+# 18. 验证 Nginx 配置
+function verify_nginx_config() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}       验证 Nginx 配置${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if ! check_nginx_installed; then
+        return
+    fi
+    
+    echo -e "${YELLOW}正在验证 Nginx 配置...${NC}"
+    echo ""
+    
+    # 执行配置测试
+    if nginx -t 2>&1; then
+        echo -e "\n${GREEN}✅ Nginx 配置验证成功！${NC}"
+        
+        # 显示配置文件路径
+        echo -e "\n${BLUE}配置文件位置：${NC}"
+        nginx -T 2>/dev/null | grep -E "^# configuration file" | head -10
+    else
+        echo -e "\n${RED}❌ Nginx 配置验证失败！${NC}"
+        
+        # 尝试显示错误详情
+        echo -e "\n${YELLOW}错误详情：${NC}"
+        nginx -t 2>&1 | tail -20
+    fi
+    
+    read -p "按回车键继续..."
+}
+
+# 19. 重载 Nginx 配置
+function reload_nginx() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}       重载 Nginx 配置${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if ! check_nginx_installed; then
+        return
+    fi
+    
+    # 先验证配置
+    echo -e "${YELLOW}正在验证配置...${NC}"
+    if ! nginx -t 2>/dev/null; then
+        echo -e "${RED}❌ 配置验证失败，无法重载${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+    
+    echo -e "${GREEN}✅ 配置验证成功${NC}"
+    echo ""
+    
+    echo -e "${YELLOW}请选择重载方式：${NC}"
+    echo "1. 优雅重载 (reload)"
+    echo "2. 强制重载 (reopen)"
+    echo "3. 完全重启 (restart)"
+    echo "4. 仅测试不重载"
+    read -p "请选择 (1-4): " reload_type
+    
+    case "$reload_type" in
+        1)
+            echo -e "${BLUE}执行优雅重载...${NC}"
+            systemctl reload nginx 2>/dev/null || nginx -s reload 2>/dev/null
+            
+            if [ $? -eq 0 ]; then
+                echo -e "${GREEN}✅ Nginx 优雅重载成功！${NC}"
+            else
+                echo -e "${RED}❌ 重载失败${NC}"
+            fi
+            ;;
+        2)
+            echo -e "${BLUE}执行强制重载...${NC}"
+            systemctl kill -s HUP nginx 2>/dev/null || nginx -s reopen 2>/dev/null
+            
+            if [ $? -eq 0 ]; then
+                echo -e "${GREEN}✅ Nginx 强制重载成功！${NC}"
+            else
+                echo -e "${RED}❌ 重载失败${NC}"
+            fi
+            ;;
+        3)
+            echo -e "${BLUE}执行完全重启...${NC}"
+            systemctl restart nginx 2>/dev/null
+            
+            if [ $? -eq 0 ]; then
+                echo -e "${GREEN}✅ Nginx 重启成功！${NC}"
+            else
+                echo -e "${RED}❌ 重启失败${NC}"
+            fi
+            ;;
+        4)
+            echo -e "${YELLOW}仅测试配置，不执行重载${NC}"
+            echo -e "${GREEN}配置测试完成${NC}"
+            ;;
+        *)
+            echo -e "${RED}无效的选择${NC}"
+            ;;
+    esac
+    
+    # 显示状态
+    echo -e "\n${BLUE}Nginx 服务状态：${NC}"
+    systemctl status nginx --no-pager -l | head -10
+    
+    read -p "按回车键继续..."
+}
+
+# 20. Nginx 配置文件编辑器
+function edit_nginx_config() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}     Nginx 配置文件编辑器${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if ! check_nginx_installed; then
+        return
+    fi
+    
+    echo -e "${YELLOW}选择要编辑的配置文件：${NC}"
+    echo ""
+    
+    # 显示配置文件列表
+    local config_files=()
+    config_files+=("/etc/nginx/nginx.conf (主配置文件)")
+    
+    if [ -d "/etc/nginx/conf.d" ]; then
+        local confd_files=$(find /etc/nginx/conf.d -name "*.conf" -type f 2>/dev/null)
+        for file in $confd_files; do
+            config_files+=("$file")
+        done
+    fi
+    
+    if [ -d "/etc/nginx/sites-available" ]; then
+        local sites_files=$(find /etc/nginx/sites-available -name "*" -type f 2>/dev/null)
+        for file in $sites_files; do
+            config_files+=("$file")
+        done
+    fi
+    
+    if [ -d "/etc/nginx/sites-enabled" ]; then
+        local enabled_files=$(find /etc/nginx/sites-enabled -name "*" -type f 2>/dev/null)
+        for file in $enabled_files; do
+            config_files+=("$file (已启用)")
+        done
+    fi
+    
+    # 显示文件列表
+    for i in "${!config_files[@]}"; do
+        echo -e "$((i+1)). ${GREEN}${config_files[$i]}${NC}"
+    done
+    
+    echo ""
+    echo -e "0. 创建新配置文件"
+    echo ""
+    
+    read -p "请选择文件编号 (0-${#config_files[@]}): " file_choice
+    
+    local selected_file=""
+    
+    if [ "$file_choice" = "0" ]; then
+        read -p "请输入新文件名 (例如: my_site.conf): " new_file
+        selected_file="/etc/nginx/conf.d/$new_file"
+        
+        # 创建模板
+        cat > "$selected_file" << EOF
+# Nginx 配置模板
+# 创建时间: $(date)
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name example.com www.example.com;
+    
+    # 访问日志
+    access_log /var/log/nginx/example_access.log;
+    error_log /var/log/nginx/example_error.log;
+    
+    # 网站根目录
+    root /var/www/example;
+    index index.html index.htm;
+    
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
+    
+    # 静态文件缓存
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js)$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+}
+EOF
+        
+        echo -e "${GREEN}已创建配置文件: $selected_file${NC}"
+    else
+        local index=$((file_choice-1))
+        if [ "$index" -ge 0 ] && [ "$index" -lt ${#config_files[@]} ]; then
+            selected_file=$(echo "${config_files[$index]}" | awk '{print $1}')
+        else
+            echo -e "${RED}无效的选择${NC}"
+            return
+        fi
+    fi
+    
+    if [ -n "$selected_file" ]; then
+        echo -e "\n${YELLOW}正在编辑: $selected_file${NC}"
+        echo ""
+        
+        # 显示文件内容
+        echo -e "${BLUE}文件内容预览：${NC}"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        head -30 "$selected_file" 2>/dev/null || echo -e "${RED}文件为空或不存在${NC}"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        
+        # 选择编辑器
+        echo -e "\n${YELLOW}选择编辑器：${NC}"
+        echo "1. nano (简单)"
+        echo "2. vim (高级)"
+        echo "3. 直接编辑 (使用系统默认编辑器)"
+        read -p "请选择 (1-3): " editor_choice
+        
+        case "$editor_choice" in
+            1)
+                if command -v nano &> /dev/null; then
+                    nano "$selected_file"
+                else
+                    echo -e "${RED}nano 未安装${NC}"
+                    return
+                fi
+                ;;
+            2)
+                if command -v vim &> /dev/null; then
+                    vim "$selected_file"
+                else
+                    echo -e "${RED}vim 未安装${NC}"
+                    return
+                fi
+                ;;
+            3)
+                ${EDITOR:-vi} "$selected_file"
+                ;;
+            *)
+                echo -e "${RED}无效的选择${NC}"
+                return
+                ;;
+        esac
+        
+        # 编辑后验证
+        echo -e "\n${YELLOW}验证配置文件...${NC}"
+        if nginx -t 2>/dev/null; then
+            echo -e "${GREEN}✅ 配置验证成功${NC}"
+            
+            read -p "是否立即重载 Nginx 使更改生效？(y/N): " reload_now
+            if [[ "$reload_now" =~ ^[yY]$ ]]; then
+                systemctl reload nginx 2>/dev/null
+                echo -e "${GREEN}✅ 配置已重载${NC}"
+            fi
+        else
+            echo -e "${RED}❌ 配置验证失败${NC}"
+            echo -e "${YELLOW}错误信息：${NC}"
+            nginx -t 2>&1 | tail -5
+        fi
+    fi
+    
+    read -p "按回车键继续..."
+}
+
+# =========================================
+# 辅助函数
+# =========================================
+
+# 检查 Nginx 是否安装
+function check_nginx_installed() {
+    if ! command -v nginx &> /dev/null; then
+        echo -e "${RED}Nginx 未安装！${NC}"
+        echo -e "请使用菜单选项 16 安装 Nginx"
+        read -p "按回车键继续..."
+        return 1
+    fi
+    return 0
+}
+
+# 验证 Nginx 配置（静默模式）
+function verify_nginx_config_silent() {
+    nginx -t >/dev/null 2>&1
+    return $?
+}
+
+# 重载 Nginx（静默模式）
+function reload_nginx_silent() {
+    systemctl reload nginx >/dev/null 2>&1 || nginx -s reload >/dev/null 2>&1
+    return $?
+}
+
+# 备份单个配置文件
+function backup_nginx_single_config() {
+    local config_file="$1"
+    local backup_dir="/etc/nginx/backups"
+    
+    if [ -f "$config_file" ]; then
+        mkdir -p "$backup_dir"
+        local backup_file="$backup_dir/$(basename "$config_file").backup.$(date +%Y%m%d_%H%M%S)"
+        cp "$config_file" "$backup_file"
+        echo -e "${GREEN}已备份: $backup_file${NC}"
+    fi
+}
+
+# 恢复单个配置文件
+function restore_nginx_single_config() {
+    local config_file="$1"
+    local backup_dir="/etc/nginx/backups"
+    
+    local latest_backup=$(find "$backup_dir" -name "$(basename "$config_file").backup.*" -type f 2>/dev/null | sort -r | head -1)
+    
+    if [ -f "$latest_backup" ]; then
+        cp "$latest_backup" "$config_file"
+        echo -e "${GREEN}已从备份恢复: $latest_backup${NC}"
+        return 0
+    else
+        echo -e "${RED}未找到备份文件${NC}"
+        return 1
+    fi
+}
+
+# 安装 GeoIP 数据库
+function install_geoip_database() {
+    echo -e "${YELLOW}安装 GeoIP 数据库...${NC}"
+    
+    # 检测系统
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        local os_name=$ID
+    else
+        os_name=$(uname -s)
+    fi
+    
+    case "$os_name" in
+        ubuntu|debian)
+            apt update
+            apt install -y libmaxminddb0 libmaxminddb-dev mmdb-bin
+            ;;
+        centos|rhel|fedora|rocky|almalinux)
+            if command -v dnf &> /dev/null; then
+                dnf install -y libmaxminddb libmaxminddb-devel
+            else
+                yum install -y libmaxminddb libmaxminddb-devel
+            fi
+            ;;
+    esac
+    
+    # 下载 GeoIP2 数据库
+    echo -e "${YELLOW}下载 GeoIP2 数据库...${NC}"
+    mkdir -p /usr/share/GeoIP
+    wget -O /usr/share/GeoIP/GeoLite2-Country.mmdb https://raw.githubusercontent.com/P3TERX/GeoLite.mmdb/download/GeoLite2-Country.mmdb 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ GeoIP 数据库安装完成${NC}"
+    else
+        echo -e "${RED}❌ GeoIP 数据库下载失败${NC}"
+    fi
+}
+
+# 处理批量规则
+function process_batch_rules() {
+    local rules_file="$1"
+    
+    echo -e "\n${YELLOW}处理批量规则...${NC}"
+    
+    # 读取规则文件
+    local nginx_config=$(mktemp)
+    
+    echo "# 批量重定向规则" > "$nginx_config"
+    echo "# 生成时间: $(date)" >> "$nginx_config"
+    echo "" >> "$nginx_config"
+    echo "server {" >> "$nginx_config"
+    echo "    listen 80;" >> "$nginx_config"
+    echo "    listen [::]:80;" >> "$nginx_config"
+    echo "    server_name _;" >> "$nginx_config"
+    echo "" >> "$nginx_config"
+    
+    # 处理每条规则
+    while IFS= read -r rule || [ -n "$rule" ]; do
+        # 跳过注释和空行
+        [[ "$rule" =~ ^# ]] && continue
+        [[ -z "$rule" ]] && continue
+        
+        # 解析规则
+        read -r from_url to_url status_code <<< "$rule"
+        status_code=${status_code:-"301"}
+        
+        # 生成 rewrite 规则
+        echo "    rewrite ^${from_url}$ ${to_url} $status_code;" >> "$nginx_config"
+    done < "$rules_file"
+    
+    echo "" >> "$nginx_config"
+    echo "    # 默认配置" >> "$nginx_config"
+    echo "    location / {" >> "$nginx_config"
+    echo "        return 404;" >> "$nginx_config"
+    echo "    }" >> "$nginx_config"
+    echo "}" >> "$nginx_config"
+    
+    # 显示生成的配置
+    echo -e "\n${BLUE}生成的 Nginx 配置：${NC}"
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    cat "$nginx_config"
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    
+    read -p "是否保存此配置？(y/N): " save_config
+    if [[ "$save_config" =~ ^[yY]$ ]]; then
+        local output_file="/etc/nginx/conf.d/batch_redirects_$(date +%Y%m%d_%H%M%S).conf"
+        cp "$nginx_config" "$output_file"
+        chmod 644 "$output_file"
+        echo -e "${GREEN}配置已保存到: $output_file${NC}"
+    fi
+    
+    rm -f "$rules_file" "$nginx_config"
+}
+
+# 处理 CSV 文件
+function process_csv_file() {
+    local csv_file="$1"
+    local col_numbers="$2"
+    
+    echo -e "${YELLOW}处理 CSV 文件...${NC}"
+    
+    # 解析列号
+    IFS=',' read -r old_col new_col code_col <<< "$col_numbers"
+    old_col=${old_col:-1}
+    new_col=${new_col:-2}
+    code_col=${code_col:-3}
+    
+    local nginx_config=$(mktemp)
+    local rule_count=0
+    
+    echo "# 从 CSV 文件导入的重定向规则" > "$nginx_config"
+    echo "# 生成时间: $(date)" >> "$nginx_config"
+    echo "" >> "$nginx_config"
+    echo "server {" >> "$nginx_config"
+    echo "    listen 80;" >> "$nginx_config"
+    echo "    listen [::]:80;" >> "$nginx_config"
+    echo "    server_name _;" >> "$nginx_config"
+    echo "" >> "$nginx_config"
+    
+    # 处理 CSV 文件
+    while IFS= read -r line || [ -n "$line" ]; do
+        # 跳过注释和空行
+        [[ "$line" =~ ^# ]] && continue
+        [[ -z "$line" ]] && continue
+        
+        # 解析 CSV 行（简单处理）
+        IFS=',' read -ra fields <<< "$line"
+        
+        local from_url="${fields[$((old_col-1))]}"
+        local to_url="${fields[$((new_col-1))]}"
+        local status_code="${fields[$((code_col-1))]:-301}"
+        
+        # 清理字段
+        from_url=$(echo "$from_url" | tr -d '"' | tr -d "'")
+        to_url=$(echo "$to_url" | tr -d '"' | tr -d "'")
+        
+        if [ -n "$from_url" ] && [ -n "$to_url" ]; then
+            echo "    rewrite ^${from_url}$ ${to_url} $status_code;" >> "$nginx_config"
+            rule_count=$((rule_count+1))
+        fi
+    done < "$csv_file"
+    
+    if [ "$rule_count" -eq 0 ]; then
+        echo -e "${RED}未找到有效的重定向规则${NC}"
+        return
+    fi
+    
+    echo "" >> "$nginx_config"
+    echo "}" >> "$nginx_config"
+    
+    echo -e "\n${GREEN}成功解析了 $rule_count 条规则${NC}"
+    
+    # 显示生成的配置
+    echo -e "\n${BLUE}生成的 Nginx 配置：${NC}"
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    head -50 "$nginx_config"
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    
+    read -p "是否保存此配置？(y/N): " save_config
+    if [[ "$save_config" =~ ^[yY]$ ]]; then
+        local output_file="/etc/nginx/conf.d/csv_redirects_$(date +%Y%m%d_%H%M%S).conf"
+        cp "$nginx_config" "$output_file"
+        chmod 644 "$output_file"
+        echo -e "${GREEN}配置已保存到: $output_file${NC}"
+    fi
+    
+    rm -f "$nginx_config"
+}
+
+# 从 URL 列表生成重定向
+function generate_redirects_from_urls() {
+    local urls="$1"
+    local old_prefix="$2"
+    local new_prefix="$3"
+    
+    local nginx_config=$(mktemp)
+    local rule_count=0
+    
+    echo "# 从 URL 列表生成的重定向规则" > "$nginx_config"
+    echo "# 生成时间: $(date)" >> "$nginx_config"
+    echo "# 旧前缀: $old_prefix" >> "$nginx_config"
+    echo "# 新前缀: $new_prefix" >> "$nginx_config"
+    echo "" >> "$nginx_config"
+    
+    # 为每个 URL 生成规则
+    echo "$urls" | while IFS= read -r url; do
+        if [ -n "$url" ]; then
+            local new_url="${url/$old_prefix/$new_prefix}"
+            
+            if [ "$url" != "$new_url" ]; then
+                echo "# $url" >> "$nginx_config"
+                echo "rewrite ^${url}$ ${new_url} permanent;" >> "$nginx_config"
+                rule_count=$((rule_count+1))
+            fi
+        fi
+    done
+    
+    echo -e "${GREEN}成功生成了 $rule_count 条规则${NC}"
+    
+    # 显示生成的配置
+    if [ "$rule_count" -gt 0 ]; then
+        echo -e "\n${BLUE}生成的 Nginx 配置：${NC}"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        head -50 "$nginx_config"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        
+        read -p "是否保存此配置？(y/N): " save_config
+        if [[ "$save_config" =~ ^[yY]$ ]]; then
+            local output_file="/etc/nginx/conf.d/url_redirects_$(date +%Y%m%d_%H%M%S).conf"
+            cp "$nginx_config" "$output_file"
+            chmod 644 "$output_file"
+            echo -e "${GREEN}配置已保存到: $output_file${NC}"
+        fi
+    else
+        echo -e "${YELLOW}未生成任何规则${NC}"
+    fi
+    
+    rm -f "$nginx_config"
+}
+
+# 从日志生成重定向规则
+function generate_redirects_from_logs() {
+    local not_found_urls="$1"
+    
+    echo -e "\n${YELLOW}基于日志生成重定向规则...${NC}"
+    
+    local nginx_config=$(mktemp)
+    local rule_count=0
+    
+    echo "# 从 404 日志生成的重定向规则" > "$nginx_config"
+    echo "# 生成时间: $(date)" >> "$nginx_config"
+    echo "" >> "$nginx_config"
+    
+    echo "$not_found_urls" | while IFS= read -r line; do
+        local count=$(echo "$line" | awk '{print $1}')
+        local url=$(echo "$line" | awk '{print $2}')
+        
+        if [ "$count" -gt 5 ]; then  # 只处理频繁出现的 404
+            # 尝试猜测正确的 URL
+            local suggested_url=$(suggest_correct_url "$url")
+            
+            if [ -n "$suggested_url" ]; then
+                echo "# 404 次数: $count" >> "$nginx_config"
+                echo "rewrite ^${url}$ ${suggested_url} permanent;" >> "$nginx_config"
+                rule_count=$((rule_count+1))
+            fi
+        fi
+    done
+    
+    if [ "$rule_count" -gt 0 ]; then
+        echo -e "${GREEN}成功生成了 $rule_count 条规则${NC}"
+        
+        # 显示配置
+        echo -e "\n${BLUE}生成的配置：${NC}"
+        cat "$nginx_config"
+        
+        read -p "是否保存此配置？(y/N): " save_config
+        if [[ "$save_config" =~ ^[yY]$ ]]; then
+            local output_file="/etc/nginx/conf.d/log_redirects_$(date +%Y%m%d_%H%M%S).conf"
+            cp "$nginx_config" "$output_file"
+            chmod 644 "$output_file"
+            echo -e "${GREEN}配置已保存到: $output_file${NC}"
+        fi
+    else
+        echo -e "${YELLOW}未生成任何规则${NC}"
+    fi
+    
+    rm -f "$nginx_config"
+}
+
+# 建议正确的 URL（简单实现）
+function suggest_correct_url() {
+    local url="$1"
+    
+    # 移除尾部斜杠
+    url="${url%/}"
+    
+    # 检查可能的正确 URL
+    local suggestions=()
+    
+    # 常见修正
+    suggestions+=("${url}.html")
+    suggestions+=("${url}/index.html")
+    suggestions+=("${url}/index.php")
+    
+    # 如果 URL 包含数字 ID，可能是旧的固定链接
+    if [[ "$url" =~ /[0-9]+$ ]]; then
+        suggestions+=("/post/${url##*/}")
+        suggestions+=("/article/${url##*/}")
+    fi
+    
+    # 返回第一个建议
+    echo "${suggestions[0]}"
 }
