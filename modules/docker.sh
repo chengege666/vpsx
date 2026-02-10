@@ -247,8 +247,27 @@ EOF
     if systemctl is-active --quiet docker; then
         echo -e "${GREEN}修复成功！Docker 服务已正常运行。${NC}"
     else
-        echo -e "${RED}修复失败。Docker 仍无法启动。${NC}"
-        echo -e "${YELLOW}最后尝试: 请检查是否安装了过期的防火墙插件，或尝试重启服务器。${NC}"
+        echo -e "${RED}常规修复失败。Docker 仍无法启动。${NC}"
+        echo -e "${YELLOW}这通常是由于云服务器精简版内核缺失关键组件导致的。${NC}"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e "${GREEN}推荐方案: 安装完整版内核 (linux-image-amd64)${NC}"
+        echo -e "注意: 安装后需要重启服务器才能生效。"
+        read -p "是否立即安装完整版内核并准备重启? (y/N): " install_kernel
+        if [[ "$install_kernel" =~ ^[Yy]$ ]]; then
+            echo -e "${BLUE}正在更新软件包列表...${NC}"
+            apt update
+            echo -e "${BLUE}正在安装 linux-image-amd64...${NC}"
+            if apt install linux-image-amd64 -y; then
+                echo -e "${GREEN}内核安装成功！${NC}"
+                echo -e "${YELLOW}系统将在 5 秒后重启以应用新内核...${NC}"
+                sleep 5
+                reboot
+            else
+                echo -e "${RED}内核安装失败，请检查网络或软件源设置。${NC}"
+            fi
+        else
+            echo -e "${YELLOW}已取消内核安装。建议手动检查防火墙插件或重启。${NC}"
+        fi
     fi
     echo -e "${CYAN}=========================================${NC}"
     read -p "按任意键继续..."
