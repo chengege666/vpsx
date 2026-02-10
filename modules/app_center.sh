@@ -28,7 +28,8 @@ function app_center_menu() {
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-20): " app_choice
+        read -p "请输入你的选择 (0-16): " app_choice
+
         case "$app_choice" in
             1) one_panel_management ;;
             2) nezha_probe_management ;;
@@ -45,7 +46,7 @@ function app_center_menu() {
             13) moontv_management ;;
             14) libretv_management ;;
             15) frp_management ;;
-            16) nginx_redirect_manager ;;
+            16) nginx_redirect_management ;;
             0) break ;; 
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -5732,11 +5733,8 @@ function nginx_redirect_manager() {
         echo -e " ${RED}0.${NC} 返回应用中心菜单"
         echo -e "${CYAN}=========================================${NC}"
         read -p "请输入你的选择 (0-20): " redirect_choice
+
         case "$redirect_choice" in
-            16)
-                echo "DEBUG: 正在调用 install_update_nginx..."
-                install_update_nginx
-                ;;
             1) nginx_http_to_https ;;
             2) nginx_www_redirect ;;
             3) nginx_301_redirect ;;
@@ -5752,6 +5750,7 @@ function nginx_redirect_manager() {
             13) restore_nginx_config ;;
             14) test_redirect_rules ;;
             15) batch_redirect_generator ;;
+            16) install_update_nginx ;;
             17) view_nginx_logs ;;
             18) verify_nginx_config ;;
             19) reload_nginx ;;
