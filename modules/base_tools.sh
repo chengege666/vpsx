@@ -7,7 +7,7 @@ function basic_tools_menu() {
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}            基础工具菜单${NC}"
         echo -e "${CYAN}=========================================${NC}"
-        echo -e " ${GREEN}1.${NC} 安装 htop"
+        echo -e " ${GREEN}1.${NC} 安装 htop（需要先安装sudo）"
         echo -e " ${GREEN}2.${NC} 安装 wget"
         echo -e " ${GREEN}3.${NC} 安装 curl"
         echo -e " ${GREEN}4.${NC} 安装 git"
