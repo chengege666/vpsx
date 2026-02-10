@@ -15,52 +15,60 @@ else
     NC='\033[0m'
 fi
 
-# 检查 Docker 安装状态并显示版本
+# 检查 Docker 安装状态并显示版本与诊断
 function check_docker_status() {
-    echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}         检查 Docker 安装状态${NC}"
-    echo -e "${CYAN}=========================================${NC}"
-
     local docker_command_found=false
     local docker_service_active=false
     local docker_version=""
     local docker_is_functional=false
 
-    # 1. 检查 'docker' 命令是否存在且可执行
+    # 1. 检查 'docker' 命令是否存在
     if command -v docker >/dev/null 2>&1; then
         docker_command_found=true
-        # 2. 尝试获取 Docker 版本以确认其功能正常
         docker_version=$(docker --version 2>/dev/null | awk '{print $3}' | sed 's/,//')
         if [ -n "$docker_version" ]; then
             docker_is_functional=true
         fi
     fi
 
-    # 3. 检查 Docker 服务状态
+    # 2. 检查 Docker 服务状态
     if command -v systemctl >/dev/null 2>&1; then
         if systemctl is-active --quiet docker >/dev/null 2>&1; then
             docker_service_active=true
         fi
     else
-        # 对于没有 systemctl 的系统，尝试检查 dockerd 进程是否存在
         if pgrep dockerd >/dev/null 2>&1; then
             docker_service_active=true
         fi
     fi
 
+    echo -e "${CYAN}================================================${NC}"
+    echo -e "               ${GREEN}Docker 运行状态诊断${NC}"
+    echo -e "${CYAN}================================================${NC}"
+
     if $docker_is_functional && $docker_service_active; then
-        echo -e " Docker ${GREEN}已安装并运行${NC}。版本信息: ${docker_version}"
+        echo -e " ● Docker 服务: [ ${GREEN}运行中${NC} ] (v${docker_version})"
+        # 显示简单的统计
+        local running_count=$(docker ps -q 2>/dev/null | wc -l)
+        local image_count=$(docker images -q 2>/dev/null | wc -l)
+        echo -e " ● 资源概况: ${BLUE}${running_count}${NC} 容器正在运行 | ${BLUE}${image_count}${NC} 本地镜像"
     elif $docker_is_functional && ! $docker_service_active; then
-        echo -e " Docker ${YELLOW}已安装但未运行${NC}。版本信息: ${docker_version}"
-        echo -e "${YELLOW}请尝试启动 Docker 服务: systemctl start docker${NC}"
+        echo -e " ● Docker 服务: [ ${YELLOW}已安装但未运行${NC} ]"
+        echo -e " ● 故障定位: 服务未启动，建议执行 [ ${CYAN}systemctl start docker${NC} ]"
     else
-        echo -e " Docker ${RED}未安装或安装异常${NC}。"
+        echo -e " ● Docker 服务: [ ${RED}未安装或环境异常${NC} ]"
         if $docker_command_found && ! $docker_is_functional; then
-            echo -e "${YELLOW}提示: 'docker' 命令存在，但无法获取版本信息，可能安装不完整或已损坏。${NC}"
+            echo -e " ● 故障定位: ${YELLOW}iptables 冲突或内核模块缺失${NC}"
+            echo -e " ● 建议操作: 尝试执行菜单中的 [ ${YELLOW}10. Docker 启动故障修复${NC} ]"
         fi
     fi
-    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${CYAN}================================================${NC}"
 }
+
+
+
+# --- 核心逻辑开始 ---
+
 
 # 安装/更新 Docker 环境 (包含 Docker Compose)
 function install_update_docker_env() {
@@ -261,759 +269,427 @@ function docker_container_management() {
         read -p "按任意键继续..."
         return
     fi
-    while true;
-    do
+    while true; do
         clear
-        list_docker_containers
-        echo -e "${CYAN}=========================================${NC}"
-        echo -e "${GREEN}          Docker 容器管理${NC}"
-        echo -e "${CYAN}=========================================${NC}"
-        echo -e " ${GREEN}1.${NC} 创建新的容器"
-        echo -e " ${GREEN}2.${NC} 启动指定容器"
-        echo -e " ${GREEN}3.${NC} 停止指定容器"
-        echo -e " ${GREEN}4.${NC} 删除指定容器"
-        echo -e " ${GREEN}5.${NC} 重启指定容器"
-        echo -e " ${GREEN}6.${NC} 启动所有容器"
-        echo -e " ${GREEN}7.${NC} 停止所有容器"
-        echo -e " ${GREEN}8.${NC} 删除所有容器"
-        echo -e " ${GREEN}9.${NC} 重启所有容器"
-        echo -e "${CYAN}-----------------------------------------${NC}"
-        echo -e " ${GREEN}11.${NC} 进入指定容器        ${GREEN}12.${NC} 查看容器日志"
-        echo -e " ${GREEN}13.${NC} 查看容器网络        ${GREEN}14.${NC} 查看容器占用"
-        echo -e " ${GREEN}15.${NC} 开启容器端口访问    ${GREEN}16.${NC} 关闭容器端口访问"
-        echo -e "${CYAN}-----------------------------------------${NC}"
-        echo -e " ${RED}0.${NC} 返回上一级选单"
-        echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择: " choice
+        echo -e "${CYAN}================================================${NC}"
+        echo -e "               ${GREEN}Docker 容器管理${NC}"
+        echo -e "${CYAN}================================================${NC}"
+        
+        # 获取容器列表并存入数组
+        local containers=()
+        local i=1
+        
+        # 格式化输出容器列表
+        printf "${YELLOW}%-5s %-12s %-20s %-15s %-20s${NC}\n" "序号" "容器ID" "名称" "状态" "端口映射"
+        echo -e "${CYAN}------------------------------------------------${NC}"
+        
+        while read -r line; do
+            if [ -n "$line" ]; then
+                containers+=("$line")
+                local id=$(echo "$line" | awk '{print $1}')
+                local name=$(echo "$line" | awk '{print $2}')
+                local status=$(echo "$line" | awk '{print $3}')
+                local ports=$(echo "$line" | awk -F'|' '{print $2}')
+                
+                local status_color="${NC}"
+                [[ "$status" == "Up" ]] && status_color="${GREEN}" || status_color="${RED}"
+                
+                printf "[%2d]  %-12s %-20s ${status_color}%-15s${NC} %-20s\n" "$i" "$id" "$name" "$status" "$ports"
+                ((i++))
+            fi
+        done < <(docker ps -a --format "{{.ID}} {{.Names}} {{.Status}} |{{.Ports}}" | sed 's/About //g; s/ago//g')
 
+        if [ ${#containers[@]} -eq 0 ]; then
+            echo -e "${YELLOW}当前没有容器${NC}"
+        fi
 
-        case $choice in
-            1) create_new_container ;;
-            2) start_specified_container ;;
-            3) stop_specified_container ;;
-            4) remove_specified_container ;;
-            5) restart_specified_container ;;
-            6) start_all_containers ;;
-            7) stop_all_containers ;;
-            8) remove_all_containers ;;
-            9) restart_all_containers ;;
-            11) enter_specified_container ;;
-            12) view_container_logs ;;
-            13) view_container_network ;;
-            14) view_container_usage ;;
-            15) enable_container_port_access ;;
-            16) disable_container_port_access ;;
-            0) break ;;
-            *) echo "无效的选择，请重新输入！" ; read -p "按任意键继续..." ;;
+        echo -e "${CYAN}------------------------------------------------${NC}"
+        echo -e " ${GREEN}1.${NC} 启动    ${GREEN}2.${NC} 停止    ${GREEN}3.${NC} 重启    ${GREEN}4.${NC} 删除"
+        echo -e " ${GREEN}5.${NC} 日志    ${GREEN}6.${NC} 终端    ${GREEN}7.${NC} 详情    ${GREEN}8.${NC} 创建"
+        echo -e " ${GREEN}9.${NC} 批量操作 (启动/停止/删除)"
+        echo -e " ${RED}0.${NC} 返回"
+        echo -e "${CYAN}================================================${NC}"
+        read -p "请选择操作 [1-9]: " op_choice
+        [[ "$op_choice" == "0" ]] && break
+        [[ "$op_choice" == "8" ]] && { create_new_container; continue; }
+
+        if [ ${#containers[@]} -eq 0 ] && [[ "$op_choice" =~ ^[12345679]$ ]]; then
+            echo -e "${RED}没有可操作的容器！${NC}"; sleep 1; continue
+        fi
+
+        if [[ "$op_choice" == "9" ]]; then
+            read -p "请输入操作 (start/stop/rm): " batch_op
+            read -p "请输入序号 (如 1 2 3 或 all): " idx_list
+            local target_ids=""
+            if [[ "$idx_list" == "all" ]]; then
+                target_ids=$(docker ps -aq)
+            else
+                for idx in $idx_list; do
+                    local real_idx=$((idx-1))
+                    if [ -n "${containers[$real_idx]}" ]; then
+                        target_ids+="$(echo "${containers[$real_idx]}" | awk '{print $1}') "
+                    fi
+                done
+            fi
+            if [ -n "$target_ids" ]; then
+                echo -e "${BLUE}正在执行批量操作 $batch_op...${NC}"
+                docker $batch_op $target_ids
+                echo -e "${GREEN}操作完成！${NC}"; sleep 1
+            fi
+            continue
+        fi
+
+        read -p "请输入容器序号: " container_idx
+        local real_idx=$((container_idx-1))
+        if [ -z "${containers[$real_idx]}" ]; then
+            echo -e "${RED}无效的序号！${NC}"; sleep 1; continue
+        fi
+        
+        local target_id=$(echo "${containers[$real_idx]}" | awk '{print $1}')
+        local target_name=$(echo "${containers[$real_idx]}" | awk '{print $2}')
+
+        case $op_choice in
+            1) docker start "$target_id" && echo -e "${GREEN}$target_name 已启动${NC}" ;;
+            2) docker stop "$target_id" && echo -e "${GREEN}$target_name 已停止${NC}" ;;
+            3) docker restart "$target_id" && echo -e "${GREEN}$target_name 已重启${NC}" ;;
+            4) 
+                read -p "确定要删除容器 $target_name 吗? (y/N): " confirm
+                [[ "$confirm" =~ ^[Yy]$ ]] && docker rm -f "$target_id" && echo -e "${GREEN}$target_name 已删除${NC}"
+                ;;
+            5) docker logs --tail 100 -f "$target_id" ;;
+            6) docker exec -it "$target_id" /bin/bash || docker exec -it "$target_id" /bin/sh || docker exec -it "$target_id" sh ;;
+            7) docker inspect "$target_id" | less ;;
+            *) echo -e "${RED}无效操作！${NC}" ;;
         esac
+        [[ "$op_choice" != "5" && "$op_choice" != "6" && "$op_choice" != "7" ]] && sleep 1
     done
 }
 
-function list_docker_containers() {
-    clear
-    echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}        列出所有 Docker 容器${NC}"
-    echo -e "${CYAN}=========================================${NC}"
-    # 格式化输出：指定字段并设置固定宽度，实现整齐对齐
-    if ! command -v docker &> /dev/null; then
-        return
-    fi
-    docker ps -a --format "ID: {{.ID}} | 名称: {{.Names}} | 镜像: {{.Image}} | 状态: {{.Status}} | 端口: {{.Ports}} | 创建时间: {{.CreatedAt}}" | 
-    awk -F '|' -v green="${GREEN}" -v nc="${NC}" '{
-        # 调整各字段对齐（根据实际需求修改数字调整宽度）
-        printf "%s%-12s%s | %-20s | %-25s | %-20s | %-30s | %-25s\n", 
-        green, $1, nc, $2, $3, $4, $5, $6
-    }'
-    echo -e "${CYAN}=========================================${NC}"
-}
-
-
+# 创建新容器
 function create_new_container() {
     clear
-    echo "========================================="
-    echo "        创建 Docker 容器"
-    echo "========================================="
-    read -p "请输入要使用的镜像名称 (例如: ubuntu:latest): " image_name
-    if [ -z "$image_name" ]; then
-        echo "镜像名称不能为空。"
-        echo "========================================="
-        read -p "按任意键继续..."
-        return
+    echo -e "${CYAN}================================================${NC}"
+    echo -e "               ${GREEN}创建新容器${NC}"
+    echo -e "${CYAN}================================================${NC}"
+    
+    read -p "请输入容器名称: " name
+    read -p "请输入镜像名称 (如 nginx:latest): " image
+    read -p "请输入端口映射 (如 8080:80, 留空跳过): " ports
+    read -p "请输入挂载卷 (如 /host/path:/container/path, 留空跳过): " volumes
+    read -p "请输入环境变量 (如 KEY=VALUE, 多个用空格, 留空跳过): " envs
+    read -p "是否后台运行? (Y/n): " detach
+    
+    local cmd="docker run"
+    [[ ! "$detach" =~ ^[Nn]$ ]] && cmd+=" -d"
+    [[ -n "$name" ]] && cmd+=" --name $name"
+    [[ -n "$ports" ]] && cmd+=" -p $ports"
+    [[ -n "$volumes" ]] && cmd+=" -v $volumes"
+    if [[ -n "$envs" ]]; then
+        for e in $envs; do
+            cmd+=" -e $e"
+        done
     fi
-
-    read -p "请输入容器名称 (可选): " container_name
-    read -p "请输入端口映射 (例如: 80:80, 可选): " port_mapping
-    read -p "请输入数据卷映射 (例如: /host/path:/container/path, 可选): " volume_mapping
-    read -p "请输入网络名称 (可选): " network_name
-
-    run_command="docker run -d"
-
-    if [ -n "$container_name" ]; then
-        run_command="$run_command --name $container_name"
-    fi
-
-    if [ -n "$port_mapping" ]; then
-        run_command="$run_command -p $port_mapping"
-    fi
-
-    if [ -n "$volume_mapping" ]; then
-        run_command="$run_command -v $volume_mapping"
-    fi
-
-    if [ -n "$network_name" ]; then
-        run_command="$run_command --network $network_name"
-    fi
-
-    run_command="$run_command $image_name"
-
-    echo "正在执行命令: $run_command"
-    eval $run_command
-
+    cmd+=" $image"
+    
+    echo -e "${BLUE}执行命令: $cmd${NC}"
+    eval $cmd
+    
     if [ $? -eq 0 ]; then
-        echo "容器已成功创建。"
+        echo -e "${GREEN}容器创建成功！${NC}"
     else
-        echo "创建容器失败。"
+        echo -e "${RED}容器创建失败！${NC}"
     fi
-    echo "========================================="
-    read -p "按任意键继续..."
-}
-
-function start_specified_container() {
-    clear
-    echo "========================================="
-    echo "        启动 Docker 容器"
-    echo "========================================="
-    docker ps -a
-    echo "-----------------------------------------"
-    read -p "请输入要启动的容器名称或ID: " container_id
-    if [ -z "$container_id" ]; then
-        echo "容器名称或ID不能为空。"
-    else
-        docker start "$container_id"
-        if [ $? -eq 0 ]; then
-            echo "容器 '$container_id' 已成功启动。"
-        else
-            echo "启动容器 '$container_id' 失败。"
-        fi
-    fi
-    echo "========================================="
-    read -p "按任意键继续..."
-}
-
-function stop_specified_container() {
-    clear
-    echo "========================================="
-    echo "        停止 Docker 容器"
-    echo "========================================="
-    docker ps -a
-    echo "-----------------------------------------"
-    read -p "请输入要停止的容器名称或ID: " container_id
-    if [ -z "$container_id" ]; then
-        echo "容器名称或ID不能为空。"
-    else
-        docker stop "$container_id"
-        if [ $? -eq 0 ]; then
-            echo "容器 '$container_id' 已成功停止。"
-        else
-            echo "停止容器 '$container_id' 失败。"
-        fi
-    fi
-    echo "========================================="
-    read -p "按任意键继续..."
-}
-
-function restart_specified_container() {
-    clear
-    echo "========================================="
-    echo "        重启 Docker 容器"
-    echo "========================================="
-    docker ps -a
-    echo "-----------------------------------------"
-    read -p "请输入要重启的容器名称或ID: " container_id
-    if [ -z "$container_id" ]; then
-        echo "容器名称或ID不能为空。"
-    else
-        docker restart "$container_id"
-        if [ $? -eq 0 ]; then
-            echo "容器 '$container_id' 已成功重启。"
-        else
-            echo "重启容器 '$container_id' 失败。"
-        fi
-    fi
-    echo "========================================="
-    read -p "按任意键继续..."
-}
-
-function remove_specified_container() {
-    clear
-    echo "========================================="
-    echo "        删除 Docker 容器"
-    echo "========================================="
-    docker ps -a
-    echo "-----------------------------------------"
-    read -p "请输入要删除的容器名称或ID: " container_id
-    if [ -z "$container_id" ]; then
-        echo "容器名称或ID不能为空。"
-    else
-        read -p "确定要删除容器 '$container_id' 吗？(y/N): " confirm_remove
-        if [[ "$confirm_remove" =~ ^[yY]$ ]]; then
-            docker rm "$container_id"
-            if [ $? -eq 0 ]; then
-                echo "容器 '$container_id' 已成功删除。"
-            else
-                echo "删除容器 '$container_id' 失败。"
-            fi
-        else
-            echo "取消删除容器。"
-        fi
-    fi
-    echo "========================================="
-    read -p "按任意键继续..."
-}
-
-function start_all_containers() {
-    clear
-    echo "========================================="
-    echo "        启动所有 Docker 容器"
-    echo "========================================="
-    docker start $(docker ps -a -q)
-    echo "========================================="
-    read -p "按任意键继续..."
-}
-
-function stop_all_containers() {
-    clear
-    echo "========================================="
-    echo "        停止所有 Docker 容器"
-    echo "========================================="
-    docker stop $(docker ps -a -q)
-    echo "========================================="
-    read -p "按任意键继续..."
-}
-
-function remove_all_containers() {
-    clear
-    echo "========================================="
-    echo "        删除所有 Docker 容器"
-    echo "========================================="
-    read -p "确定要删除所有容器吗？(y/N): " confirm_remove_all
-    if [[ "$confirm_remove_all" =~ ^[yY]$ ]]; then
-        docker rm $(docker ps -a -q)
-        echo "所有容器已删除。"
-    else
-        echo "取消删除所有容器。"
-    fi
-    echo "========================================="
-    read -p "按任意键继续..."
-}
-
-function restart_all_containers() {
-    clear
-    echo "========================================="
-    echo "        重启所有 Docker 容器"
-    echo "========================================="
-    docker restart $(docker ps -a -q)
-    echo "========================================="
-    read -p "按任意键继续..."
-}
-
-function enter_specified_container() {
-    clear
-    echo "========================================="
-    echo "        进入指定 Docker 容器"
-    echo "========================================="
-    docker ps -a
-    echo "-----------------------------------------"
-    read -p "请输入要进入的容器名称或 ID: " container_id
-    if [ -z "$container_id" ]; then
-        echo "容器名称或 ID 不能为空。"
-        echo "========================================="
-        read -p "按任意键继续..."
-        return
-    fi
-    docker exec -it "$container_id" /bin/bash || docker exec -it "$container_id" sh
-    echo "========================================="
-    read -p "按任意键继续..."
-}
-
-function view_container_logs() {
-    clear
-    echo "========================================="
-    echo "        查看容器日志"
-    echo "========================================="
-    docker ps -a
-    echo "-----------------------------------------"
-    read -p "请输入要查看日志的容器名称或 ID: " container_id
-    if [ -z "$container_id" ]; then
-        echo "容器名称或 ID 不能为空。"
-        echo "========================================="
-        read -p "按任意键继续..."
-        return
-    fi
-    docker logs "$container_id"
-    echo "========================================="
-    read -p "按任意键继续..."
-}
-
-function view_container_network() {
-    clear
-    echo "========================================="
-    echo "        查看容器网络"
-    echo "========================================="
-    docker ps -a
-    echo "-----------------------------------------"
-    read -p "请输入要查看网络的容器名称或 ID: " container_id
-    if [ -z "$container_id" ]; then
-        echo "容器名称或 ID 不能为空。"
-        echo "========================================="
-        read -p "按任意键继续..."
-        return
-    fi
-    docker inspect --format='{{json .NetworkSettings.Networks}}' "$container_id" | jq .
-    echo "========================================="
-    read -p "按任意键继续..."
-}
-
-function view_container_usage() {
-    clear
-    echo "========================================="
-    echo "        查看容器占用"
-    echo "========================================="
-    docker ps -a
-    echo "-----------------------------------------"
-    read -p "请输入要查看占用的容器名称或 ID: " container_id
-    if [ -z "$container_id" ]; then
-        echo "容器名称或 ID 不能为空。"
-        echo "========================================="
-        read -p "按任意键继续..."
-        return
-    fi
-    docker stats --no-stream "$container_id"
-    echo "========================================="
-    read -p "按任意键继续..."
-}
-
-function enable_container_port_access() {
-    clear
-    echo "========================================="
-    echo "        开启容器端口访问"
-    echo "========================================="
-    docker ps -a
-    echo "-----------------------------------------"
-    read -p "请输入容器名称或 ID: " container_id
-    if [ -z "$container_id" ]; then
-        echo "容器名称或 ID 不能为空。"
-        echo "========================================="
-        read -p "按任意键继续..."
-        return
-    fi
-    read -p "请输入要开启的端口 (例如: 80): " port
-    if [ -z "$port" ]; then
-        echo "端口不能为空。"
-        echo "========================================="
-        read -p "按任意键继续..."
-        return
-    fi
-    # This operation usually requires recreating the container with port mapping.
-    # For simplicity, we'll just inform the user.
-    echo "开启容器端口访问通常需要重新创建容器并进行端口映射。"
-    echo "请考虑使用 '创建新的容器' 选项并设置端口映射。"
-    echo "========================================="
-    read -p "按任意键继续..."
-}
-
-function disable_container_port_access() {
-    clear
-    echo "========================================="
-    echo "        关闭容器端口访问"
-    echo "========================================="
-    docker ps -a
-    echo "-----------------------------------------"
-    read -p "请输入容器名称或 ID: " container_id
-    if [ -z "$container_id" ]; then
-        echo "容器名称或 ID 不能为空。"
-        echo "========================================="
-        read -p "按任意键继续..."
-        return
-    fi
-    read -p "请输入要关闭的端口 (例如: 80): " port
-    if [ -z "$port" ]; then
-        echo "端口不能为空。"
-        echo "========================================="
-        read -p "按任意键继续..."
-        return
-    fi
-    # This operation usually requires recreating the container without port mapping.
-    # For simplicity, we'll just inform the user.
-    echo "关闭容器端口访问通常需要重新创建容器并移除端口映射。"
-    echo "请考虑使用 '创建新的容器' 选项并移除端口映射。"
-    echo "========================================="
     read -p "按任意键继续..."
 }
 
 function docker_image_management() {
-    while true;
-    do
-        clear
-        list_docker_images
-        echo "========================================="
-        echo "        Docker 镜像管理"
-        echo "========================================="
-        echo "1. 列出镜像"
-        echo "2. 拉取镜像"
-        echo "3. 删除镜像"
-        echo "4. 清理悬空镜像"
-        echo "5. 清空所有镜像"
-        echo "0. 返回主菜单"
-        echo "========================================="
-        read -p "请选择操作: " choice
-
-        case $choice in
-            1) list_docker_images ;;
-            2) pull_docker_image ;;
-            3) remove_docker_image ;;
-            4) clean_dangling_images ;;
-            5) remove_all_images ;;
-            0) break ;;
-            *) echo "无效选择，请重新输入。" ; read -p "按任意键继续..." ;;
-        esac
-    done
-}
-
-function list_docker_images() {
-    clear
-    echo "========================================="
-    echo "        列出所有 Docker 镜像"
-    echo "========================================="
-    docker images -a
-    echo "========================================="
-}
-
-function pull_docker_image() {
-    clear
-    echo "========================================="
-    echo "        拉取 Docker 镜像"
-    echo "========================================="
-    read -p "请输入要拉取的镜像名称 (例如: ubuntu:latest): " image_name
-    if [ -z "$image_name" ]; then
-        echo "镜像名称不能为空。"
-    else
-        echo "正在拉取镜像 '$image_name' ..."
-        docker pull "$image_name"
-        if [ $? -eq 0 ]; then
-            echo "镜像 '$image_name' 已成功拉取。"
-        else
-            echo "拉取镜像 '$image_name' 失败。"
-        fi
+    if ! command -v docker &> /dev/null; then
+        echo -e "${RED}错误: 未检测到 Docker，请先安装 Docker。${NC}"
+        read -p "按任意键继续..."
+        return
     fi
-    echo "========================================="
-    read -p "按任意键继续..."
-}
-
-function remove_docker_image() {
-    clear
-    echo "========================================="
-    echo "        删除 Docker 镜像"
-    echo "========================================="
-    docker images -a
-    echo "-----------------------------------------"
-    read -p "请输入要删除的镜像名称或ID: " image_id
-    if [ -z "$image_id" ]; then
-        echo "镜像名称或ID不能为空。"
-    else
-        read -p "确定要删除镜像 '$image_id' 吗？(y/N): " confirm_remove
-        if [[ "$confirm_remove" =~ ^[Yy]$ ]]; then
-            docker rmi "$image_id"
-            if [ $? -eq 0 ]; then
-                echo "镜像 '$image_id' 已成功删除。"
-            else
-                echo "删除镜像 '$image_id' 失败。"
-            fi
-        else
-            echo "已取消删除操作。"
-        fi
-    fi
-    echo "========================================="
-    read -p "按任意键继续..."
-}
-
-function clean_dangling_images() {
-    clear
-    echo "========================================="
-    echo "        清理悬空 Docker 镜像"
-    echo "========================================="
-    echo "正在清理悬空镜像..."
-    docker image prune -f
-    if [ $? -eq 0 ]; then
-        echo "悬空镜像已成功清理。"
-    else
-        echo "清理悬空镜像失败。"
-    fi
-    echo "========================================="
-    read -p "按任意键继续..."
-}
-
-function remove_all_images() {
-    clear
-    echo "========================================="
-    echo "        清空所有 Docker 镜像"
-    echo "========================================="
-    docker images -a
-    echo "-----------------------------------------"
-    read -p "确定要删除本地所有镜像吗？该操作不可撤销！(y/N): " confirm_remove
-    if [[ "$confirm_remove" =~ ^[Yy]$ ]]; then
-        local image_ids=$(docker images -q)
-        if [ -z "$image_ids" ]; then
-            echo "本地没有可删除的镜像。"
-        else
-            echo "正在清空所有镜像..."
-            docker rmi $image_ids 2>/dev/null
-            if [ $? -eq 0 ]; then
-                echo "所有镜像已成功清空。"
-            else
-                echo "部分镜像清空失败，可能是有容器正在使用这些镜像。"
-                echo "请先停止并删除相关容器后再尝试。"
-            fi
-        fi
-    else
-        echo "已取消清空操作。"
-    fi
-    echo "========================================="
-    read -p "按任意键继续..."
-}
-
-function docker_network_management() {
     while true; do
         clear
-        list_docker_networks
-        echo "========================================="
-        echo "        Docker 网络管理"
-        echo "========================================="
-        echo "2. 创建网络"
-        echo "3. 删除网络"
-        echo "4. 检查网络"
-        echo "0. 返回主菜单"
-        echo "========================================="
-        read -p "请选择操作: " choice
-        case $choice in
-            1) list_docker_networks ;;
-            2) create_docker_network ;;
-            3) remove_docker_network ;;
-            4) inspect_docker_network ;;
-            0) break ;;
-            *) echo "无效的选项，请重新输入。" ; read -p "按任意键继续..." ;;
+        echo -e "${CYAN}================================================${NC}"
+        echo -e "               ${GREEN}Docker 镜像管理${NC}"
+        echo -e "${CYAN}================================================${NC}"
+        
+        # 获取镜像列表
+        local images=()
+        local i=1
+        
+        printf "${YELLOW}%-5s %-30s %-15s %-10s${NC}\n" "序号" "镜像仓库:标签" "镜像ID" "占用大小"
+        echo -e "${CYAN}------------------------------------------------${NC}"
+        
+        while read -r line; do
+            if [ -n "$line" ]; then
+                images+=("$line")
+                local repo=$(echo "$line" | awk '{print $1}')
+                local tag=$(echo "$line" | awk '{print $2}')
+                local id=$(echo "$line" | awk '{print $3}')
+                local size=$(echo "$line" | awk '{print $4}')
+                
+                printf "[%2d]  %-30s %-15s %-10s\n" "$i" "$repo:$tag" "$id" "$size"
+                ((i++))
+            fi
+        done < <(docker images --format "{{.Repository}} {{.Tag}} {{.ID}} {{.Size}}")
+
+        if [ ${#images[@]} -eq 0 ]; then
+            echo -e "${YELLOW}当前没有本地镜像${NC}"
+        fi
+
+        echo -e "${CYAN}------------------------------------------------${NC}"
+        echo -e " ${GREEN}1.${NC} 拉取镜像  ${GREEN}2.${NC} 删除镜像  ${GREEN}3.${NC} 清理悬空  ${GREEN}4.${NC} 清空所有"
+        echo -e " ${RED}0.${NC} 返回"
+        echo -e "${CYAN}================================================${NC}"
+        read -p "请选择操作 [0-4]: " img_choice
+        [[ "$img_choice" == "0" ]] && break
+
+        case $img_choice in
+            1)
+                read -p "请输入镜像名称 (如 nginx:latest): " img_name
+                if [ -n "$img_name" ]; then
+                    echo -e "${BLUE}正在拉取镜像 $img_name...${NC}"
+                    docker pull "$img_name"
+                fi
+                ;;
+            2)
+                if [ ${#images[@]} -eq 0 ]; then
+                    echo -e "${RED}没有可删除的镜像！${NC}"; sleep 1; continue
+                fi
+                read -p "请输入要删除的镜像序号 (支持多个, 如 1 2): " idx_list
+                for idx in $idx_list; do
+                    local real_idx=$((idx-1))
+                    if [ -n "${images[$real_idx]}" ]; then
+                        local target_id=$(echo "${images[$real_idx]}" | awk '{print $3}')
+                        docker rmi -f "$target_id" && echo -e "${GREEN}序号 $idx 已删除${NC}"
+                    fi
+                done
+                ;;
+            3)
+                echo -e "${BLUE}正在清理悬空镜像...${NC}"
+                docker image prune -f
+                ;;
+            4)
+                read -p "确定要清空所有镜像吗？(y/N): " confirm
+                if [[ "$confirm" =~ ^[Yy]$ ]]; then
+                    echo -e "${BLUE}正在清空所有镜像...${NC}"
+                    docker rmi $(docker images -q) -f
+                fi
+                ;;
+            *) echo -e "${RED}无效操作！${NC}" ;;
         esac
+        sleep 1
     done
 }
 
-function list_docker_networks() {
-    clear
-    echo "========================================="
-    echo "        列出所有 Docker 网络"
-    echo "========================================="
-    docker network ls
-    echo "========================================="
-}
 
-function create_docker_network() {
-    clear
-    echo "========================================="
-    echo "        创建 Docker 网络"
-    echo "========================================="
-    read -p "请输入要创建的网络名称: " network_name
-    if [ -z "$network_name" ]; then
-        echo "网络名称不能为空。"
-    else
-        read -p "请输入网络驱动 (例如: bridge, overlay, macvlan, 默认为 bridge): " network_driver
-        if [ -z "$network_driver" ]; then
-            network_driver="bridge"
-        fi
-        echo "正在创建网络 '$network_name' (驱动: '$network_driver') ..."
-        docker network create -d "$network_driver" "$network_name"
-        if [ $? -eq 0 ]; then
-            echo "网络 '$network_name' 已成功创建。"
-        else
-            echo "创建网络 '$network_name' 失败。"
-        fi
+
+
+
+
+
+
+
+
+
+
+
+
+
+function docker_network_management() {
+    if ! command -v docker &> /dev/null; then
+        echo -e "${RED}错误: 未检测到 Docker，请先安装 Docker。${NC}"
+        read -p "按任意键继续..."
+        return
     fi
-    echo "========================================="
-    read -p "按任意键继续..."
-}
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${NC}"
+        echo -e "               ${GREEN}Docker 网络管理${NC}"
+        echo -e "${CYAN}================================================${NC}"
 
-function remove_docker_network() {
-    clear
-    echo "========================================="
-    echo "        删除 Docker 网络"
-    echo "========================================="
-    docker network ls
-    echo "-----------------------------------------"
-    read -p "请输入要删除的网络名称或ID: " network_id
-    if [ -z "$network_id" ]; then
-        echo "网络名称或ID不能为空。"
-    else
-        read -p "确定要删除网络 '$network_id' 吗？(y/N): " confirm_remove
-        if [[ "$confirm_remove" =~ ^[Yy]$ ]]; then
-            docker network rm "$network_id"
-            if [ $? -eq 0 ]; then
-                echo "网络 '$network_id' 已成功删除。"
-            else
-                echo "删除网络 '$network_id' 失败。"
+        local networks=()
+        local i=1
+        printf "${YELLOW}%-5s %-25s %-15s %-10s${NC}\n" "序号" "网络名称" "驱动" "范围"
+        echo -e "${CYAN}------------------------------------------------${NC}"
+
+        while read -r line; do
+            if [ -n "$line" ]; then
+                networks+=("$line")
+                local name=$(echo "$line" | awk '{print $1}')
+                local driver=$(echo "$line" | awk '{print $2}')
+                local scope=$(echo "$line" | awk '{print $3}')
+                
+                printf "[%2d]  %-25s %-15s %-10s\n" "$i" "$name" "$driver" "$scope"
+                ((i++))
             fi
-        else
-            echo "已取消删除操作。"
-        fi
-    fi
-    echo "========================================="
-    read -p "按任意键继续..."
-}
+        done < <(docker network ls --format "{{.Name}} {{.Driver}} {{.Scope}}")
 
-function inspect_docker_network() {
-    clear
-    echo "========================================="
-    echo "        检查 Docker 网络"
-    echo "========================================="
-    docker network ls
-    echo "-----------------------------------------"
-    read -p "请输入要检查的网络名称或ID: " network_id
-    if [ -z "$network_id" ]; then
-        echo "网络名称或ID不能为空。"
-    else
-        echo "正在检查网络 '$network_id' ..."
-        docker network inspect "$network_id"
-        if [ $? -eq 0 ]; then
-            echo "网络 '$network_id' 检查完成。"
-        else
-            echo "检查网络 '$network_id' 失败。"
+        if [ ${#networks[@]} -eq 0 ]; then
+            echo -e "${YELLOW}当前没有自定义网络${NC}"
         fi
-    fi
-    echo "========================================="
-    read -p "按任意键继续..."
+
+        echo -e "${CYAN}------------------------------------------------${NC}"
+        echo -e " ${GREEN}1.${NC} 创建网络    ${GREEN}2.${NC} 删除网络    ${GREEN}3.${NC} 查看详情"
+        echo -e " ${GREEN}4.${NC} 批量删除"
+        echo -e " ${RED}0.${NC} 返回"
+        echo -e "${CYAN}================================================${NC}"
+        read -p "请选择操作 [0-4]: " net_choice
+        [[ "$net_choice" == "0" ]] && break
+        
+        case $net_choice in
+            1)
+                read -p "请输入网络名称: " net_name
+                if [ -n "$net_name" ]; then
+                    docker network create "$net_name" && echo -e "${GREEN}网络 $net_name 创建成功${NC}"
+                fi
+                ;;
+            2)
+                read -p "请输入要删除的网络序号: " idx
+                local real_idx=$((idx-1))
+                if [ -n "${networks[$real_idx]}" ]; then
+                    local target_name=$(echo "${networks[$real_idx]}" | awk '{print $1}')
+                    docker network rm "$target_name" && echo -e "${GREEN}网络 $target_name 已删除${NC}"
+                fi
+                ;;
+            3)
+                read -p "请输入序号: " idx
+                local real_idx=$((idx-1))
+                if [ -n "${networks[$real_idx]}" ]; then
+                    local target_name=$(echo "${networks[$real_idx]}" | awk '{print $1}')
+                    docker network inspect "$target_name" | less
+                fi
+                ;;
+            4)
+                read -p "请输入要批量删除的网络序号 (如 1 2 3): " idx_list
+                for idx in $idx_list; do
+                    local real_idx=$((idx-1))
+                    if [ -n "${networks[$real_idx]}" ]; then
+                        local target_name=$(echo "${networks[$real_idx]}" | awk '{print $1}')
+                        docker network rm "$target_name" && echo -e "${GREEN}网络 $target_name 已删除${NC}"
+                    fi
+                done
+                ;;
+            *) echo -e "${RED}无效选择！${NC}" ;;
+        esac
+        [[ "$net_choice" != "3" ]] && sleep 1
+    done
 }
 
 function docker_volume_management() {
+    if ! command -v docker &> /dev/null; then
+        echo -e "${RED}错误: 未检测到 Docker，请先安装 Docker。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
     while true; do
         clear
-        list_docker_volumes
-        echo "========================================="
-        echo "        Docker 数据卷管理"
-        echo "========================================="
-        echo "2. 创建数据卷"
-        echo "3. 删除数据卷"
-        echo "4. 检查数据卷"
-        echo "0. 返回主菜单"
-        echo "========================================="
-        read -p "请选择操作: " choice
-        case $choice in
-            1) list_docker_volumes ;;
-            2) create_docker_volume ;;
-            3) remove_docker_volume ;;
-            4) inspect_docker_volume ;;
-            0) break ;;
-            *) echo "无效的选项，请重新输入。" ; read -p "按任意键继续..." ;;
+        echo -e "${CYAN}================================================${NC}"
+        echo -e "               ${GREEN}Docker 数据卷管理${NC}"
+        echo -e "${CYAN}================================================${NC}"
+
+        local volumes=()
+        local i=1
+        printf "${YELLOW}%-5s %-35s %-15s${NC}\n" "序号" "数据卷名称" "驱动"
+        echo -e "${CYAN}------------------------------------------------${NC}"
+
+        while read -r line; do
+            if [ -n "$line" ]; then
+                volumes+=("$line")
+                local name=$(echo "$line" | awk '{print $1}')
+                local driver=$(echo "$line" | awk '{print $2}')
+                
+                printf "[%2d]  %-35s %-15s\n" "$i" "$name" "$driver"
+                ((i++))
+            fi
+        done < <(docker volume ls --format "{{.Name}} {{.Driver}}")
+
+        if [ ${#volumes[@]} -eq 0 ]; then
+            echo -e "${YELLOW}当前没有数据卷${NC}"
+        fi
+
+        echo -e "${CYAN}------------------------------------------------${NC}"
+        echo -e " ${GREEN}1.${NC} 创建数据卷  ${GREEN}2.${NC} 删除数据卷  ${GREEN}3.${NC} 查看详情"
+        echo -e " ${GREEN}4.${NC} 批量删除"
+        echo -e " ${RED}0.${NC} 返回"
+        echo -e "${CYAN}================================================${NC}"
+        read -p "请选择操作 [0-4]: " vol_choice
+        [[ "$vol_choice" == "0" ]] && break
+        
+        case $vol_choice in
+            1)
+                read -p "请输入数据卷名称: " vol_name
+                if [ -n "$vol_name" ]; then
+                    docker volume create "$vol_name" && echo -e "${GREEN}数据卷 $vol_name 创建成功${NC}"
+                fi
+                ;;
+            2)
+                read -p "请输入要删除的数据卷序号: " idx
+                local real_idx=$((idx-1))
+                if [ -n "${volumes[$real_idx]}" ]; then
+                    local target_name=$(echo "${volumes[$real_idx]}" | awk '{print $1}')
+                    docker volume rm "$target_name" && echo -e "${GREEN}数据卷 $target_name 已删除${NC}"
+                fi
+                ;;
+            3)
+                read -p "请输入序号: " idx
+                local real_idx=$((idx-1))
+                if [ -n "${volumes[$real_idx]}" ]; then
+                    local target_name=$(echo "${volumes[$real_idx]}" | awk '{print $1}')
+                    docker volume inspect "$target_name" | less
+                fi
+                ;;
+            4)
+                read -p "请输入要批量删除的数据卷序号 (如 1 2 3): " idx_list
+                for idx in $idx_list; do
+                    local real_idx=$((idx-1))
+                    if [ -n "${volumes[$real_idx]}" ]; then
+                        local target_name=$(echo "${volumes[$real_idx]}" | awk '{print $1}')
+                        docker volume rm "$target_name" && echo -e "${GREEN}数据卷 $target_name 已删除${NC}"
+                    fi
+                done
+                ;;
+            *) echo -e "${RED}无效选择！${NC}" ;;
         esac
+        [[ "$vol_choice" != "3" ]] && sleep 1
     done
 }
 
-function list_docker_volumes() {
-    clear
-    echo "========================================="
-    echo "        列出所有 Docker 数据卷"
-    echo "========================================="
-    docker volume ls
-    echo "========================================="
-}
 
-function create_docker_volume() {
-    clear
-    echo "========================================="
-    echo "        创建 Docker 数据卷"
-    echo "========================================="
-    read -p "请输入要创建的数据卷名称: " volume_name
-    if [ -z "$volume_name" ]; then
-        echo "数据卷名称不能为空。"
-    else
-        echo "正在创建数据卷 '$volume_name' ..."
-        docker volume create "$volume_name"
-        if [ $? -eq 0 ]; then
-            echo "数据卷 '$volume_name' 已成功创建。"
-        else
-            echo "创建数据卷 '$volume_name' 失败。"
-        fi
-    fi
-    echo "========================================="
-    read -p "按任意键继续..."
-}
-
-function remove_docker_volume() {
-    clear
-    echo "========================================="
-    echo "        删除 Docker 数据卷"
-    echo "========================================="
-    docker volume ls
-    echo "-----------------------------------------"
-    read -p "请输入要删除的数据卷名称或ID: " volume_id
-    if [ -z "$volume_id" ]; then
-        echo "数据卷名称或ID不能为空。"
-    else
-        read -p "确定要删除数据卷 '$volume_id' 吗？(y/N): " confirm_remove
-        if [[ "$confirm_remove" =~ ^[Yy]$ ]]; then
-            docker volume rm "$volume_id"
-            if [ $? -eq 0 ]; then
-                echo "数据卷 '$volume_id' 已成功删除。"
-            else
-                echo "删除数据卷 '$volume_id' 失败。"
-            fi
-        else
-            echo "已取消删除操作。"
-        fi
-    fi
-    echo "========================================="
-    read -p "按任意键继续..."
-}
-
-function inspect_docker_volume() {
-    clear
-    echo "========================================="
-    echo "        检查 Docker 数据卷"
-    echo "========================================="
-    docker volume ls
-    echo "-----------------------------------------"
-    read -p "请输入要检查的数据卷名称或ID: " volume_id
-    if [ -z "$volume_id" ]; then
-        echo "数据卷名称或ID不能为空。"
-    else
-        docker volume inspect "$volume_id"
-        if [ $? -eq 0 ]; then
-            echo "数据卷 '$volume_id' 检查成功。"
-        else
-            echo "检查数据卷 '$volume_id' 失败。"
-        fi
-    fi
-    echo "========================================="
-    read -p "按任意键继续..."
-}
 
 function clean_docker_resources() {
     clear
-    echo "========================================="
-    echo "        清理无用的 Docker 资源"
-    echo "========================================="
-    echo "此操作将删除所有停止的容器、未使用的网络、悬空镜像以及所有未使用的构建缓存。"
-    echo "如果您添加 --volumes 选项，还将删除所有未使用的本地卷。"
+    echo -e "${CYAN}================================================${NC}"
+    echo -e "               ${GREEN}Docker 系统深度清理${NC}"
+    echo -e "${CYAN}================================================${NC}"
+    echo -e "${YELLOW}此操作将永久删除以下资源:${NC}"
+    echo -e " 1. 所有已停止的容器 (Stopped Containers)"
+    echo -e " 2. 所有未使用的网络 (Unused Networks)"
+    echo -e " 3. 所有悬空镜像 (Dangling Images)"
+    echo -e " 4. 所有未使用的构建缓存 (Build Cache)"
+    echo -e " 5. ${RED}所有未使用的本地卷 (Unused Volumes)${NC}"
     echo ""
-    read -p "确定要执行 Docker 系统清理操作吗？(y/N): " confirm_prune
+    echo -e "${BOLD}注意: 正在运行的容器所使用的资源不会被删除。${NC}"
+    echo -e "${CYAN}------------------------------------------------${NC}"
+    read -p "确定要执行深度清理吗？(y/N): " confirm_prune
     if [[ "$confirm_prune" =~ ^[Yy]$ ]]; then
-        echo "正在执行 Docker 系统清理 (docker system prune --volumes)..."
-        docker system prune --volumes -f
+        echo -e "${BLUE}正在执行清理中，请稍候...${NC}"
+        # 使用 docker system prune 并清理 volumes
+        local result=$(docker system prune --volumes -f 2>&1)
         if [ $? -eq 0 ]; then
-            echo "Docker 资源清理完成。"
+            echo -e "${GREEN}Docker 资源清理完成！${NC}"
+            # 提取释放的空间信息
+            local space=$(echo "$result" | grep "Total reclaimed space" | awk -F': ' '{print $2}')
+            [ -n "$space" ] && echo -e "${CYAN}本次清理共释放空间: ${GREEN}$space${NC}"
         else
-            echo "Docker 资源清理失败。"
+            echo -e "${RED}Docker 资源清理过程中出现错误。${NC}"
+            echo -e "${RED}错误详情: $result${NC}"
         fi
     else
-        echo "已取消 Docker 系统清理操作。"
+        echo -e "${YELLOW}已取消清理操作。${NC}"
     fi
-    echo "========================================="
+    echo -e "${CYAN}================================================${NC}"
     read -p "按任意键继续..."
 }
 
@@ -1170,182 +846,223 @@ function disable_docker_ipv6() {
 function backup_migrate_restore_docker() {
     while true; do
         clear
-        echo "========================================="
-        echo "        备份/迁移/还原 Docker 环境"
-        echo "========================================="
-        echo "1. 备份 Docker 环境"
-        echo "2. 迁移 Docker 环境 (待实现)"
-        echo "3. 还原 Docker 环境 (待实现)"
-        echo "0. 返回主菜单"
-        echo "========================================="
-        read -p "请选择操作: " choice
+        echo -e "${CYAN}================================================${NC}"
+        echo -e "         ${GREEN}Docker 备份 / 迁移 / 还原${NC}"
+        echo -e "${CYAN}================================================${NC}"
+        echo -e "  ${GREEN}1.${NC} 备份 Docker 环境 (完整数据包)"
+        echo -e "  ${GREEN}2.${NC} 还原 Docker 环境 (从备份包)"
+        echo -e "  ${GREEN}3.${NC} 迁移 Docker 环境 (待开发)"
+        echo -e "${CYAN}------------------------------------------------${NC}"
+        echo -e "  ${RED}0.${NC} 返回主菜单"
+        echo -e "${CYAN}================================================${NC}"
+        read -p "请选择操作 [0-3]: " choice
 
         case $choice in
             1) backup_docker_env ;;
-            2) echo "迁移功能待实现，按任意键继续..."; read -p "" ;;
-            3) echo "还原功能待实现，按任意键继续..."; read -p "" ;;
+            2) restore_docker_env ;;
+            3) echo -e "${YELLOW}迁移功能目前尚在开发中...${NC}"; sleep 2 ;;
             0) break ;;
-            *) echo "无效的选项，请重新输入。" ; read -p "按任意键继续..." ;;
+            *) echo -e "${RED}无效选择！${NC}"; sleep 1 ;;
         esac
     done
 }
 
 function backup_docker_env() {
     clear
-    echo "========================================="
-    echo "        备份 Docker 环境"
-    echo "========================================="
-    read -p "请输入备份文件名称 (例如: docker_backup_$(date +%Y%m%d).tar.gz): " backup_file
-    if [ -z "$backup_file" ]; then
-        backup_file="docker_backup_$(date +%Y%m%d).tar.gz"
-    fi
+    echo -e "${CYAN}================================================${NC}"
+    echo -e "               ${GREEN}备份 Docker 环境${NC}"
+    echo -e "${CYAN}================================================${NC}"
+    echo -e "${YELLOW}注意: 该操作将备份 /var/lib/docker 目录，可能耗时较长。${NC}"
+    echo -e "${YELLOW}建议先停止所有运行中的容器以保证数据一致性。${NC}"
+    echo -e "${CYAN}------------------------------------------------${NC}"
+    
+    local default_name="docker_backup_$(date +%Y%m%d_%H%M%S).tar.gz"
+    read -p "请输入备份文件名 [默认: $default_name]: " backup_file
+    [ -z "$backup_file" ] && backup_file="$default_name"
 
-    read -p "请输入备份保存路径 (例如: /opt/docker_backups, 默认为当前目录): " backup_path
-    if [ -z "$backup_path" ]; then
-        backup_path="."
-    fi
+    read -p "请输入备份保存路径 [默认: 当前目录]: " backup_path
+    [ -z "$backup_path" ] && backup_path="."
 
     mkdir -p "$backup_path"
-
-    echo "正在备份 Docker 环境到 $backup_path/$backup_file ..."
-    tar -czvf "$backup_path/$backup_file" /var/lib/docker
-
-    if [ $? -eq 0 ]; then
-        echo "Docker 环境备份成功。"
+    
+    echo -e "${BLUE}正在停止 Docker 服务以进行备份...${NC}"
+    systemctl stop docker
+    
+    echo -e "${BLUE}正在打包 Docker 数据，请耐心等待...${NC}"
+    if tar -czvf "$backup_path/$backup_file" /var/lib/docker >/dev/null 2>&1; then
+        echo -e "${GREEN}备份成功！${NC}"
+        echo -e "${CYAN}备份文件已保存至: ${YELLOW}$backup_path/$backup_file${NC}"
+        echo -e "${CYAN}文件大小: ${GREEN}$(du -h "$backup_path/$backup_file" | awk '{print $1}')${NC}"
     else
-        echo "Docker 环境备份失败。"
+        echo -e "${RED}备份失败！请检查磁盘空间或权限。${NC}"
     fi
-    echo "========================================="
+    
+    echo -e "${BLUE}正在重新启动 Docker 服务...${NC}"
+    systemctl start docker
+    
+    echo -e "${CYAN}================================================${NC}"
+    read -p "按任意键继续..."
+}
+
+function restore_docker_env() {
+    clear
+    echo -e "${CYAN}================================================${NC}"
+    echo -e "               ${GREEN}还原 Docker 环境${NC}"
+    echo -e "${CYAN}================================================${NC}"
+    echo -e "${RED}警告: 还原操作将覆盖当前所有 Docker 数据！${NC}"
+    echo -e "${RED}请务必确认您已备份当前数据。${NC}"
+    echo -e "${CYAN}------------------------------------------------${NC}"
+    
+    read -p "请输入备份文件的完整路径: " backup_full_path
+    if [ ! -f "$backup_full_path" ]; then
+        echo -e "${RED}错误: 文件 $backup_full_path 不存在！${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+
+    read -p "确定要开始还原吗？此操作不可逆！(y/N): " confirm_restore
+    if [[ "$confirm_restore" =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}正在停止 Docker 服务...${NC}"
+        systemctl stop docker
+        
+        echo -e "${BLUE}正在清理旧数据...${NC}"
+        rm -rf /var/lib/docker/*
+        
+        echo -e "${BLUE}正在解压备份文件...${NC}"
+        if tar -xzvf "$backup_full_path" -C / >/dev/null 2>&1; then
+            echo -e "${GREEN}还原成功！${NC}"
+        else
+            echo -e "${RED}还原失败！请检查备份文件是否损坏。${NC}"
+        fi
+        
+        echo -e "${BLUE}正在重新启动 Docker 服务...${NC}"
+        systemctl start docker
+    else
+        echo -e "${YELLOW}已取消还原操作。${NC}"
+    fi
+    
+    echo -e "${CYAN}================================================${NC}"
     read -p "按任意键继续..."
 }
 
 function uninstall_docker() {
     clear
-    echo "========================================="
-    echo "        卸载 Docker 环境"
-    echo "========================================="
-    read -p "警告：这将彻底卸载 Docker 及其所有相关组件 (容器、镜像、数据卷)。确定要继续吗？(y/N): " confirm_uninstall
+    echo -e "${CYAN}================================================${NC}"
+    echo -e "               ${RED}${BOLD}卸载 Docker 环境${NC}"
+    echo -e "${CYAN}================================================${NC}"
+    echo -e "${RED}警告: 这将彻底卸载 Docker 及其所有相关组件！${NC}"
+    echo -e "包括: ${YELLOW}所有容器、镜像、网络、数据卷以及配置文件${NC}"
+    echo -e "${CYAN}------------------------------------------------${NC}"
+    read -p "危险操作！确定要继续吗？(y/N): " confirm_uninstall
     if [[ "$confirm_uninstall" =~ ^[Yy]$ ]]; then
-        echo "正在停止所有运行中的 Docker 容器..."
-        docker stop $(docker ps -aq)
+        echo -e "${BLUE}[1/7] 正在停止并删除所有容器...${NC}"
+        docker ps -aq | xargs -r docker stop >/dev/null 2>&1
+        docker ps -aq | xargs -r docker rm >/dev/null 2>&1
 
-        echo "正在删除所有 Docker 容器..."
-        docker rm $(docker ps -aq)
+        echo -e "${BLUE}[2/7] 正在删除所有镜像...${NC}"
+        docker images -aq | xargs -r docker rmi -f >/dev/null 2>&1
 
-        echo "正在删除所有 Docker 镜像..."
-        docker rmi -f $(docker images -aq)
+        echo -e "${BLUE}[3/7] 正在删除所有网络和数据卷...${NC}"
+        docker network ls -q | xargs -r docker network rm >/dev/null 2>&1
+        docker volume ls -q | xargs -r docker volume rm >/dev/null 2>&1
 
-        echo "正在删除所有 Docker 数据卷..."
-        docker volume rm $(docker volume ls -q)
+        echo -e "${BLUE}[4/7] 正在停止并禁用 Docker 服务...${NC}"
+        systemctl stop docker >/dev/null 2>&1
+        systemctl disable docker >/dev/null 2>&1
 
-        echo "正在停止并禁用 Docker 服务..."
-        systemctl stop docker
-        systemctl disable docker
-
-        echo "正在卸载 Docker 软件包..."
+        echo -e "${BLUE}[5/7] 正在卸载 Docker 软件包...${NC}"
         if command -v apt >/dev/null 2>&1; then
-            echo "检测到 Debian/Ubuntu 系统，使用 apt 进行卸载..."
-            apt purge -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-            apt autoremove -y
+            apt purge -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null 2>&1
+            apt autoremove -y >/dev/null 2>&1
         elif command -v yum >/dev/null 2>&1; then
-            echo "检测到 CentOS/RHEL 系统，使用 yum 进行卸载..."
-            yum remove -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-            yum autoremove -y
+            yum remove -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null 2>&1
+            yum autoremove -y >/dev/null 2>&1
         elif command -v dnf >/dev/null 2>&1; then
-            echo "检测到 Fedora/RHEL 8+ 系统，使用 dnf 进行卸载..."
-            dnf remove -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-            dnf autoremove -y
-        else
-            echo "未检测到支持的包管理器 (apt, yum, dnf)。请手动卸载 Docker 软件包。"
+            dnf remove -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null 2>&1
+            dnf autoremove -y >/dev/null 2>&1
         fi
 
-        echo "正在删除 Docker 配置文件和目录..."
+        echo -e "${BLUE}[6/7] 正在清理残留文件和目录...${NC}"
         rm -rf /var/lib/docker
         rm -rf /etc/docker
         rm -rf /var/run/docker.sock
+        rm -rf /usr/local/bin/docker-compose
 
-        echo "Docker 环境已成功卸载。"
+        echo -e "${BLUE}[7/7] 最终检查...${NC}"
+        if ! command -v docker &> /dev/null; then
+            echo -e "${GREEN}Docker 环境已成功彻底卸载！${NC}"
+        else
+            echo -e "${YELLOW}卸载完成，但检测到部分残留，请手动检查。${NC}"
+        fi
     else
-        echo "取消卸载 Docker 环境。"
+        echo -e "${YELLOW}已取消卸载操作。${NC}"
     fi
-    echo "========================================="
+    echo -e "${CYAN}================================================${NC}"
     read -p "按任意键继续..."
+}
+
+function docker_ipv6_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${NC}"
+        echo -e "               ${GREEN}Docker IPv6 访问控制${NC}"
+        echo -e "${CYAN}================================================${NC}"
+        echo -e "  ${GREEN}1.${NC} 开启 Docker IPv6 访问"
+        echo -e "  ${GREEN}2.${NC} 关闭 Docker IPv6 访问"
+        echo -e "  ${CYAN}------------------------------------------------${NC}"
+        echo -e "  ${RED}0.${NC} 返回"
+        echo -e "${CYAN}================================================${NC}"
+        read -p "请选择操作 [0-2]: " ipv6_choice
+        
+        case "$ipv6_choice" in
+            1) enable_docker_ipv6 ;;
+            2) disable_docker_ipv6 ;;
+            0) break ;;
+            *) echo -e "${RED}无效选择！${NC}"; sleep 1 ;;
+        esac
+    done
 }
 
 # Docker 管理菜单
 function docker_menu() {
     while true; do
         clear
+        # 调用状态检查显示顶部简报
         check_docker_status
-        echo -e " ${GREEN}1.${NC}  安装更新Docker环境"
-        echo -e " ${GREEN}2.${NC}  查看Docker全局状态"
-        echo -e " ${GREEN}3.${NC}  Docker容器管理"
-        echo -e " ${GREEN}4.${NC}  Docker镜像管理"
-        echo -e " ${GREEN}5.${NC}  Docker网络管理"
-        echo -e " ${GREEN}6.${NC}  Docker卷管理"
-        echo -e " ${GREEN}7.${NC}  清理无用的docker容器和镜像网络数据卷"
-        echo -e " ${GREEN}8.${NC}  更换Docker源"
-        echo -e " ${GREEN}9.${NC}  编辑daemon.json文件"
-        echo -e " ${GREEN}10.${NC} ${YELLOW}Docker 启动故障修复 (iptables)${NC}"
-        echo -e " ${GREEN}11.${NC} 开启Docker-ipv6访问"
-        echo -e " ${GREEN}12.${NC} 关闭Docker-ipv6访问"
-        echo -e " ${GREEN}19.${NC} 备份/迁移/还原Docker环境"
-        echo -e " ${GREEN}20.${NC} 卸载Docker环境"
-        echo -e "${CYAN}-----------------------------------------${NC}"
-        echo -e " ${RED}0.${NC}  返回主菜单"
-        echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择: " docker_choice
+        
+        echo -e "  ${CYAN}[ 基础维护 ]${NC}"
+        echo -e "  ${GREEN}1.${NC} 安装/更新 Docker 环境     ${GREEN}2.${NC} 查看 Docker 全局状态"
+        echo -e "  ${GREEN}3.${NC} 更换 Docker 国内镜像源     ${GREEN}4.${NC} Docker 启动故障修复"
+        echo ""
+        echo -e "  ${CYAN}[ 资源管理 ]${NC}"
+        echo -e "  ${GREEN}5.${NC} 容器管理 (交互式)          ${GREEN}6.${NC} 镜像管理 (交互式)"
+        echo -e "  ${GREEN}7.${NC} 网络管理 (交互式)          ${GREEN}8.${NC} 数据卷管理 (交互式)"
+        echo ""
+        echo -e "  ${CYAN}[ 高级配置 ]${NC}"
+        echo -e "  ${GREEN}9.${NC} 编辑 daemon.json           ${GREEN}10.${NC} IPv6 访问控制"
+        echo -e "  ${GREEN}11.${NC} 备份/迁移/还原             ${GREEN}12.${NC} 系统一键深度清理"
+        echo ""
+        echo -e "  ${CYAN}[ 系统操作 ]${NC}"
+        echo -e "  ${RED}20.${NC} 彻底卸载 Docker 环境      ${RED}0.${NC} 返回主菜单"
+        echo -e "${CYAN}================================================${NC}"
+        read -p "请输入操作代码: " docker_choice
 
         case "$docker_choice" in
-            1)
-                install_update_docker_env
-                ;;
-            2)
-                view_docker_global_status
-                ;;
-            3)
-                docker_container_management
-                ;;
-            4)
-                docker_image_management
-                ;;
-            5)
-                docker_network_management
-                ;;
-            6)
-                docker_volume_management
-                ;;
-            7)
-                clean_docker_resources
-                ;;
-            8)
-                change_docker_source
-                ;;
-            9)
-                edit_daemon_json
-                ;;
-            10)
-                fix_docker_iptables
-                ;;
-            11)
-                enable_docker_ipv6
-                ;;
-            12)
-                disable_docker_ipv6
-                ;;
-            19)
-                backup_migrate_restore_docker
-                ;;
-            20)
-                uninstall_docker
-                ;;
-            0)
-                break
-                ;;
-            *)
-                echo -e "${RED}无效的选择，请重新输入！${NC}"
-                sleep 2
-                ;;
+            1) install_update_docker_env ;;
+            2) view_docker_global_status ;;
+            3) change_docker_source ;;
+            4) fix_docker_iptables ;;
+            5) docker_container_management ;;
+            6) docker_image_management ;;
+            7) docker_network_management ;;
+            8) docker_volume_management ;;
+            9) edit_daemon_json ;;
+            10) docker_ipv6_management ;;
+            11) backup_migrate_restore_docker ;;
+            12) clean_docker_resources ;;
+            20) uninstall_docker ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
     done
 }
