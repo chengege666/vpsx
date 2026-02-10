@@ -424,11 +424,29 @@ function manage_github_proxy_container() {
     echo -e " 3. 重启"
     echo -e " 0. 返回"
     read -p "请选择: " op
-    case $op in
-        1) docker start github-proxy ;;
-        2) docker stop github-proxy ;;
-        3) docker restart github-proxy ;;
+    case "$op" in
+        1)
+            echo -e "${BLUE}正在启动 GitHub 加速站...${NC}"
+            docker start github-proxy
+            ;;
+        2)
+            echo -e "${BLUE}正在停止 GitHub 加速站...${NC}"
+            docker stop github-proxy
+            ;;
+        3)
+            echo -e "${BLUE}正在重启 GitHub 加速站...${NC}"
+            docker restart github-proxy
+            ;;
+        0) return ;;
+        *) echo -e "${RED}无效选择。${NC}" ;;
     esac
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}操作成功！${NC}"
+    else
+        echo -e "${RED}操作失败，请检查 Docker 日志。${NC}"
+    fi
+    read -p "按回车键继续..."
 }
 
 
