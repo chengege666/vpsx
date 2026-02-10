@@ -1441,15 +1441,15 @@ function list_delete_nginx_redirects() {
         done
         
         echo -e "${CYAN}-----------------------------------------${NC}"
-        echo -e " ${RED}d <编号>.${NC} 删除配置 (例如: d 1)"
+        echo -e " ${RED}请输入编号删除配置 (例如: 1)${NC}"
         echo -e " ${RED}0.${NC}       返回"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请选择操作: " action choice_idx
+        read -p "请选择: " choice
         
-        if [ "$action" == "0" ]; then
+        if [ "$choice" == "0" ]; then
             break
-        elif [ "$action" == "d" ] && [ -n "$choice_idx" ]; then
-            local target_config="${config_map[$choice_idx]}"
+        elif [[ "$choice" =~ ^[0-9]+$ ]]; then
+            local target_config="${config_map[$choice]}"
             if [ -n "$target_config" ]; then
                 read -p "确定要删除该配置吗？(y/N): " confirm_del
                 if [[ "$confirm_del" =~ ^[yY]$ ]]; then
