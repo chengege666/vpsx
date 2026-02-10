@@ -568,34 +568,21 @@ function batch_uninstall() {
         "系统权限管理工具"
     )
     
-    # 创建选择数组
-    local selections=()
-    for tool in "${tool_names[@]}"; do
-        if command -v "$tool" &> /dev/null; then
-            selections+=("0") # 0表示未选中，1表示选中
-        else
-            selections+=("-") # -表示未安装，不可选
-        fi
-    done
-    
     # 批量选择菜单
     while true; do
         clear
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${RED}           批量卸载选择${NC}"
         echo -e "${CYAN}=========================================${NC}"
-        echo -e "${YELLOW}请选择要卸载的工具（空格键选择/取消）：${NC}"
+        echo -e "${YELLOW}请输入要卸载的工具编号（多个编号用空格隔开，如: 1 2 3）：${NC}"
         echo ""
         
         for i in "${!tool_names[@]}"; do
             local tool_name="${tool_names[$i]}"
-            local status="${selections[$i]}"
             local desc="${tool_descriptions[$i]}"
             
-            if [[ "$status" == "-" ]]; then
+            if ! command -v "$tool_name" &> /dev/null; then
                 echo -e " [${GRAY}-${NC}] ${GRAY}$(($i+1)). $tool_name - $desc ${RED}✗ 未安装${NC}"
-            elif [[ "$status" == "1" ]]; then
-                echo -e " [${GREEN}✓${NC}] ${GREEN}$(($i+1)). $tool_name - $desc ${GREEN}✓ 已选择${NC}"
             else
                 echo -e " [ ] ${CYAN}$(($i+1)). $tool_name - $desc ${GREEN}✓ 已安装${NC}"
             fi
@@ -603,62 +590,52 @@ function batch_uninstall() {
         
         echo ""
         echo -e "${CYAN}-----------------------------------------${NC}"
-        echo -e " ${GREEN}空格键${NC}: 选择/取消选择"
-        echo -e " ${GREEN}回车键${NC}: 确认选择"
         echo -e " ${RED}q${NC}: 返回工具卸载菜单"
         echo -e "${CYAN}=========================================${NC}"
         
-        # 获取已选择的工具
+        read -p "请输入编号: " input_choice
+        
+        if [[ "$input_choice" == "q" || "$input_choice" == "Q" ]]; then
+            echo -e "${YELLOW}返回工具卸载菜单...${NC}"
+            sleep 1
+            return
+        fi
+
         selected_tools=()
-        local selected_count=0
-        for i in "${!selections[@]}"; do
-            if [[ "${selections[$i]}" == "1" ]]; then
-                selected_tools+=("${tool_names[$i]}")
-                ((selected_count++))
+        local invalid_selection=false
+        
+        # 将输入按空格或逗号分割
+        local choices=$(echo "$input_choice" | tr ',' ' ')
+        
+        for choice in $choices; do
+            if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#tool_names[@]}" ]; then
+                local idx=$((choice-1))
+                local tool_name="${tool_names[$idx]}"
+                if command -v "$tool_name" &> /dev/null; then
+                    selected_tools+=("$tool_name")
+                else
+                    echo -e "${RED}错误: 编号 $choice ($tool_name) 未安装，无法卸载。${NC}"
+                    invalid_selection=true
+                fi
+            else
+                echo -e "${RED}错误: 无效的编号 $choice。${NC}"
+                invalid_selection=true
             fi
         done
-        
-        if [[ $selected_count -gt 0 ]]; then
-            echo -e "${YELLOW}已选择: ${selected_tools[*]}${NC}"
+
+        if [[ "$invalid_selection" == "true" ]]; then
+            echo -e "${YELLOW}请重新输入有效编号。${NC}"
+            sleep 2
+            continue
         fi
-        
-        # 读取按键
-        read -rsn1 key
-        
-        case "$key" in
-            " ")
-                # 处理空格键选择
-                echo -e -n "\033[1A\033[2K" # 清除上一行
-                read -p "请选择编号(1-7): " -n1 index
-                echo
-                
-                local idx=$((index-1))
-                if [[ $idx -ge 0 && $idx -lt ${#tool_names[@]} && "${selections[$idx]}" != "-" ]]; then
-                    if [[ "${selections[$idx]}" == "0" ]]; then
-                        selections[$idx]="1"
-                    elif [[ "${selections[$idx]}" == "1" ]]; then
-                        selections[$idx]="0"
-                    fi
-                else
-                    echo -e "${RED}无效的选择！${NC}"
-                    sleep 1
-                fi
-                ;;
-            "")
-                # 回车键确认选择
-                if [[ $selected_count -eq 0 ]]; then
-                    echo -e "${YELLOW}请至少选择一个工具！${NC}"
-                    sleep 1
-                    continue
-                fi
-                break
-                ;;
-            "q"|"Q")
-                echo -e "${YELLOW}返回工具卸载菜单...${NC}"
-                sleep 1
-                return
-                ;;
-        esac
+
+        if [[ ${#selected_tools[@]} -eq 0 ]]; then
+            echo -e "${YELLOW}未选择任何工具！${NC}"
+            sleep 2
+            continue
+        fi
+
+        break
     done
     
     # 确认批量卸载
