@@ -46,7 +46,7 @@ function app_center_menu() {
             13) moontv_management ;;
             14) libretv_management ;;
             15) frp_management ;;
-            16) nginx_redirect_management ;;
+            16) nginx_redirect_manager ;;
             0) break ;; 
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
