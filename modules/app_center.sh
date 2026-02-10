@@ -5733,6 +5733,7 @@ function nginx_redirect_manager() {
         echo -e " ${RED}0.${NC} 返回应用中心菜单"
         echo -e "${CYAN}=========================================${NC}"
         read -p "请输入你的选择 (0-20): " redirect_choice
+        [ -z "$redirect_choice" ] && continue
 
         case "$redirect_choice" in
             1) nginx_http_to_https ;;
