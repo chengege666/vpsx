@@ -195,22 +195,38 @@ function fix_docker_iptables() {
     
     # 1. 加载必要的内核模块
     echo -e "${BLUE}[1/3] 正在加载内核模块 (overlay, br_netfilter)...${NC}"
-    modprobe overlay
-    modprobe br_netfilter
+    local module_failed=false
+    if ! modprobe overlay; then
+        echo -e "${YELLOW}警告: 模块 overlay 加载失败，可能是云服务商裁剪了内核。${NC}"
+        module_failed=true
+    fi
+    if ! modprobe br_netfilter; then
+        echo -e "${YELLOW}警告: 模块 br_netfilter 加载失败。${NC}"
+        module_failed=true
+    fi
     
-    # 永久写入模块配置
-    cat <<EOF | tee /etc/modules-load.d/docker.conf > /dev/null
+    if [ "$module_failed" = false ]; then
+        # 只有在成功加载时才写入配置
+        cat <<EOF | tee /etc/modules-load.d/docker.conf > /dev/null
 overlay
 br_netfilter
 EOF
+    fi
 
     # 2. 优化系统网络参数
     echo -e "${BLUE}[2/3] 正在优化内核网络参数...${NC}"
-    cat <<EOF | tee /etc/sysctl.d/docker.conf > /dev/null
+    if [ -d "/proc/sys/net/bridge" ]; then
+        cat <<EOF | tee /etc/sysctl.d/docker.conf > /dev/null
 net.bridge.bridge-nf-call-iptables  = 1
 net.bridge.bridge-nf-call-ip6tables = 1
 net.ipv4.ip_forward                 = 1
 EOF
+    else
+        echo -e "${YELLOW}提示: 检测到 bridge 模块未激活，仅开启基础转发。${NC}"
+        cat <<EOF | tee /etc/sysctl.d/docker.conf > /dev/null
+net.ipv4.ip_forward                 = 1
+EOF
+    fi
     sysctl --system >/dev/null 2>&1
 
     # 3. 强制切换 iptables 模式
