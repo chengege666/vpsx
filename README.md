@@ -20,18 +20,36 @@
 - **⌨️ 快捷操作**: 支持配置快捷键 `k` 快速启动脚本。
 
 ## 🚀 快速开始
-环境git
+
+### 方式一：一键脚本安装 (推荐)
+直接运行以下命令，自动完成依赖安装、项目部署及快捷键配置：
+
 ```bash
-apt update
-apt install git -y
+wget -P /root -N https://raw.githubusercontent.com/chengege666/vpsx/main/install.sh && bash /root/install.sh
 ```
-在您的 VPS 上运行以下命令即可启动：
+
+### 方式二：手动克隆安装
+如果您已安装 `git`，也可以手动克隆仓库：
 
 ```bash
 git clone https://github.com/chengege666/vpsx.git /root/vpsx && chmod +x /root/vpsx/vpsx.sh && /root/vpsx/vpsx.sh
 ```
 
-> **提示**: 启动后，建议选择选项 `10` 配置快捷键 `k`，之后只需在终端输入 `k` 即可随时进入面板。
+### 方式三：使用 curl 直接运行 (不保存文件)
+适合临时使用，不下载完整项目：
+
+```bash
+curl -sSL https://raw.githubusercontent.com/chengege666/vpsx/main/install.sh | bash
+```
+
+## ⌨️ 常用命令
+
+安装完成后，您可以使用以下命令：
+
+- **启动面板**: 直接输入 `vpsx` (推荐) 或 `k` (如果已配置)
+- **更新脚本**: 在面板中选择 `000` 或再次运行安装脚本
+- **卸载脚本**: 在面板中选择 `00`
+
 
 ## 🛠️ 模块化架构
 
