@@ -591,12 +591,12 @@ function batch_uninstall() {
         
         echo ""
         echo -e "${CYAN}-----------------------------------------${NC}"
-        echo -e " ${RED}q${NC}: 返回工具卸载菜单"
+        echo -e " ${RED}0${NC}: 返回工具卸载菜单"
         echo -e "${CYAN}=========================================${NC}"
         
         read -p "请输入编号: " input_choice
         
-        if [[ "$input_choice" == "q" || "$input_choice" == "Q" ]]; then
+        if [[ "$input_choice" == "0" ]]; then
             echo -e "${YELLOW}返回工具卸载菜单...${NC}"
             sleep 1
             return
