@@ -24,6 +24,7 @@ function app_center_menu() {
         echo -e " ${GREEN}13.${NC} MoonTV流媒体应用管理"
         echo -e " ${GREEN}14.${NC} LibreTV流媒体应用管理"
         echo -e " ${GREEN}15.${NC} FRP内网穿透管理"
+        echo -e " ${GREEN}16.${NC} Nginx重定向功能"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
@@ -45,6 +46,7 @@ function app_center_menu() {
             13) moontv_management ;;
             14) libretv_management ;;
             15) frp_management ;;
+            16) nginx_redirect_management ;;
             0) break ;; 
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -1249,6 +1251,257 @@ function access_komari_web() {
     fi
     echo -e "${CYAN}=========================================${NC}"
     read -p "按回车键返回..."
+}
+
+# Nginx 重定向功能管理
+function nginx_redirect_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}             Nginx 重定向管理${NC}"
+        
+        if command -v nginx &> /dev/null; then
+            echo -e "          状态: ${GREEN}已安装${NC}"
+            local nginx_status=$(systemctl is-active nginx)
+            if [ "$nginx_status" == "active" ]; then
+                echo -e "          服务: ${GREEN}运行中${NC}"
+            else
+                echo -e "          服务: ${RED}已停止${NC}"
+            fi
+        else
+            echo -e "          状态: ${RED}未安装${NC}"
+        fi
+        
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e " ${GREEN}1.${NC}  安装 Nginx"
+        echo -e " ${GREEN}2.${NC}  添加重定向配置"
+        echo -e " ${GREEN}3.${NC}  查看/删除重定向配置"
+        echo -e " ${GREEN}4.${NC}  Nginx 服务管理"
+        echo -e " ${GREEN}5.${NC}  卸载 Nginx"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC}  返回应用中心菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 (0-5): " redirect_choice
+
+        case "$redirect_choice" in
+            1) install_nginx ;;
+            2) add_nginx_redirect ;;
+            3) list_delete_nginx_redirects ;;
+            4) manage_nginx_service ;;
+            5) uninstall_nginx ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
+        esac
+    done
+}
+
+# 安装 Nginx
+function install_nginx() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}             安装 Nginx${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if command -v nginx &> /dev/null; then
+        echo -e "${YELLOW}Nginx 已经安装。${NC}"
+    else
+        echo -e "${BLUE}正在安装 Nginx...${NC}"
+        install_package nginx
+        systemctl enable nginx
+        systemctl start nginx
+        echo -e "${GREEN}Nginx 安装完成并已启动。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+# 卸载 Nginx
+function uninstall_nginx() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${RED}             卸载 Nginx${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if ! command -v nginx &> /dev/null; then
+        echo -e "${YELLOW}未检测到 Nginx 安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+    
+    read -p "确定要卸载 Nginx 吗？(y/N): " confirm
+    if [[ "$confirm" =~ ^[yY]$ ]]; then
+        echo -e "${BLUE}正在停止并卸载 Nginx...${NC}"
+        systemctl stop nginx
+        systemctl disable nginx
+        if command -v apt &> /dev/null; then
+            sudo apt purge -y nginx nginx-common nginx-full
+            sudo apt autoremove -y
+        elif command -v yum &> /dev/null; then
+            sudo yum remove -y nginx
+        fi
+        rm -rf /etc/nginx
+        echo -e "${GREEN}Nginx 卸载完成。${NC}"
+    else
+        echo "操作已取消。"
+    fi
+    read -p "按回车键继续..."
+}
+
+# 添加重定向配置
+function add_nginx_redirect() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          添加 Nginx 重定向${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if ! command -v nginx &> /dev/null; then
+        echo -e "${RED}错误: 请先安装 Nginx！${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    read -p "请输入来源域名 (例如: a.com): " source_domain
+    if [ -z "$source_domain" ]; then
+        echo -e "${RED}域名不能为空。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    read -p "请输入目标 URL (例如: https://b.com): " target_url
+    if [ -z "$target_url" ]; then
+        echo -e "${RED}目标 URL 不能为空。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    # 检查目标 URL 是否以 http:// 或 https:// 开头
+    if [[ ! "$target_url" =~ ^https?:// ]]; then
+        echo -e "${YELLOW}警告: 目标 URL 建议以 http:// 或 https:// 开头。${NC}"
+        read -p "是否继续？(y/N): " confirm_url
+        [[ ! "$confirm_url" =~ ^[yY]$ ]] && return
+    fi
+
+    local config_file="/etc/nginx/conf.d/redirect_${source_domain}.conf"
+    
+    if [ -f "$config_file" ]; then
+        echo -e "${YELLOW}该域名的重定向配置已存在。${NC}"
+        read -p "是否覆盖？(y/N): " overwrite
+        [[ ! "$overwrite" =~ ^[yY]$ ]] && return
+    fi
+
+    echo -e "${BLUE}正在生成配置文件...${NC}"
+    cat > "$config_file" <<EOF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $source_domain;
+    return 301 $target_url\$request_uri;
+}
+EOF
+
+    echo -e "${BLUE}正在测试 Nginx 配置...${NC}"
+    if nginx -t; then
+        echo -e "${BLUE}正在重载 Nginx...${NC}"
+        systemctl reload nginx
+        echo -e "${GREEN}✅ 重定向配置成功！${NC}"
+        echo -e "来源: ${YELLOW}$source_domain${NC}"
+        echo -e "目标: ${YELLOW}$target_url${NC}"
+    else
+        echo -e "${RED}❌ Nginx 配置测试失败，正在移除无效配置。${NC}"
+        rm -f "$config_file"
+    fi
+    
+    read -p "按回车键继续..."
+}
+
+# 查看/删除重定向配置
+function list_delete_nginx_redirects() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}          当前 Nginx 重定向列表${NC}"
+        echo -e "${CYAN}=========================================${NC}"
+        
+        local configs=(/etc/nginx/conf.d/redirect_*.conf)
+        if [ ! -e "${configs[0]}" ]; then
+            echo -e "${YELLOW}暂无重定向配置。${NC}"
+            echo -e "${CYAN}-----------------------------------------${NC}"
+            echo -e " ${RED}0.${NC} 返回"
+            read -p "请选择: " choice
+            break
+        fi
+
+        local i=1
+        declare -A config_map
+        for config in "${configs[@]}"; do
+            local domain=$(basename "$config" | sed 's/redirect_//;s/.conf//')
+            local target=$(grep "return 301" "$config" | awk '{print $3}' | sed 's/;//;s/\$request_uri//')
+            echo -e " ${GREEN}$i.${NC} $domain -> $target"
+            config_map[$i]="$config"
+            ((i++))
+        done
+        
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}d <编号>.${NC} 删除配置 (例如: d 1)"
+        echo -e " ${RED}0.${NC}       返回"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请选择操作: " action choice_idx
+        
+        if [ "$action" == "0" ]; then
+            break
+        elif [ "$action" == "d" ] && [ -n "$choice_idx" ]; then
+            local target_config="${config_map[$choice_idx]}"
+            if [ -n "$target_config" ]; then
+                read -p "确定要删除该配置吗？(y/N): " confirm_del
+                if [[ "$confirm_del" =~ ^[yY]$ ]]; then
+                    rm -f "$target_config"
+                    systemctl reload nginx
+                    echo -e "${GREEN}配置已删除。${NC}"
+                    sleep 1
+                fi
+            else
+                echo -e "${RED}无效的编号。${NC}"; sleep 1
+            fi
+        else
+            echo -e "${RED}无效的选择。${NC}"; sleep 1
+        fi
+    done
+}
+
+# Nginx 服务管理
+function manage_nginx_service() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}             Nginx 服务管理${NC}"
+        if command -v nginx &> /dev/null; then
+            local nginx_status=$(systemctl is-active nginx)
+            echo -e "          当前状态: ${nginx_status}${NC}"
+        else
+            echo -e "          状态: ${RED}未安装${NC}"
+            read -p "按回车键继续..."
+            return
+        fi
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e " ${GREEN}1.${NC} 启动 Nginx"
+        echo -e " ${GREEN}2.${NC} 停止 Nginx"
+        echo -e " ${GREEN}3.${NC} 重启 Nginx"
+        echo -e " ${GREEN}4.${NC} 重载配置 (Reload)"
+        echo -e " ${GREEN}5.${NC} 查看详细状态 (Status)"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC} 返回"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入选择: " svc_choice
+        
+        case "$svc_choice" in
+            1) systemctl start nginx; echo -e "${GREEN}已尝试启动 Nginx。${NC}"; sleep 1 ;;
+            2) systemctl stop nginx; echo -e "${GREEN}已尝试停止 Nginx。${NC}"; sleep 1 ;;
+            3) systemctl restart nginx; echo -e "${GREEN}已尝试重启 Nginx。${NC}"; sleep 1 ;;
+            4) systemctl reload nginx; echo -e "${GREEN}已重载配置。${NC}"; sleep 1 ;;
+            5) systemctl status nginx; read -p "按回车键继续..." ;;
+            0) break ;;
+            *) echo -e "${RED}无效选择。${NC}"; sleep 1 ;;
+        esac
+    done
 }
 
 # PanSou 网盘管理
