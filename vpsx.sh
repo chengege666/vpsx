@@ -35,7 +35,7 @@ source "${BASE_PATH}/modules/self_manage.sh"
 show_menu() {
     clear
     echo -e "${CYAN}================================================${NC}"
-    echo -e "${GREEN}            vpsx 主菜单 v1.1            ${NC}"
+    echo -e "${GREEN}            vpsx 主菜单 v1.2            ${NC}"
     echo -e "${CYAN}================================================${NC}"
     echo -e " ${GREEN}1.${NC}   系统信息查询"
     echo -e " ${GREEN}2.${NC}   系统更新"
