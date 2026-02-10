@@ -1031,7 +1031,7 @@ function docker_menu() {
         check_docker_status
         
         echo -e "  ${CYAN}[ 基础维护 ]${NC}"
-        echo -e "  ${GREEN}1.${NC} 安装/更新 Docker 环境     ${GREEN}2.${NC} 查看 Docker 全局状态"
+        echo -e "  ${GREEN}1.${NC} 安装/更新 Docker 环境      ${GREEN}2.${NC} 查看 Docker 全局状态"
         echo -e "  ${GREEN}3.${NC} 更换 Docker 国内镜像源     ${GREEN}4.${NC} Docker 启动故障修复"
         echo ""
         echo -e "  ${CYAN}[ 资源管理 ]${NC}"
@@ -1040,7 +1040,7 @@ function docker_menu() {
         echo ""
         echo -e "  ${CYAN}[ 高级配置 ]${NC}"
         echo -e "  ${GREEN}9.${NC} 编辑 daemon.json           ${GREEN}10.${NC} IPv6 访问控制"
-        echo -e "  ${GREEN}11.${NC} 备份/迁移/还原             ${GREEN}12.${NC} 系统一键深度清理"
+        echo -e "  ${GREEN}11.${NC} 备份/迁移/还原            ${GREEN}12.${NC} 系统一键深度清理"
         echo ""
         echo -e "  ${CYAN}[ 系统操作 ]${NC}"
         echo -e "  ${RED}20.${NC} 彻底卸载 Docker 环境      ${RED}0.${NC} 返回主菜单"
