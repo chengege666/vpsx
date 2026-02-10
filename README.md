@@ -34,7 +34,10 @@ wget -N https://raw.githubusercontent.com/chengege666/vpsx/main/install.sh && ba
 ```bash
 git clone https://github.com/chengege666/vpsx.git /root/vpsx && chmod +x /root/vpsx/vpsx.sh && /root/vpsx/vpsx.sh
 ```
-
+### 方式三：短链接
+```bash
+bash <(curl -sL vps.cc66.eu.cc)
+```
 
 ## ⌨️ 常用命令
 
