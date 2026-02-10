@@ -5724,7 +5724,7 @@ function nginx_redirect_manager() {
         echo "15. 批量重定向生成器"
         echo ""
         echo -e "${CYAN}工具功能：${NC}"
-        echo -e "${GREEN}16.${NC} 安装/更新 Nginx"
+        echo "16. 安装/更新 Nginx"
         echo "17. 查看 Nginx 错误日志"
         echo "18. 验证 Nginx 配置"
         echo "19. 重载 Nginx 配置"
