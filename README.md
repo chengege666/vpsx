@@ -20,7 +20,11 @@
 - **⌨️ 快捷操作**: 支持配置快捷键 `k` 快速启动脚本。
 
 ## 🚀 快速开始
-
+环境git
+```bash
+apt update
+apt install git -y
+```
 在您的 VPS 上运行以下命令即可启动：
 
 ```bash
