@@ -1060,13 +1060,13 @@ function docker_menu() {
         check_docker_status
         
         echo -e "  ${CYAN}[ 基础维护 ]${NC}"
-        echo -e "  ${GREEN}1.${NC} 安装/更新 Docker 环境     ${GREEN}2.${NC} 查看 Docker 全局状态"
-        echo -e "  ${GREEN}3.${NC} 更换 Docker 国内镜像源     ${GREEN}4.${NC} Docker 启动故障修复"
-        echo -e "  ${GREEN}5.${NC} 重启 Docker 服务          ${GREEN}6.${NC} 停止 Docker 服务"
+        echo -e "  ${GREEN}1.${NC}  安装/更新 Docker 环境      ${GREEN}2.${NC} 查看 Docker 全局状态"
+        echo -e "  ${GREEN}3.${NC}  更换 Docker 国内镜像源     ${GREEN}4.${NC} Docker 启动故障修复"
+        echo -e "  ${GREEN}5.${NC}  重启 Docker 服务          ${GREEN}6.${NC} 停止 Docker 服务"
         echo ""
         echo -e "  ${CYAN}[ 资源管理 ]${NC}"
-        echo -e "  ${GREEN}7.${NC} 容器管理 (交互式)          ${GREEN}8.${NC} 镜像管理 (交互式)"
-        echo -e "  ${GREEN}9.${NC} 网络管理 (交互式)          ${GREEN}10.${NC} 数据卷管理 (交互式)"
+        echo -e "  ${GREEN}7.${NC} 容器管理 (交互式)            ${GREEN}8.${NC} 镜像管理 (交互式)"
+        echo -e "  ${GREEN}9.${NC} 网络管理 (交互式)           ${GREEN}10.${NC} 数据卷管理 (交互式)"
         echo ""
         echo -e "  ${CYAN}[ 高级配置 ]${NC}"
         echo -e "  ${GREEN}11.${NC} 编辑 daemon.json           ${GREEN}12.${NC} IPv6 访问控制"
