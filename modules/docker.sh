@@ -93,7 +93,12 @@ function install_update_docker_env() {
                         echo -e "${GREEN}Docker 更新并启动成功。${NC}"
                     else
                         echo -e "${RED}Docker 更新成功，但服务启动失败。${NC}"
-                        echo -e "${YELLOW}请尝试运行: systemctl status docker 查看原因。${NC}"
+                        read -p "是否立即尝试启动故障修复? (y/N): " try_fix
+                        if [[ "$try_fix" =~ ^[Yy]$ ]]; then
+                            fix_docker_iptables
+                        else
+                            echo -e "${YELLOW}请手动运行菜单中的 'Docker 启动故障修复'。${NC}"
+                        fi
                     fi
                 else
                     rm get-docker.sh
@@ -132,9 +137,12 @@ function install_update_docker_env() {
                         echo -e "${GREEN}Docker 安装并启动成功。${NC}"
                     else
                         echo -e "${RED}Docker 安装脚本执行成功，但服务启动失败。${NC}"
-                        echo -e "${YELLOW}常见原因: 内核版本过低、缺少依赖或存储驱动问题。${NC}"
-                        echo -e "${YELLOW}请运行: journalctl -u docker -n 20 查看错误日志。${NC}"
-                        read -p "按任意键继续..."
+                        read -p "是否立即尝试启动故障修复? (y/N): " try_fix
+                        if [[ "$try_fix" =~ ^[Yy]$ ]]; then
+                            fix_docker_iptables
+                        else
+                            echo -e "${YELLOW}提示: 常见原因为 iptables/nft 冲突，可手动运行故障修复。${NC}"
+                        fi
                         return
                     fi
                 else
