@@ -21,6 +21,7 @@ function sys_tools_menu() {
         echo -e " ${GREEN}10.${NC} Fail2ban配置"
         echo -e " ${GREEN}11.${NC} SSL证书管理"
         echo -e " ${GREEN}12.${NC} 进程管理工具"
+        echo -e " ${GREEN}13.${NC} 系统环境修复 (权限/磁盘/APT)"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
@@ -62,6 +63,9 @@ function sys_tools_menu() {
                 ;;
             12)
                 process_management
+                ;;
+            13)
+                system_environment_repair
                 ;;
             0)
                 break
@@ -386,7 +390,59 @@ function process_management() {
     done
 }
 
-# 系统时区调整
+# 系统环境修复 (权限/磁盘/APT)
+function system_environment_repair() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}             系统环境修复工具${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    # 1. 检查磁盘空间
+    echo -e "${BLUE}[1/4] 检查磁盘空间使用情况...${NC}"
+    df -h | grep -E '^Filesystem|/dev/|/$'
+    echo ""
+    
+    # 2. 修复 /tmp 权限
+    echo -e "${BLUE}[2/4] 正在修复 /tmp 目录权限 (1777)...${NC}"
+    chmod 1777 /tmp
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ /tmp 权限已重置。${NC}"
+    else
+        echo -e "${RED}❌ 权限修复失败，请检查是否具有 root 权限。${NC}"
+    fi
+    echo ""
+    
+    # 3. 清理 APT 缓存
+    echo -e "${BLUE}[3/4] 正在清理包管理器缓存...${NC}"
+    if command -v apt &> /dev/null; then
+        apt-get clean
+        echo -e "${GREEN}✅ APT 缓存已清理。${NC}"
+    elif command -v yum &> /dev/null; then
+        yum clean all
+        echo -e "${GREEN}✅ YUM 缓存已清理。${NC}"
+    fi
+    echo ""
+    
+    # 4. 更新软件源
+    echo -e "${BLUE}[4/4] 正在尝试同步软件源...${NC}"
+    echo -e "${YELLOW}提示：如果此步报错，请检查网络连接或磁盘是否已满。${NC}"
+    if command -v apt &> /dev/null; then
+        apt-get update
+    elif command -v yum &> /dev/null; then
+        yum makecache
+    fi
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ 软件源同步成功！系统环境已基本恢复正常。${NC}"
+    else
+        echo -e "${RED}❌ 软件源同步失败。请根据上方错误信息进一步排查。${NC}"
+    fi
+    
+    echo -e "${CYAN}=========================================${NC}"
+    read -p "按任意键返回菜单..."
+}
+
+ # 系统时区调整
 function adjust_system_timezone() {
     clear
     echo -e "${CYAN}=========================================${NC}"
