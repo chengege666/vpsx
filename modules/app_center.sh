@@ -5838,18 +5838,52 @@ EOF
         echo ""
         echo -e "${GREEN}✅ 雷池 WAF 安装成功！${NC}"
         
-        # === 新增/修改部分开始 ===
-        echo -e "${BLUE}正在等待服务初始化以获取初始密码 (约需 15 秒)...${NC}"
-        sleep 15  # 必须等待数据库和服务完全启动，否则获取密码会失败
+        echo -e "${BLUE}正在等待管理服务就绪以获取初始密码...${NC}"
         
-        echo ""
-        echo -e "${CYAN}=========================================${NC}"
-        echo -e "${GREEN}          初始登录凭证          ${NC}"
-        echo -e "${CYAN}=========================================${NC}"
-        # 执行容器内部命令重置并打印密码
-        docker compose exec mgt-api reset-admin-password
-        echo -e "${CYAN}=========================================${NC}"
-        # === 新增/修改部分结束 ===
+        # === 修复逻辑开始：动态查找容器并智能等待 ===
+        local mgt_container=""
+        local wait_time=0
+        local timeout=60  # 最大等待60秒
+        
+        while [ $wait_time -lt $timeout ]; do
+            # 模糊匹配查找管理容器 (兼容 safeline-mgt-api 或 safeline-mgt)
+            if docker ps --format '{{.Names}}' | grep -q "safeline.*mgt"; then
+                # 获取准确的容器名称
+                mgt_container=$(docker ps --format '{{.Names}}' | grep "safeline.*mgt" | head -n 1)
+                # 检查容器是否处于运行状态
+                if docker inspect -f '{{.State.Running}}' "$mgt_container" 2>/dev/null | grep -q "true"; then
+                    break
+                fi
+            fi
+            sleep 2
+            wait_time=$((wait_time + 2))
+        done
+        
+        if [ -n "$mgt_container" ]; then
+            # 容器运行后，内部程序初始化还需要几秒
+            sleep 5
+            
+            echo ""
+            echo -e "${CYAN}=========================================${NC}"
+            echo -e "${GREEN}          初始登录凭证          ${NC}"
+            echo -e "${CYAN}=========================================${NC}"
+            
+            # 尝试执行标准重置密码命令
+            # 使用 docker exec 绕过 compose 的状态检查
+            if ! docker exec "$mgt_container" reset-admin-password 2>/dev/null; then
+                # 如果标准命令失败，尝试备用命令 (resetadmin)
+                if ! docker exec "$mgt_container" resetadmin 2>/dev/null; then
+                    echo -e "${RED}自动获取密码失败。${NC}"
+                    echo -e "${YELLOW}请在浏览器点击“忘记密码”，并在终端执行提示的命令。${NC}"
+                    echo -e "参考容器名: ${mgt_container}"
+                fi
+            fi
+            echo -e "${CYAN}=========================================${NC}"
+        else
+            echo -e "${RED}等待超时：未检测到管理容器启动。${NC}"
+            echo -e "${YELLOW}请稍后手动检查容器状态：docker ps${NC}"
+        fi
+        # === 修复逻辑结束 ===
 
         echo ""
         IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
