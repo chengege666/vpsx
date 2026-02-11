@@ -6048,3 +6048,14 @@ function akilecloud_management() {
     wget -qO- https://raw.githubusercontent.com/akile-network/aktools/refs/heads/main/akdns.sh | bash
     read -p "按回车键继续..."
 }
+
+# 功能扩展占位
+function app_center() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          应用中心${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${BLUE}正在执行应用中心脚本...${NC}"
+    wget -qO- https://raw.githubusercontent.com/akile-network/aktools/refs/heads/main/akapp.sh | bash
+    read -p "按回车键继续..."
+}
