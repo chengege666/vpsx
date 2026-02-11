@@ -29,7 +29,7 @@ function app_center_menu() {
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-17): " app_choice
+        read -p "请输入你的选择 (0-16): " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
@@ -6053,13 +6053,22 @@ function uninstall_safeline() {
     read -p "按回车键继续..."
 }
 
+# =================================================================
 # AkileCloud 专用脚本
+# =================================================================
 function akilecloud_management() {
     clear
     echo -e "${CYAN}=========================================${NC}"
     echo -e "${GREEN}          AkileCloud 专用脚本${NC}"
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "${BLUE}正在执行 AkileCloud 脚本...${NC}"
+    echo -e "${BLUE}正在执行 AkileCloud DNS 配置脚本...${NC}"
+    echo -e "${YELLOW}脚本来源: https://github.com/akile-network/aktools${NC}"
+    echo ""
+    
+    # 直接执行远程脚本
     wget -qO- https://raw.githubusercontent.com/akile-network/aktools/refs/heads/main/akdns.sh | bash
+    
+    echo ""
+    echo -e "${GREEN}✅ AkileCloud 脚本执行完成。${NC}"
     read -p "按回车键继续..."
 }
