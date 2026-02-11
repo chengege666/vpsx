@@ -5874,21 +5874,6 @@ EOF
         echo ""
         echo -e "${YELLOW}⚠️  首次登录请使用浏览器访问，如遇证书警告请点击\"继续访问/高级\"${NC}"
     else
-            echo -e "${RED}等待超时：未检测到管理容器启动。${NC}"
-            echo -e "${YELLOW}请稍后手动检查容器状态：docker ps${NC}"
-        fi
-        # === 修复逻辑结束 ===
-
-        echo ""
-        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
-        
-        echo -e "${CYAN}访问信息：${NC}"
-        [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}https://${ipv4}:${mgt_port}${NC}"
-        [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}https://[${ipv6}]:${mgt_port}${NC}"
-        echo -e "${CYAN}(雷池默认使用 HTTPS 协议)${NC}"
-        echo ""
-        echo -e "${YELLOW}⚠️  首次登录请使用浏览器访问，如遇证书警告请点击\"继续访问/高级\"${NC}"
-    else
         echo -e "${RED}❌ 安装失败，请检查 Docker 日志。${NC}"
     fi
     read -p "按回车键继续..."
