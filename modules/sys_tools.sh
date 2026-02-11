@@ -192,6 +192,19 @@ function fail2ban_management() {
                 read -p "按任意键继续..."
                 ;;
             3)
+                # 自动检测 SSH 日志路径和系统类型
+                local log_path=""
+                local backend="auto"
+                
+                if [ -f /var/log/auth.log ]; then
+                    log_path="/var/log/auth.log"
+                elif [ -f /var/log/secure ]; then
+                    log_path="/var/log/secure"
+                else
+                    # 如果找不到传统日志文件，尝试使用 systemd 后端
+                    backend="systemd"
+                fi
+
                 if [ -f /etc/fail2ban/jail.local ]; then
                     if grep -q "enabled = true" /etc/fail2ban/jail.local; then
                         sed -i 's/enabled = true/enabled = false/g' /etc/fail2ban/jail.local
@@ -201,16 +214,24 @@ function fail2ban_management() {
                         echo -e "${GREEN}SSH 防护已启用。${NC}"
                     fi
                 else
+                    # 自动化创建配置
+                    echo -e "${BLUE}正在根据系统环境生成自动配置...${NC}"
                     cat > /etc/fail2ban/jail.local <<EOF
+[DEFAULT]
+# 忽略本机 IP
+ignoreip = 127.0.0.1/8 ::1
+
 [sshd]
 enabled = true
 port = ssh
 filter = sshd
-logpath = /var/log/auth.log
+$( [ "$backend" = "systemd" ] && echo "backend = systemd" || echo "logpath = $log_path" )
 maxretry = 5
+findtime = 600
 bantime = 3600
 EOF
-                    echo -e "${GREEN}已创建基础配置并启用 SSH 防护。${NC}"
+                    echo -e "${GREEN}已自动适配系统环境并启用 SSH 防护。${NC}"
+                    [ "$backend" = "systemd" ] && echo -e "${CYAN}检测到系统使用 systemd 日志，已自动切换后端。${NC}"
                 fi
                 systemctl restart fail2ban
                 read -p "按任意键继续..."
