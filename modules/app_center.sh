@@ -5696,7 +5696,8 @@ function safeline_waf_management() {
         local status_text="${RED}未安装${NC}"
         
         if [ -d "$safeline_dir" ] && [ -f "$safeline_dir/compose.yaml" ]; then
-            if docker compose -f "$safeline_dir/compose.yaml" ps --services --filter "status=running" | grep -q "mgt-api"; then
+            # 改为直接检测管理容器是否在运行，更准确
+            if docker ps --format '{{.Names}}' | grep -q "^safeline-mgt-api$"; then
                 status_text="${GREEN}运行中${NC}"
             else
                 status_text="${YELLOW}已安装但未运行${NC}"
