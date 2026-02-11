@@ -6003,10 +6003,10 @@ function uninstall_safeline() {
     echo "2. 删除 /data/safeline 目录（包含数据库数据、日志、配置）"
     echo "3. 删除相关的 Docker 网络"
     echo ""
-    read -p "请输入 'uninstall' 确认卸载: " confirm_str
     
-    if [ "$confirm_str" != "uninstall" ]; then
-        echo "确认失败，已取消。"
+    read -p "确定要卸载雷池 WAF 吗？(y/N): " confirm_uninstall
+    if [[ ! "$confirm_uninstall" =~ ^[yY]$ ]]; then
+        echo "卸载已取消。"
         read -p "按回车键返回..."
         return
     fi
