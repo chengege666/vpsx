@@ -163,7 +163,7 @@ function fail2ban_management() {
         echo -e "${GREEN}             Fail2ban 配置管理${NC}"
         echo -e "${CYAN}=========================================${NC}"
         echo -e " ${GREEN}1.${NC}  安装 Fail2ban"
-        echo -e " ${GREEN}2.${NC}  查看 Fail2ban 运行状态"
+        echo -e " ${GREEN}2.${NC}  查看 Fail2ban 运行状态（按q退出）"
         echo -e " ${GREEN}3.${NC}  启用/禁用 SSH 暴力破解防护"
         echo -e " ${GREEN}4.${NC}  查看当前已封禁的 IP 列表"
         echo -e " ${GREEN}5.${NC}  手动解封指定 IP"
