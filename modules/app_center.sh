@@ -29,7 +29,7 @@ function app_center_menu() {
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-16): " app_choice
+        read -p "请输入你的选择 (0-17): " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
