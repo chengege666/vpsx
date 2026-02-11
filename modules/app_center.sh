@@ -25,7 +25,7 @@ function app_center_menu() {
         echo -e " ${GREEN}14.${NC} LibreTV流媒体应用管理"
         echo -e " ${GREEN}15.${NC} FRP内网穿透管理"
         echo -e " ${GREEN}16.${NC} 雷池WAF安全防护系统"
-        echo -e " ${GREEN}17.${NC} AkileCloud（专用脚本）"
+        echo -e " ${GREEN}17.${NC} AkileCloud专用脚本"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
@@ -6053,22 +6053,13 @@ function uninstall_safeline() {
     read -p "按回车键继续..."
 }
 
-# =================================================================
 # AkileCloud 专用脚本
-# =================================================================
 function akilecloud_management() {
     clear
     echo -e "${CYAN}=========================================${NC}"
     echo -e "${GREEN}          AkileCloud 专用脚本${NC}"
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "${BLUE}正在执行 AkileCloud DNS 配置脚本...${NC}"
+    echo -e "${BLUE}正在执行 AkileCloud 脚本...${NC}"
     wget -qO- https://raw.githubusercontent.com/akile-network/aktools/refs/heads/main/akdns.sh | bash
-    echo -e "${GREEN}✅ AkileCloud 脚本执行完成。${NC}"
     read -p "按回车键继续..."
 }
-1
-# 启动主菜单
-app_center_menu
-
-# 调试：检查函数是否被正确定义
-type akilecloud_management
