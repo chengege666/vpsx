@@ -48,7 +48,9 @@ function app_center_menu() {
             14) libretv_management ;;
             15) frp_management ;;
             16) safeline_waf_management ;;
-            17) akilecloud_management ;;
+            17) 
+                akilecloud_management 
+                ;;
             0) break ;; 
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
