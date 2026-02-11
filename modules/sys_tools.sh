@@ -18,6 +18,9 @@ function sys_tools_menu() {
         echo -e " ${GREEN}7.${NC}  修改虚拟内存大小(Swap)"
         echo -e " ${GREEN}8.${NC}  内存加速清理"
         echo -e " ${GREEN}9.${NC}  修改DNS服务器"
+        echo -e " ${GREEN}10.${NC} Fail2ban配置"
+        echo -e " ${GREEN}11.${NC} SSL证书管理"
+        echo -e " ${GREEN}12.${NC} 进程管理工具"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
@@ -50,6 +53,15 @@ function sys_tools_menu() {
                 ;;
             9)
                 modify_dns_server
+                ;;
+            10)
+                fail2ban_management
+                ;;
+            11)
+                ssl_certificate_management
+                ;;
+            12)
+                process_management
                 ;;
             0)
                 break
@@ -137,6 +149,241 @@ function open_specified_port() {
         fi
     fi
     read -p "按任意键继续..."
+}
+
+# Fail2ban 配置管理
+function fail2ban_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}             Fail2ban 配置管理${NC}"
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e " ${GREEN}1.${NC}  安装 Fail2ban"
+        echo -e " ${GREEN}2.${NC}  查看 Fail2ban 运行状态"
+        echo -e " ${GREEN}3.${NC}  启用/禁用 SSH 暴力破解防护"
+        echo -e " ${GREEN}4.${NC}  查看当前已封禁的 IP 列表"
+        echo -e " ${GREEN}5.${NC}  手动解封指定 IP"
+        echo -e " ${GREEN}6.${NC}  卸载 Fail2ban"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC}  返回上一级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择: " f2b_choice
+
+        case "$f2b_choice" in
+            1)
+                echo -e "${YELLOW}正在安装 Fail2ban...${NC}"
+                if command -v apt &> /dev/null; then
+                    apt update && apt install -y fail2ban
+                elif command -v yum &> /dev/null; then
+                    yum install -y epel-release
+                    yum install -y fail2ban
+                fi
+                systemctl enable fail2ban
+                systemctl start fail2ban
+                echo -e "${GREEN}Fail2ban 安装并启动完成。${NC}"
+                read -p "按任意键继续..."
+                ;;
+            2)
+                systemctl status fail2ban
+                read -p "按任意键继续..."
+                ;;
+            3)
+                if [ -f /etc/fail2ban/jail.local ]; then
+                    if grep -q "enabled = true" /etc/fail2ban/jail.local; then
+                        sed -i 's/enabled = true/enabled = false/g' /etc/fail2ban/jail.local
+                        echo -e "${YELLOW}SSH 防护已禁用。${NC}"
+                    else
+                        sed -i 's/enabled = false/enabled = true/g' /etc/fail2ban/jail.local
+                        echo -e "${GREEN}SSH 防护已启用。${NC}"
+                    fi
+                else
+                    cat > /etc/fail2ban/jail.local <<EOF
+[sshd]
+enabled = true
+port = ssh
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 5
+bantime = 3600
+EOF
+                    echo -e "${GREEN}已创建基础配置并启用 SSH 防护。${NC}"
+                fi
+                systemctl restart fail2ban
+                read -p "按任意键继续..."
+                ;;
+            4)
+                echo -e "${GREEN}当前已封禁的 IP 列表:${NC}"
+                fail2ban-client status sshd
+                read -p "按任意键继续..."
+                ;;
+            5)
+                read -p "请输入要解封的 IP: " unban_ip
+                fail2ban-client set sshd unbanip "$unban_ip"
+                echo -e "${GREEN}已尝试解封 IP: $unban_ip${NC}"
+                read -p "按任意键继续..."
+                ;;
+            6)
+                read -p "确定要卸载 Fail2ban 吗？(y/N): " confirm_uninstall
+                if [[ "$confirm_uninstall" =~ ^[Yy]$ ]]; then
+                    systemctl stop fail2ban
+                    systemctl disable fail2ban
+                    if command -v apt &> /dev/null; then
+                        apt purge -y fail2ban
+                    elif command -v yum &> /dev/null; then
+                        yum remove -y fail2ban
+                    fi
+                    rm -rf /etc/fail2ban
+                    echo -e "${GREEN}Fail2ban 已卸载。${NC}"
+                fi
+                read -p "按任意键继续..."
+                ;;
+            0)
+                break
+                ;;
+            *)
+                echo -e "${RED}无效的选择，请重新输入！${NC}"
+                sleep 2
+                ;;
+        esac
+    done
+}
+
+# SSL 证书管理 (acme.sh)
+function ssl_certificate_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}             SSL 证书管理 (acme.sh)${NC}"
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e " ${GREEN}1.${NC}  安装 acme.sh 脚本"
+        echo -e " ${GREEN}2.${NC}  申请 SSL 证书 (HTTP 验证 - 需 80 端口)"
+        echo -e " ${GREEN}3.${NC}  申请 SSL 证书 (DNS 验证 - 支持泛域名)"
+        echo -e " ${GREEN}4.${NC}  查看已申请的证书列表"
+        echo -e " ${GREEN}5.${NC}  手动续签现有证书"
+        echo -e " ${GREEN}6.${NC}  卸载 acme.sh"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC}  返回上一级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择: " ssl_choice
+
+        case "$ssl_choice" in
+            1)
+                echo -e "${YELLOW}正在安装 acme.sh...${NC}"
+                curl https://get.acme.sh | sh
+                alias acme.sh=~/.acme.sh/acme.sh
+                echo -e "${GREEN}acme.sh 安装完成。请重新连接 SSH 或运行 'source ~/.bashrc' 以使 alias 生效。${NC}"
+                read -p "按任意键继续..."
+                ;;
+            2)
+                read -p "请输入要申请证书的域名: " domain
+                read -p "请输入网站根目录 (例如 /var/www/html): " web_root
+                ~/.acme.sh/acme.sh --issue -d "$domain" --webroot "$web_root"
+                read -p "按任意键继续..."
+                ;;
+            3)
+                echo -e "${YELLOW}DNS 验证需要配置 API Key，请确保已设置环境变量。${NC}"
+                read -p "请输入要申请证书的域名 (例如 *.example.com): " domain
+                read -p "请输入 DNS 提供商 (例如 dns_cf, dns_ali): " dns_provider
+                ~/.acme.sh/acme.sh --issue -d "$domain" --dns "$dns_provider"
+                read -p "按任意键继续..."
+                ;;
+            4)
+                ~/.acme.sh/acme.sh --list
+                read -p "按任意键继续..."
+                ;;
+            5)
+                read -p "请输入要续签的域名: " domain
+                ~/.acme.sh/acme.sh --renew -d "$domain" --force
+                read -p "按任意键继续..."
+                ;;
+            6)
+                ~/.acme.sh/acme.sh --uninstall
+                rm -rf ~/.acme.sh
+                echo -e "${GREEN}acme.sh 已卸载。${NC}"
+                read -p "按任意键继续..."
+                ;;
+            0)
+                break
+                ;;
+            *)
+                echo -e "${RED}无效的选择，请重新输入！${NC}"
+                sleep 2
+                ;;
+        esac
+    done
+}
+
+# 进程管理工具
+function process_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}             进程管理工具${NC}"
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e " ${GREEN}1.${NC}  实时进程监控 (htop/top)"
+        echo -e " ${GREEN}2.${NC}  查找并结束进程 (按名称/PID)"
+        echo -e " ${GREEN}3.${NC}  系统服务管理 (systemd)"
+        echo -e " ${GREEN}4.${NC}  查看网络端口占用情况"
+        echo -e " ${GREEN}5.${NC}  进程树查看 (pstree)"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC}  返回上一级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择: " proc_choice
+
+        case "$proc_choice" in
+            1)
+                if command -v htop &> /dev/null; then
+                    htop
+                else
+                    top
+                fi
+                ;;
+            2)
+                read -p "请输入要查找的进程名称或 PID: " search_term
+                ps aux | grep -i "$search_term" | grep -v grep
+                read -p "请输入要结束的 PID (输入 0 取消): " kill_pid
+                if [ "$kill_pid" != "0" ]; then
+                    kill -9 "$kill_pid"
+                    echo -e "${GREEN}已尝试终止进程 $kill_pid${NC}"
+                fi
+                read -p "按任意键继续..."
+                ;;
+            3)
+                read -p "请输入服务名称 (例如 nginx, fail2ban): " service_name
+                echo -e "请选择操作: ${GREEN}1.启动 2.停止 3.重启 4.状态 5.启用自启 6.禁用自启${NC}"
+                read -p "操作选择: " svc_op
+                case "$svc_op" in
+                    1) systemctl start "$service_name" ;;
+                    2) systemctl stop "$service_name" ;;
+                    3) systemctl restart "$service_name" ;;
+                    4) systemctl status "$service_name" ;;
+                    5) systemctl enable "$service_name" ;;
+                    6) systemctl disable "$service_name" ;;
+                esac
+                read -p "按任意键继续..."
+                ;;
+            4)
+                view_port_occupancy_status
+                ;;
+            5)
+                if command -v pstree &> /dev/null; then
+                    pstree -p
+                else
+                    echo -e "${RED}未安装 pstree，正在安装...${NC}"
+                    apt install -y psmisc || yum install -y psmisc
+                    pstree -p
+                fi
+                read -p "按任意键继续..."
+                ;;
+            0)
+                break
+                ;;
+            *)
+                echo -e "${RED}无效的选择，请重新输入！${NC}"
+                sleep 2
+                ;;
+        esac
+    done
 }
 
 # 系统时区调整
