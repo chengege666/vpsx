@@ -24,11 +24,12 @@ function app_center_menu() {
         echo -e " ${GREEN}13.${NC} MoonTV流媒体应用管理"
         echo -e " ${GREEN}14.${NC} LibreTV流媒体应用管理"
         echo -e " ${GREEN}15.${NC} FRP内网穿透管理"
-        echo -e " ${GREEN}16.${NC} 雷池WAF安全防护系统"
+        echo -e " ${GREEN}16.${NC}  雷池WAF安全防护系统"
+        echo -e " ${GREEN}17.${NC}  AkileCloud（专用脚本）"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-15): " app_choice
+        read -p "请输入你的选择 (0-17): " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
@@ -47,6 +48,7 @@ function app_center_menu() {
             14) libretv_management ;;
             15) frp_management ;;
             16) safeline_waf_management ;;
+            17) akilecloud_management ;;
             0) break ;; 
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -6048,5 +6050,16 @@ function uninstall_safeline() {
     rm -rf "$safeline_dir"
     
     echo -e "${GREEN}✅ 雷池 WAF 已完全卸载。${NC}"
+    read -p "按回车键继续..."
+}
+
+# AkileCloud 专用脚本
+function akilecloud_management() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          AkileCloud 专用脚本${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${BLUE}正在执行 AkileCloud 脚本...${NC}"
+    wget -qO- https://raw.githubusercontent.com/akile-network/aktools/refs/heads/main/akdns.sh | bash
     read -p "按回车键继续..."
 }
