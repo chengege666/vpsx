@@ -6062,13 +6062,10 @@ function akilecloud_management() {
     echo -e "${GREEN}          AkileCloud 专用脚本${NC}"
     echo -e "${CYAN}=========================================${NC}"
     echo -e "${BLUE}正在执行 AkileCloud DNS 配置脚本...${NC}"
-    echo -e "${YELLOW}脚本来源: https://github.com/akile-network/aktools${NC}"
-    echo ""
-    
-    # 直接执行远程脚本
     wget -qO- https://raw.githubusercontent.com/akile-network/aktools/refs/heads/main/akdns.sh | bash
-    
-    echo ""
     echo -e "${GREEN}✅ AkileCloud 脚本执行完成。${NC}"
     read -p "按回车键继续..."
 }
+1
+# 启动主菜单
+app_center_menu
