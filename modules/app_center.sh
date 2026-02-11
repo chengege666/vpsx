@@ -5837,8 +5837,21 @@ EOF
     if [ $? -eq 0 ]; then
         echo ""
         echo -e "${GREEN}✅ 雷池 WAF 安装成功！${NC}"
-        echo ""
         
+        # === 新增/修改部分开始 ===
+        echo -e "${BLUE}正在等待服务初始化以获取初始密码 (约需 15 秒)...${NC}"
+        sleep 15  # 必须等待数据库和服务完全启动，否则获取密码会失败
+        
+        echo ""
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}          初始登录凭证          ${NC}"
+        echo -e "${CYAN}=========================================${NC}"
+        # 执行容器内部命令重置并打印密码
+        docker compose exec mgt-api reset-admin-password
+        echo -e "${CYAN}=========================================${NC}"
+        # === 新增/修改部分结束 ===
+
+        echo ""
         IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
         
         echo -e "${CYAN}访问信息：${NC}"
@@ -5847,7 +5860,6 @@ EOF
         echo -e "${CYAN}(雷池默认使用 HTTPS 协议)${NC}"
         echo ""
         echo -e "${YELLOW}⚠️  首次登录请使用浏览器访问，如遇证书警告请点击\"继续访问/高级\"${NC}"
-        echo -e "${YELLOW}⚠️  默认管理员密码需手动设置或查看日志，建议使用菜单中的\"重置管理员密码\"功能设定。${NC}"
     else
         echo -e "${RED}❌ 安装失败，请检查 Docker 日志。${NC}"
     fi
