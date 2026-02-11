@@ -318,9 +318,9 @@ function process_management() {
     while true; do
         clear
         echo -e "${CYAN}=========================================${NC}"
-        echo -e "${GREEN}             进程管理工具${NC}"
+        echo -e "${GREEN}             进程管理工具）${NC}"
         echo -e "${CYAN}=========================================${NC}"
-        echo -e " ${GREEN}1.${NC}  实时进程监控 (htop/top)"
+        echo -e " ${GREEN}1.${NC}  实时进程监控 (输入q退出)"
         echo -e " ${GREEN}2.${NC}  查找并结束进程 (按名称/PID)"
         echo -e " ${GREEN}3.${NC}  系统服务管理 (systemd)"
         echo -e " ${GREEN}4.${NC}  查看网络端口占用情况"
