@@ -22,27 +22,10 @@ fi
 # 项目路径
 INSTALL_PATH="/root/vpsx"
 REPO_URL="https://github.com/chengege666/vpsx.git"
-MIRROR_URL="https://github.1231818.xyz/https://github.com/chengege666/vpsx.git"
 
 echo -e "${CYAN}================================================${NC}"
 echo -e "${GREEN}            vpsx 一键安装工具            ${NC}"
 echo -e "${CYAN}================================================${NC}"
-
-# 选择下载源
-select_download_source() {
-    echo -e "请选择下载源："
-    echo -e "1) GitHub 原生 (可能需要魔法)"
-    echo -e "2) GitHub 镜像 (推荐国内服务器)"
-    read -p "请输入选项 [1-2] (默认2): " source_choice
-    source_choice=${source_choice:-2}
-    
-    if [ "$source_choice" == "1" ]; then
-        FINAL_REPO_URL="$REPO_URL"
-    else
-        FINAL_REPO_URL="$MIRROR_URL"
-    fi
-    echo -e "${BLUE}已选择下载源: ${FINAL_REPO_URL}${NC}"
-}
 
 # 检测包管理器并安装必要依赖
 install_dependencies() {
@@ -69,7 +52,7 @@ download_project() {
         cd "$INSTALL_PATH" && git pull
     else
         echo -e "${YELLOW}正在克隆项目仓库...${NC}"
-        git clone "$FINAL_REPO_URL" "$INSTALL_PATH"
+        git clone "$REPO_URL" "$INSTALL_PATH"
     fi
 
     if [ $? -ne 0 ]; then
@@ -94,7 +77,6 @@ setup_environment() {
 }
 
 # 执行安装流程
-select_download_source
 install_dependencies
 download_project
 setup_environment
