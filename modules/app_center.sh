@@ -6069,3 +6069,6 @@ function akilecloud_management() {
 1
 # 启动主菜单
 app_center_menu
+
+# 调试：检查函数是否被正确定义
+type akilecloud_management
