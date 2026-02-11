@@ -22,7 +22,7 @@ fi
 # 项目路径
 INSTALL_PATH="/root/vpsx"
 REPO_URL="https://github.com/chengege666/vpsx.git"
-MIRROR_URL="https://ghp.ci/https://github.com/chengege666/vpsx.git"
+MIRROR_URL="https://github.1231818.xyz/https://github.com/chengege666/vpsx.git"
 
 echo -e "${CYAN}================================================${NC}"
 echo -e "${GREEN}            vpsx 一键安装工具            ${NC}"

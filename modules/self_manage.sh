@@ -84,6 +84,21 @@ function update_script() {
             fi
         fi
         
+        # 选择更新源
+        echo -e "请选择更新源："
+        echo -e "1) GitHub 原生 (可能需要魔法)"
+        echo -e "2) GitHub 镜像 (推荐国内服务器)"
+        read -p "请输入选项 [1-2] (默认2): " update_choice
+        update_choice=${update_choice:-2}
+        
+        if [ "$update_choice" == "2" ]; then
+            echo -e "${BLUE}正在配置镜像源加速...${NC}"
+            git remote set-url origin "https://github.1231818.xyz/https://github.com/chengege666/vpsx.git"
+        else
+            echo -e "${BLUE}使用 GitHub 原生链接...${NC}"
+            git remote set-url origin "https://github.com/chengege666/vpsx.git"
+        fi
+
         if git pull; then
             chmod +x "$main_script"
             echo -e "${GREEN}脚本通过 Git 更新成功！${NC}"
@@ -118,7 +133,19 @@ function update_script() {
             fi
         fi
 
-        wget -O "$main_script.tmp" "https://raw.githubusercontent.com/chengege666/vpsx/main/vpsx.sh"
+        # 选择下载源
+        echo -e "请选择下载源："
+        echo -e "1) GitHub 原生 (可能需要魔法)"
+        echo -e "2) GitHub 镜像 (推荐国内服务器)"
+        read -p "请输入选项 [1-2] (默认2): " update_choice
+        update_choice=${update_choice:-2}
+
+        local raw_url="https://raw.githubusercontent.com/chengege666/vpsx/main/vpsx.sh"
+        if [ "$update_choice" == "2" ]; then
+            raw_url="https://github.1231818.xyz/https://raw.githubusercontent.com/chengege666/vpsx/main/vpsx.sh"
+        fi
+
+        wget -O "$main_script.tmp" "$raw_url"
         if [ $? -eq 0 ]; then
             mv "$main_script.tmp" "$main_script"
             chmod +x "$main_script"
