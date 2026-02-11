@@ -5793,11 +5793,22 @@ function install_safeline() {
     local postgres_pwd=$(LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 32)
     local redis_pwd=$(LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 32)
     
-    echo -e "${BLUE}正在生成环境配置文件 (.env)...${NC}"
+    echo -e "${BLUE}正在检测系统架构并生成环境配置文件 (.env)...${NC}"
+    
+    # 检测是否为 ARM 架构
+    local arch_suffix=""
+    if [ "$(uname -m)" = "aarch64" ]; then
+        arch_suffix="-arm64"
+    fi
+
     cat > "${safeline_dir}/.env" <<EOF
 SAFELINE_DIR=${safeline_dir}
 IMAGE_TAG=latest
+IMAGE_PREFIX=chaitin
+ARCH_SUFFIX=${arch_suffix}
+REGION=
 MGT_PORT=${mgt_port}
+MGT_PROXY=
 POSTGRES_PASSWORD=${postgres_pwd}
 REDIS_PASSWORD=${redis_pwd}
 SUBNET_PREFIX=172.22.222
