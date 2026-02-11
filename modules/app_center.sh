@@ -55,17 +55,6 @@ function app_center_menu() {
     done
 }
 
-# AkileCloud 专用脚本
-function akilecloud_management() {
-    clear
-    echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}          AkileCloud 专用脚本${NC}"
-    echo -e "${CYAN}=========================================${NC}"
-    echo -e "${BLUE}正在执行 AkileCloud 脚本...${NC}"
-    wget -qO- https://raw.githubusercontent.com/akile-network/aktools/refs/heads/main/akdns.sh | bash
-    read -p "按回车键继续..."
-}
-
 # 1Panel 管理菜单
 function one_panel_management() {
     while true; do
@@ -6046,5 +6035,16 @@ function uninstall_safeline() {
     rm -rf "$safeline_dir"
     
     echo -e "${GREEN}✅ 雷池 WAF 已完全卸载。${NC}"
+    read -p "按回车键继续..."
+}
+
+# AkileCloud 专用脚本
+function akilecloud_management() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          AkileCloud 专用脚本${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${BLUE}正在执行 AkileCloud 脚本...${NC}"
+    wget -qO- https://raw.githubusercontent.com/akile-network/aktools/refs/heads/main/akdns.sh | bash
     read -p "按回车键继续..."
 }
