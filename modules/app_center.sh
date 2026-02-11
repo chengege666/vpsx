@@ -24,6 +24,7 @@ function app_center_menu() {
         echo -e " ${GREEN}13.${NC} MoonTV流媒体应用管理"
         echo -e " ${GREEN}14.${NC} LibreTV流媒体应用管理"
         echo -e " ${GREEN}15.${NC} FRP内网穿透管理"
+        echo -e " ${GREEN}16.${NC} 雷池WAF安全防护系统"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
@@ -45,6 +46,7 @@ function app_center_menu() {
             13) moontv_management ;;
             14) libretv_management ;;
             15) frp_management ;;
+            16) safeline_waf_management ;;
             0) break ;; 
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -5677,4 +5679,335 @@ function frp_info_help() {
     
     echo -e "${CYAN}=========================================${NC}"
     read -p "按回车键返回..."
+}
+
+# =================================================================
+# 雷池 WAF (Safeline) 管理模块
+# =================================================================
+
+function safeline_waf_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}             雷池WAF安全防护系统${NC}"
+        
+        # 检查安装状态
+        local safeline_dir="/data/safeline"
+        local status_text="${RED}未安装${NC}"
+        
+        if [ -d "$safeline_dir" ] && [ -f "$safeline_dir/compose.yaml" ]; then
+            if docker compose -f "$safeline_dir/compose.yaml" ps --services --filter "status=running" | grep -q "mgt-api"; then
+                status_text="${GREEN}运行中${NC}"
+            else
+                status_text="${YELLOW}已安装但未运行${NC}"
+            fi
+        fi
+        
+        echo -e "          状态: ${status_text}"
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e " ${GREEN}1.${NC}  安装雷池 WAF (Docker Compose)"
+        echo -e " ${GREEN}2.${NC}  启动雷池 WAF"
+        echo -e " ${GREEN}3.${NC}  停止雷池 WAF"
+        echo -e " ${GREEN}4.${NC}  重启雷池 WAF"
+        echo -e " ${GREEN}5.${NC}  重置管理员密码"
+        echo -e " ${GREEN}6.${NC}  查看运行状态"
+        echo -e " ${GREEN}7.${NC}  升级雷池 WAF"
+        echo -e " ${GREEN}8.${NC}  卸载雷池 WAF"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC}  返回上级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择: " sl_choice
+
+        case "$sl_choice" in
+            1) install_safeline ;;
+            2) safeline_operation "start" ;;
+            3) safeline_operation "stop" ;;
+            4) safeline_operation "restart" ;;
+            5) reset_safeline_password ;;
+            6) view_safeline_status ;;
+            7) upgrade_safeline ;;
+            8) uninstall_safeline ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
+        esac
+    done
+}
+
+function install_safeline() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          安装雷池 WAF (Safeline)${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    # 1. 环境检测
+    echo -n "正在检测 Docker 环境... "
+    if ! command -v docker &> /dev/null; then
+        echo -e "${RED}未安装${NC}"
+        echo -e "${YELLOW}请先在应用中心安装 Docker 环境。${NC}"
+        read -p "按回车键返回..."
+        return
+    else
+        echo -e "${GREEN}已安装${NC}"
+    fi
+
+    local safeline_dir="/data/safeline"
+    echo -e "正在准备安装目录 ${safeline_dir} ..."
+    
+    # 2. 检查旧版本
+    if [ -d "$safeline_dir" ]; then
+        echo -e "${YELLOW}检测到目录已存在。${NC}"
+        read -p "是否覆盖安装？(y/N): " confirm_overwrite
+        if [[ ! "$confirm_overwrite" =~ ^[yY]$ ]]; then
+            return
+        fi
+        # 尝试停止旧容器
+        if [ -f "$safeline_dir/compose.yaml" ]; then
+             docker compose -f "$safeline_dir/compose.yaml" down >/dev/null 2>&1
+        fi
+    fi
+    mkdir -p "$safeline_dir"
+
+    echo ""
+    # 3. 端口配置
+    read -p "请输入管理后台映射端口 (默认 9443): " mgt_port
+    mgt_port=${mgt_port:-9443}
+
+    # 简单端口检查
+    if command -v ss &> /dev/null; then
+        if ss -tuln | grep -q ":${mgt_port} "; then
+            echo -e "${RED}❌ 端口 ${mgt_port} 已被占用，请选择其他端口。${NC}"
+            read -p "按回车键返回..."
+            return
+        fi
+    fi
+
+    echo ""
+    echo -e "${BLUE}正在下载官方 Docker Compose 配置...${NC}"
+    if ! curl -fsSL "https://waf-ce.chaitin.cn/release/latest/compose.yaml" -o "${safeline_dir}/compose.yaml"; then
+        echo -e "${RED}下载失败，请检查网络连接。${NC}"
+        read -p "按回车键返回..."
+        return
+    fi
+
+    echo -e "${BLUE}正在生成随机数据库密码...${NC}"
+    local postgres_pwd=$(LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 32)
+    local redis_pwd=$(LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 32)
+    
+    echo -e "${BLUE}正在生成环境配置文件 (.env)...${NC}"
+    cat > "${safeline_dir}/.env" <<EOF
+SAFELINE_DIR=${safeline_dir}
+IMAGE_TAG=latest
+MGT_PORT=${mgt_port}
+POSTGRES_PASSWORD=${postgres_pwd}
+REDIS_PASSWORD=${redis_pwd}
+SUBNET_PREFIX=172.22.222
+EOF
+
+    echo ""
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${YELLOW}安装配置确认：${NC}"
+    echo -e "安装目录: ${GREEN}${safeline_dir}${NC}"
+    echo -e "管理端口: ${GREEN}${mgt_port}${NC}"
+    echo -e "版本: ${GREEN}latest${NC}"
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    
+    read -p "确认开始安装？(y/N): " confirm_install
+    if [[ ! "$confirm_install" =~ ^[yY]$ ]]; then
+        echo "安装已取消。"
+        return
+    fi
+
+    echo ""
+    echo -e "${BLUE}正在拉取镜像并启动容器...${NC}"
+    cd "$safeline_dir"
+    docker compose up -d
+
+    if [ $? -eq 0 ]; then
+        echo ""
+        echo -e "${GREEN}✅ 雷池 WAF 安装成功！${NC}"
+        echo ""
+        
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        
+        echo -e "${CYAN}访问信息：${NC}"
+        [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}https://${ipv4}:${mgt_port}${NC}"
+        [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}https://[${ipv6}]:${mgt_port}${NC}"
+        echo -e "${CYAN}(雷池默认使用 HTTPS 协议)${NC}"
+        echo ""
+        echo -e "${YELLOW}⚠️  首次登录请使用浏览器访问，如遇证书警告请点击\"继续访问/高级\"${NC}"
+        echo -e "${YELLOW}⚠️  默认管理员密码需手动设置或查看日志，建议使用菜单中的\"重置管理员密码\"功能设定。${NC}"
+    else
+        echo -e "${RED}❌ 安装失败，请检查 Docker 日志。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function safeline_operation() {
+    local action=$1
+    local safeline_dir="/data/safeline"
+    
+    if [ ! -d "$safeline_dir" ] || [ ! -f "$safeline_dir/compose.yaml" ]; then
+        echo -e "${RED}未检测到雷池安装文件。${NC}"
+        read -p "按回车键返回..."
+        return
+    fi
+    
+    cd "$safeline_dir"
+    
+    case "$action" in
+        "start")
+            echo -e "${BLUE}正在启动雷池 WAF...${NC}"
+            docker compose up -d
+            echo -e "${GREEN}启动命令已执行。${NC}"
+            ;;
+        "stop")
+            echo -e "${BLUE}正在停止雷池 WAF...${NC}"
+            docker compose stop
+            echo -e "${GREEN}停止命令已执行。${NC}"
+            ;;
+        "restart")
+            echo -e "${BLUE}正在重启雷池 WAF...${NC}"
+            docker compose restart
+            echo -e "${GREEN}重启命令已执行。${NC}"
+            ;;
+    esac
+    read -p "按回车键继续..."
+}
+
+function reset_safeline_password() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          重置管理员密码${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    local safeline_dir="/data/safeline"
+    if [ ! -d "$safeline_dir" ]; then
+        echo -e "${RED}未安装雷池 WAF。${NC}"
+        read -p "按回车键返回..."
+        return
+    fi
+
+    # 检查容器是否运行
+    if ! docker compose -f "$safeline_dir/compose.yaml" ps --services --filter "status=running" | grep -q "mgt-api"; then
+        echo -e "${RED}雷池服务未运行，请先启动服务。${NC}"
+        read -p "按回车键返回..."
+        return
+    fi
+
+    echo -e "${BLUE}正在重置 admin 密码...${NC}"
+    cd "$safeline_dir"
+    
+    # 执行重置命令
+    docker compose exec mgt-api reset-admin-password
+    
+    echo ""
+    echo -e "${GREEN}✅ 密码重置成功，请使用上方显示的密码登录。${NC}"
+    read -p "按回车键继续..."
+}
+
+function view_safeline_status() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          雷池 WAF 运行状态${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    local safeline_dir="/data/safeline"
+    if [ ! -d "$safeline_dir" ]; then
+        echo -e "${RED}未安装雷池 WAF。${NC}"
+        read -p "按回车键返回..."
+        return
+    fi
+
+    cd "$safeline_dir"
+    docker compose ps
+    
+    echo ""
+    if [ -f ".env" ]; then
+        local port=$(grep "MGT_PORT" .env | cut -d= -f2)
+        echo -e "管理端口配置: ${GREEN}${port}${NC}"
+    fi
+    
+    read -p "按回车键继续..."
+}
+
+function upgrade_safeline() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          升级雷池 WAF${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    local safeline_dir="/data/safeline"
+    if [ ! -d "$safeline_dir" ]; then
+        echo -e "${RED}未安装雷池 WAF。${NC}"
+        read -p "按回车键返回..."
+        return
+    fi
+    
+    echo -e "${YELLOW}升级步骤：${NC}"
+    echo "1. 更新 compose.yaml 配置文件"
+    echo "2. 拉取最新镜像"
+    echo "3. 重启服务"
+    echo ""
+    read -p "确认开始升级？(y/N): " confirm
+    if [[ ! "$confirm" =~ ^[yY]$ ]]; then
+        return
+    fi
+
+    cd "$safeline_dir"
+    
+    echo -e "${BLUE}正在下载最新配置文件...${NC}"
+    if curl -fsSL "https://waf-ce.chaitin.cn/release/latest/compose.yaml" -o compose.yaml; then
+        echo -e "${GREEN}配置文件更新成功。${NC}"
+    else
+        echo -e "${RED}配置文件下载失败。${NC}"
+        read -p "按回车键返回..."
+        return
+    fi
+    
+    echo -e "${BLUE}正在拉取最新镜像...${NC}"
+    docker compose pull
+    
+    echo -e "${BLUE}正在应用更新并重启...${NC}"
+    docker compose up -d --remove-orphans
+    
+    echo -e "${GREEN}✅ 升级完成！${NC}"
+    read -p "按回车键继续..."
+}
+
+function uninstall_safeline() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${RED}          卸载雷池 WAF${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    local safeline_dir="/data/safeline"
+    if [ ! -d "$safeline_dir" ]; then
+        echo -e "${YELLOW}未检测到安装目录。${NC}"
+        read -p "按回车键返回..."
+        return
+    fi
+    
+    echo -e "${RED}⚠️  警告：此操作将执行以下动作：${NC}"
+    echo "1. 停止并删除雷池所有容器"
+    echo "2. 删除 /data/safeline 目录（包含数据库数据、日志、配置）"
+    echo "3. 删除相关的 Docker 网络"
+    echo ""
+    read -p "请输入 'uninstall' 确认卸载: " confirm_str
+    
+    if [ "$confirm_str" != "uninstall" ]; then
+        echo "确认失败，已取消。"
+        read -p "按回车键返回..."
+        return
+    fi
+    
+    cd "$safeline_dir"
+    echo -e "${BLUE}正在停止容器...${NC}"
+    docker compose down
+    
+    echo -e "${BLUE}正在删除数据目录...${NC}"
+    cd /
+    rm -rf "$safeline_dir"
+    
+    echo -e "${GREEN}✅ 雷池 WAF 已完全卸载。${NC}"
+    read -p "按回车键继续..."
 }
