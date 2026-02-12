@@ -3026,7 +3026,7 @@ function access_moontv_web() {
     fi
     
     # 获取当前端口
-    local host_port=$(grep -oP "ports:\s*-\s*'\K[0-9]+(?=:3000)" /opt/moontv/docker-compose.yml | head -1)
+    local host_port=$(grep -E "[0-9]+:3000" /opt/moontv/docker-compose.yml | grep -oP "[0-9]+(?=:3000)" | head -1)
     host_port=${host_port:-3000}
     
     # 获取用户名
