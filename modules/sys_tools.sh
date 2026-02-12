@@ -652,7 +652,7 @@ function accelerate_memory_clean() {
 }
 
 # 修改DNS服务器
-ffunction modify_dns_server() {
+function modify_dns_server() {
     clear
     echo -e "${CYAN}=========================================${NC}"
     echo -e "${GREEN}          修改DNS服务器${NC}"
@@ -700,7 +700,6 @@ ffunction modify_dns_server() {
     esac
     read -p "按任意键继续..."
 }
-
 function close_specified_port() {
     clear
     echo -e "${CYAN}=========================================${NC}"
