@@ -1073,7 +1073,7 @@ function change_ssh_port() {
         current_ssh_port=22
     fi
     echo -e "当前SSH端口号: ${YELLOW}$current_ssh_port${NC}"
-    read -p "请输入新的SSH端口号 (1024-65535): " new_port
+    read -p "请输入新的SSH端口号: " new_port
 
     if [[ -z "$new_port" ]]; then
         echo -e "${RED}端口号不能为空。${NC}"
@@ -1081,8 +1081,8 @@ function change_ssh_port() {
         return
     fi
 
-    if ! [[ "$new_port" =~ ^[0-9]+$ ]] || (( new_port < 1024 )) || (( new_port > 65535 )); then
-        echo -e "${RED}无效的端口号。请输入一个介于 1024 到 65535 之间的数字。${NC}"
+    if ! [[ "$new_port" =~ ^[0-9]+$ ]] || (( new_port < 1 )) || (( new_port > 65535 )); then
+        echo -e "${RED}无效的端口号。请输入一个介于 1 到 65535 之间的数字。${NC}"
         read -p "按任意键继续..."
         return
     fi
