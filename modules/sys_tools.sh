@@ -652,24 +652,13 @@ function accelerate_memory_clean() {
 }
 
 # 修改DNS服务器
-function modify_dns_server() {
+ffunction modify_dns_server() {
     clear
     echo -e "${CYAN}=========================================${NC}"
     echo -e "${GREEN}          修改DNS服务器${NC}"
     echo -e "${CYAN}=========================================${NC}"
-    
-    # 备份当前配置
-    if [ -f /etc/resolv.conf ]; then
-        cp /etc/resolv.conf /etc/resolv.conf.bak.$(date +%F_%T)
-        echo -e "${YELLOW}已备份当前 /etc/resolv.conf 到 /etc/resolv.conf.bak.*${NC}"
-    fi
-
-    echo -e "当前DNS服务器设置:"
-    if command -v resolvectl >/dev/null 2>&1; then
-        resolvectl dns 2>/dev/null | grep -v "No DNS servers" || grep "nameserver" /etc/resolv.conf
-    else
-        grep "nameserver" /etc/resolv.conf
-    fi
+    echo -e "当前DNS服务器设置 (来自 /etc/resolv.conf):"
+    grep "nameserver" /etc/resolv.conf
     echo ""
     echo -e "请选择操作:"
     echo -e " ${GREEN}1.${NC} 设置为 Google DNS (8.8.8.8, 8.8.4.4)"
@@ -678,96 +667,40 @@ function modify_dns_server() {
     echo -e " ${RED}0.${NC} 返回"
     read -p "请输入你的选择 (0-3): " choice
 
-    local dns1=""
-    local dns2=""
-
     case $choice in
         1)
-            dns1="8.8.8.8"
-            dns2="8.8.4.4"
+            echo "nameserver 8.8.8.8" > /etc/resolv.conf
+            echo "nameserver 8.8.4.4" >> /etc/resolv.conf
+            echo -e "${GREEN}已设置为 Google DNS。${NC}"
             ;;
         2)
-            dns1="1.1.1.1"
-            dns2="1.0.0.1"
+            echo "nameserver 1.1.1.1" > /etc/resolv.conf
+            echo "nameserver 1.0.0.1" >> /etc/resolv.conf
+            echo -e "${GREEN}已设置为 Cloudflare DNS。${NC}"
             ;;
         3)
-            read -p "请输入主DNS服务器: " dns1
-            if [[ -z "$dns1" ]]; then
+            read -p "请输入主DNS服务器: " primary_dns
+            if [[ -z "$primary_dns" ]]; then
                 echo -e "${RED}主DNS不能为空。${NC}"
-                read -p "按任意键继续..."
-                return
+            else
+                read -p "请输入备用DNS服务器 (可选，留空则不设置): " secondary_dns
+                echo "nameserver $primary_dns" > /etc/resolv.conf
+                if [ -n "$secondary_dns" ]; then
+                    echo "nameserver $secondary_dns" >> /etc/resolv.conf
+                fi
+                echo -e "${GREEN}已设置为自定义DNS。${NC}"
             fi
-            read -p "请输入备用DNS服务器 (可选，留空则不设置): " dns2
             ;;
         0)
             return
             ;;
         *)
             echo -e "${RED}无效的选择，请重新输入。${NC}"
-            read -p "按任意键继续..."
-            return
             ;;
     esac
-
-    echo -e "${YELLOW}正在应用 DNS 设置: $dns1 ${dns2:+ $dns2}...${NC}"
-
-    # 1. 尝试使用 nmcli (NetworkManager)
-    if command -v nmcli >/dev/null 2>&1 && systemctl is-active --quiet NetworkManager; then
-        local conn_name=$(nmcli -t -f NAME connection show --active | head -n 1)
-        if [ -n "$conn_name" ]; then
-            echo -e "${BLUE}检测到 NetworkManager，正在通过 nmcli 修改...${NC}"
-            nmcli connection modify "$conn_name" ipv4.dns "$dns1${dns2:+ $dns2}"
-            nmcli connection modify "$conn_name" ipv4.ignore-auto-dns yes
-            nmcli connection up "$conn_name"
-            echo -e "${GREEN}DNS 修改成功 (via nmcli)。${NC}"
-            read -p "按任意键继续..."
-            return
-        fi
-    fi
-
-    # 2. 尝试使用 resolvectl (systemd-resolved)
-    if command -v resolvectl >/dev/null 2>&1 && systemctl is-active --quiet systemd-resolved; then
-        local interface=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'dev \K\S+' || ip route | grep default | awk '{print $5}' | head -1)
-        if [ -n "$interface" ]; then
-            echo -e "${BLUE}检测到 systemd-resolved，正在通过 resolvectl 修改接口 $interface...${NC}"
-            resolvectl dns "$interface" "$dns1" ${dns2:+"$dns2"}
-            resolvectl flush-caches
-            echo -e "${GREEN}DNS 修改成功 (via resolvectl)。${NC}"
-             echo -e "${YELLOW}注意: 此修改在重启后可能需要持久化配置 (如修改 /etc/systemd/resolved.conf)。${NC}"
-             read -p "按任意键继续..."
-             return
-         fi
-     fi
-
-     # 3. 尝试使用 resolvconf (如果安装了 resolvconf 软件包)
-     if command -v resolvconf >/dev/null 2>&1; then
-         echo -e "${BLUE}检测到 resolvconf，正在尝试修改...${NC}"
-         echo "nameserver $dns1" > /tmp/resolv.conf.new
-         [ -n "$dns2" ] && echo "nameserver $dns2" >> /tmp/resolv.conf.new
-         cat /tmp/resolv.conf.new | resolvconf -a eth0.dns # 假设接口名为 eth0，或者根据实际情况
-         rm /tmp/resolv.conf.new
-         echo -e "${GREEN}DNS 修改已提交至 resolvconf。${NC}"
-         read -p "按任意键继续..."
-         return
-     fi
-
-     # 4. 兜底方案: 直接修改 /etc/resolv.conf
-    echo -e "${BLUE}正在直接修改 /etc/resolv.conf...${NC}"
-    if [ -L /etc/resolv.conf ]; then
-        echo -e "${YELLOW}警告: /etc/resolv.conf 是一个符号链接，直接修改可能被系统覆盖。${NC}"
-        # 尝试取消符号链接并创建真实文件（可选，但通常较安全）
-        # rm -f /etc/resolv.conf
-    fi
-    
-    echo "nameserver $dns1" > /etc/resolv.conf
-    if [ -n "$dns2" ]; then
-        echo "nameserver $dns2" >> /etc/resolv.conf
-    fi
-    
-    echo -e "${GREEN}DNS 修改成功 (直接写入)。${NC}"
-    echo -e "${YELLOW}提示: 如果重启后失效，请检查系统网络管理工具配置。${NC}"
     read -p "按任意键继续..."
 }
+
 function close_specified_port() {
     clear
     echo -e "${CYAN}=========================================${NC}"
