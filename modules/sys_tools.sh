@@ -1081,8 +1081,8 @@ function change_ssh_port() {
         return
     fi
 
-    if ! [[ "$new_port" =~ ^[0-9]+$ ]] || (( new_port < 1024 )) || (( new_port > 65535 )); then
-        echo -e "${RED}无效的端口号。请输入一个介于 1024 到 65535 之间的数字。${NC}"
+    if ! [[ "$new_port" =~ ^[0-9]+$ ]] || [[ "$new_port" -ne 22 && ( "$new_port" -lt 1024 || "$new_port" -gt 65535 ) ]]; then
+        echo -e "${RED}无效的端口号。请输入 22 或 1024-65535 之间的数字。${NC}"
         read -p "按任意键继续..."
         return
     fi
