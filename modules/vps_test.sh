@@ -37,7 +37,7 @@ function vps_test_menu() {
                 ;;
             4)
                 echo -e "${BLUE}正在运行：流媒体测试（专用）...${NC}"
-                bash <(curl -L -s https://github.1231818.xyz/https://github.com/1-stream/RegionRestrictionCheck/raw/main/check.sh)
+                bash <(curl -L -s https://github.com/1-stream/RegionRestrictionCheck/raw/main/check.sh)
                 read -p "按回车键返回..."
                 ;;
             0)
