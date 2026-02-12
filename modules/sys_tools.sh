@@ -1306,8 +1306,9 @@ function change_ssh_port() {
     fi
 
     echo -e "${YELLOW}正在修改SSH配置文件...${NC}"
-    if grep -q "^#?Port" /etc/ssh/sshd_config; then
-        sed -i "s/^#?Port .*/Port $new_port/g" /etc/ssh/sshd_config
+    # 使用 -E 支持 ? 量词，确保能匹配到默认的 #Port 22 或已激活的 Port 22
+    if grep -qE "^#?Port" /etc/ssh/sshd_config; then
+        sed -i -E "s/^#?Port .*/Port $new_port/g" /etc/ssh/sshd_config
     else
         echo "Port $new_port" >> /etc/ssh/sshd_config
     fi
