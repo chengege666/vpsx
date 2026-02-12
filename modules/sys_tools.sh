@@ -1286,7 +1286,7 @@ function change_ssh_port() {
     echo -e "${CYAN}=========================================${NC}"
     echo -e "${GREEN}          修改SSH连接端口${NC}"
     echo -e "${CYAN}=========================================${NC}"
-    current_ssh_port=$(grep -E "^#?Port" /etc/ssh/sshd_config | awk '{print $2}' | head -n 1)
+    current_ssh_port=$(grep -E "^Port" /etc/ssh/sshd_config | awk '{print $2}')
     if [ -z "$current_ssh_port" ]; then
         current_ssh_port=22
     fi
@@ -1306,41 +1306,22 @@ function change_ssh_port() {
     fi
 
     echo -e "${YELLOW}正在修改SSH配置文件...${NC}"
-    # 使用 -E 支持 ? 量词，确保能匹配到默认的 #Port 22 或已激活的 Port 22
-    if grep -qE "^#?Port" /etc/ssh/sshd_config; then
-        sed -i -E "s/^#?Port .*/Port $new_port/g" /etc/ssh/sshd_config
-    else
-        echo "Port $new_port" >> /etc/ssh/sshd_config
-    fi
-
-    # 自动放行防火墙端口
-    echo -e "${YELLOW}正在自动放行防火墙端口 $new_port...${NC}"
-    if command -v ufw &> /dev/null; then
-        ufw allow "$new_port"/tcp >/dev/null 2>&1
-    elif command -v firewall-cmd &> /dev/null; then
-        firewall-cmd --permanent --add-port="$new_port"/tcp >/dev/null 2>&1
-        firewall-cmd --reload >/dev/null 2>&1
-    fi
-
-    # SELinux 适配
-    if command -v semanage &> /dev/null; then
-        echo -e "${YELLOW}检测到 SELinux，正在配置端口策略...${NC}"
-        semanage port -a -t ssh_port_t -p tcp "$new_port" 2>/dev/null || semanage port -m -t ssh_port_t -p tcp "$new_port" 2>/dev/null
-    fi
+    sed -i "s/^#*Port .*/Port $new_port/g" /etc/ssh/sshd_config
 
     echo -e "${YELLOW}正在重启SSH服务...${NC}"
-    local restart_success=false
     if command -v systemctl >/dev/null 2>&1; then
-        systemctl restart sshd && restart_success=true
+        systemctl restart sshd
     elif command -v service >/dev/null 2>&1; then
-        service ssh restart && restart_success=true
+        service ssh restart
+    else
+        echo -e "${RED}无法识别系统服务管理工具，请手动重启SSH服务。${NC}"
     fi
 
-    if [ "$restart_success" = true ]; then
+    if [ $? -eq 0 ]; then
         echo -e "${GREEN}SSH端口已成功修改为 $new_port。${NC}"
-        echo -e "${YELLOW}请务必开启新的 SSH 会话测试连接，确认无误后再关闭当前会话！${NC}"
+        echo -e "${YELLOW}请记住新的端口号，并确保防火墙已放行该端口，以免无法连接。${NC}"
     else
-        echo -e "${RED}SSH服务重启失败，请检查配置文件。${NC}"
+        echo -e "${RED}SSH端口修改失败。${NC}"
     fi
     read -p "按任意键继续..."
 }
