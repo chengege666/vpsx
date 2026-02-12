@@ -425,6 +425,10 @@ function system_environment_repair() {
     
     # 2. 修复 /tmp 权限
     echo -e "${BLUE}[2/4] 正在修复 /tmp 目录权限 (1777)...${NC}"
+    if [ ! -d /tmp ]; then
+        echo -e "${YELLOW}检测到 /tmp 目录不存在，正在尝试创建...${NC}"
+        mkdir -p /tmp
+    fi
     chmod 1777 /tmp
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✅ /tmp 权限已重置。${NC}"
