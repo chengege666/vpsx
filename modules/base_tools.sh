@@ -14,11 +14,12 @@ function basic_tools_menu() {
         echo -e " ${GREEN}5.${NC} 安装 unzip（解压工具）"
         echo -e " ${GREEN}6.${NC} 安装 bzip2（压缩工具）"
         echo -e " ${GREEN}7.${NC} 安装 sudo（提升权限工具）"
-        echo -e " ${GREEN}8.${NC} 卸载工具菜单"
+        echo -e " ${GREEN}8.${NC} 安装 dig（DNS 查询工具）"
+        echo -e " ${GREEN}9.${NC} 卸载工具菜单"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC} 返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择(0-8): " basic_tool_choice
+        read -p "请输入你的选择(0-9): " basic_tool_choice
 
         case "$basic_tool_choice" in
             1)
@@ -43,6 +44,9 @@ function basic_tools_menu() {
                 install_sudo
                 ;;
             8)
+                install_dig
+                ;;
+            9)
                 uninstall_tools_menu
                 ;;
             0)
@@ -108,12 +112,18 @@ function uninstall_tools_menu() {
         else
             echo -e " ${GRAY}7.${NC} 卸载 sudo ${RED}✗ 未安装${NC}"
         fi
+
+        if command -v dig &> /dev/null; then
+            echo -e " ${GREEN}8.${NC} 卸载 dig ${GREEN}✓ 已安装${NC}"
+        else
+            echo -e " ${GRAY}8.${NC} 卸载 dig ${RED}✗ 未安装${NC}"
+        fi
         
-        echo -e " ${GREEN}8.${NC} 批量卸载"
+        echo -e " ${GREEN}9.${NC} 批量卸载"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC} 返回上一级"  
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择(0-8): " uninstall_choice  
+        read -p "请输入你的选择(0-9): " uninstall_choice  
 
         case "$uninstall_choice" in
             1)
@@ -138,6 +148,9 @@ function uninstall_tools_menu() {
                 uninstall_sudo
                 ;;
             8)
+                uninstall_dig
+                ;;
+            9)
                 batch_uninstall
                 ;;
             0)  # 修改这里：8改为0
@@ -554,10 +567,121 @@ function uninstall_sudo() {
     echo
 }
 
+# 安装 dig 函数
+function install_dig() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          安装 dig (DNS 查询工具)${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    # 根据不同的包管理器确定包名（通常是 dnsutils 或 bind-utils）
+    local dig_package=""
+    if [[ "$package_manager" == "apt" ]]; then
+        dig_package="dnsutils"
+    elif [[ "$package_manager" == "yum" || "$package_manager" == "dnf" ]]; then
+        dig_package="bind-utils"
+    elif [[ "$package_manager" == "pacman" ]]; then
+        dig_package="bind-tools"
+    elif [[ "$package_manager" == "zypper" ]]; then
+        dig_package="bind-utils"
+    else
+        dig_package="dnsutils"
+    fi
+
+    echo -e "${BLUE}正在准备安装 $dig_package...${NC}"
+    install_package "$dig_package"
+    
+    if command -v dig &> /dev/null; then
+        echo -e "\n${GREEN}✓ dig 安装成功！${NC}"
+        dig -v
+    else
+        echo -e "\n${RED}✗ dig 安装失败，请检查网络或包管理器状态。${NC}"
+    fi
+    
+    read -p "按任意键返回基础工具菜单..." -n1 -s
+    echo
+}
+
+# 卸载 dig 函数
+function uninstall_dig() {
+    # 检查是否已安装
+    if ! command -v dig &> /dev/null; then
+        echo -e "${YELLOW}检测到 dig 未安装，无需卸载。${NC}"
+        read -p "按任意键返回..." -n1 -s
+        echo
+        return 0
+    fi
+    
+    # 获取 dig 信息
+    local dig_version=$(dig -v 2>/dev/null | head -n1 || echo "未知版本")
+    
+    # 显示确认菜单
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${RED}            卸载确认${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${YELLOW}您确定要卸载 dig 吗？${NC}"
+    echo ""
+    echo -e "${GREEN}工具信息：${NC}"
+    echo -e "名称: ${CYAN}dig${NC}"
+    echo -e "版本: ${CYAN}$dig_version${NC}"
+    echo -e "描述: ${CYAN}DNS 查询工具${NC}"
+    echo ""
+    echo -e "${RED}警告：卸载后相关配置将被删除！${NC}"
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e " ${GREEN}1.${NC} 确认卸载"
+    echo -e " ${RED}2.${NC} 返回工具卸载菜单"
+    echo -e "${CYAN}=========================================${NC}"
+    read -p "请选择(1-2): " confirm_choice
+
+    case "$confirm_choice" in
+        1)
+            echo -e "${YELLOW}正在卸载 dig...${NC}"
+            local dig_package=""
+            if [[ "$package_manager" == "apt" ]]; then
+                dig_package="dnsutils"
+            elif [[ "$package_manager" == "yum" || "$package_manager" == "dnf" ]]; then
+                dig_package="bind-utils"
+            elif [[ "$package_manager" == "pacman" ]]; then
+                dig_package="bind-tools"
+            elif [[ "$package_manager" == "zypper" ]]; then
+                dig_package="bind-utils"
+            fi
+
+            if [[ -n "$dig_package" ]]; then
+                if [[ "$package_manager" == "apt" ]]; then
+                    apt-get remove -y "$dig_package"
+                    apt-get autoremove -y
+                elif [[ "$package_manager" == "yum" ]]; then
+                    yum remove -y "$dig_package"
+                elif [[ "$package_manager" == "dnf" ]]; then
+                    dnf remove -y "$dig_package"
+                elif [[ "$package_manager" == "pacman" ]]; then
+                    pacman -R --noconfirm "$dig_package"
+                elif [[ "$package_manager" == "zypper" ]]; then
+                    zypper remove -y "$dig_package"
+                fi
+            fi
+            
+            if [ $? -eq 0 ]; then
+                echo -e "${GREEN}✓ dig 已卸载！${NC}"
+            else
+                echo -e "${RED}✗ dig 卸载失败！${NC}"
+            fi
+            ;;
+        *)
+            echo -e "${YELLOW}卸载操作已取消。${NC}"
+            ;;
+    esac
+    
+    read -p "按任意键返回工具卸载菜单..." -n1 -s
+    echo
+}
+
 # 批量卸载函数
 function batch_uninstall() {
     local selected_tools=()
-    local tool_names=("htop" "wget" "curl" "git" "unzip" "bzip2" "sudo")
+    local tool_names=("htop" "wget" "curl" "git" "unzip" "bzip2" "sudo" "dig")
     local tool_descriptions=(
         "交互式系统进程查看器"
         "命令行下载工具"
@@ -566,6 +690,7 @@ function batch_uninstall() {
         "压缩包解压工具"
         "块排序文件压缩器"
         "系统权限管理工具"
+        "DNS 查询工具"
     )
     
     # 批量选择菜单
