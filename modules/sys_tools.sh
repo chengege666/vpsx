@@ -206,11 +206,11 @@ function fail2ban_management() {
                 fi
 
                 if [ -f /etc/fail2ban/jail.local ]; then
-                    if grep -q "enabled = true" /etc/fail2ban/jail.local; then
-                        sed -i 's/enabled = true/enabled = false/g' /etc/fail2ban/jail.local
+                    if sed -n '/\[sshd\]/,/\[/p' /etc/fail2ban/jail.local | grep -q "enabled = true"; then
+                        sed -i '/\[sshd\]/,/\[/ s/enabled = true/enabled = false/' /etc/fail2ban/jail.local
                         echo -e "${YELLOW}SSH 防护已禁用。${NC}"
                     else
-                        sed -i 's/enabled = false/enabled = true/g' /etc/fail2ban/jail.local
+                        sed -i '/\[sshd\]/,/\[/ s/enabled = false/enabled = true/' /etc/fail2ban/jail.local
                         echo -e "${GREEN}SSH 防护已启用。${NC}"
                     fi
                 else
@@ -367,9 +367,13 @@ function process_management() {
                 read -p "请输入要查找的进程名称或 PID: " search_term
                 ps aux | grep -i "$search_term" | grep -v grep
                 read -p "请输入要结束的 PID (输入 0 取消): " kill_pid
-                if [ "$kill_pid" != "0" ]; then
-                    kill -9 "$kill_pid"
-                    echo -e "${GREEN}已尝试终止进程 $kill_pid${NC}"
+                if [[ -n "$kill_pid" && "$kill_pid" != "0" ]]; then
+                    if [[ "$kill_pid" =~ ^[0-9]+$ ]]; then
+                        kill -9 "$kill_pid"
+                        echo -e "${GREEN}已尝试终止进程 $kill_pid${NC}"
+                    else
+                        echo -e "${RED}错误: PID 必须是数字。${NC}"
+                    fi
                 fi
                 read -p "按任意键继续..."
                 ;;
@@ -504,7 +508,7 @@ function adjust_system_timezone() {
     esac
 
     echo -e "${YELLOW}正在设置时区为 $new_timezone...${NC}"
-    timedatectl set-timezone $new_timezone
+    timedatectl set-timezone "$new_timezone"
 
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}时区已成功设置为 $new_timezone。${NC}"
@@ -545,7 +549,7 @@ function change_swap_size() {
 
     if (( new_swap_mb > 0 )); then
         echo -e "${YELLOW}正在创建新的Swap文件，大小为 ${new_swap_mb}MB...${NC}"
-        fallocate -l ${new_swap_mb}M /swapfile
+        fallocate -l "${new_swap_mb}M" /swapfile
         chmod 600 /swapfile
         mkswap /swapfile
         swapon /swapfile
@@ -1138,9 +1142,8 @@ function switch_ip_priority() {
     case $choice in
         1)
             echo -e "${YELLOW}正在设置为IPv4优先...${NC}"
-            sed -i '/^#precedence ::ffff:0:0\/96  100/d' /etc/gai.conf
-            sed -i '/^precedence ::ffff:0:0\/96  100/d' /etc/gai.conf
-            sed -i '$a\precedence ::ffff:0:0/96  100' /etc/gai.conf
+            sed -i '/precedence ::ffff:0:0\/96  100/d' /etc/gai.conf
+            echo 'precedence ::ffff:0:0/96  100' >> /etc/gai.conf
             echo -e "${GREEN}IPv4优先设置完成。${NC}"
             ;;
         2)
