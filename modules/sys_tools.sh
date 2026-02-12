@@ -101,7 +101,6 @@ function advanced_firewall_management() {
         echo -e " ${GREEN}15.${NC} 阻止指定国家IP"
         echo -e " ${GREEN}16.${NC} 仅允许指定国家IP"
         echo -e " ${GREEN}17.${NC} 解除指定国家IP限制"
-        echo -e " ${GREEN}18.${NC} 查看国家IP限制状态"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回上一级菜单"
         echo -e "${CYAN}=========================================${NC}"
@@ -123,7 +122,6 @@ function advanced_firewall_management() {
             15) block_specified_country_ip ;;
             16) allow_only_specified_country_ip ;;
             17) unblock_specified_country_ip ;;
-            18) view_country_ip_block_status ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; read -p "按任意键继续..." ;;
         esac
@@ -208,11 +206,11 @@ function fail2ban_management() {
                 fi
 
                 if [ -f /etc/fail2ban/jail.local ]; then
-                    if sed -n '/\[sshd\]/,/\[/p' /etc/fail2ban/jail.local | grep -q "enabled = true"; then
-                        sed -i '/\[sshd\]/,/\[/ s/enabled = true/enabled = false/' /etc/fail2ban/jail.local
+                    if grep -q "enabled = true" /etc/fail2ban/jail.local; then
+                        sed -i 's/enabled = true/enabled = false/g' /etc/fail2ban/jail.local
                         echo -e "${YELLOW}SSH 防护已禁用。${NC}"
                     else
-                        sed -i '/\[sshd\]/,/\[/ s/enabled = false/enabled = true/' /etc/fail2ban/jail.local
+                        sed -i 's/enabled = false/enabled = true/g' /etc/fail2ban/jail.local
                         echo -e "${GREEN}SSH 防护已启用。${NC}"
                     fi
                 else
@@ -369,13 +367,9 @@ function process_management() {
                 read -p "请输入要查找的进程名称或 PID: " search_term
                 ps aux | grep -i "$search_term" | grep -v grep
                 read -p "请输入要结束的 PID (输入 0 取消): " kill_pid
-                if [[ -n "$kill_pid" && "$kill_pid" != "0" ]]; then
-                    if [[ "$kill_pid" =~ ^[0-9]+$ ]]; then
-                        kill -9 "$kill_pid"
-                        echo -e "${GREEN}已尝试终止进程 $kill_pid${NC}"
-                    else
-                        echo -e "${RED}错误: PID 必须是数字。${NC}"
-                    fi
+                if [ "$kill_pid" != "0" ]; then
+                    kill -9 "$kill_pid"
+                    echo -e "${GREEN}已尝试终止进程 $kill_pid${NC}"
                 fi
                 read -p "按任意键继续..."
                 ;;
@@ -510,7 +504,7 @@ function adjust_system_timezone() {
     esac
 
     echo -e "${YELLOW}正在设置时区为 $new_timezone...${NC}"
-    timedatectl set-timezone "$new_timezone"
+    timedatectl set-timezone $new_timezone
 
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}时区已成功设置为 $new_timezone。${NC}"
@@ -543,35 +537,28 @@ function change_swap_size() {
         return
     fi
 
-    echo -e "${YELLOW}正在禁用旧的Swap文件...${NC}"
-    swapoff /swapfile 2>/dev/null
+    echo -e "${YELLOW}正在禁用所有Swap...${NC}"
+    swapoff -a
 
     echo -e "${YELLOW}正在删除旧的Swap文件...${NC}"
     rm -f /swapfile
 
     if (( new_swap_mb > 0 )); then
-        echo -e "${YELLOW}正在创建新的Swap文件 (${new_swap_mb}MB)...${NC}"
-        # 优先使用 fallocate，失败则回退到 dd
-        if ! fallocate -l "${new_swap_mb}M" /swapfile 2>/dev/null; then
-            echo -e "${CYAN}fallocate 失败，正在使用 dd 创建 (这可能需要一点时间)...${NC}"
-            dd if=/dev/zero of=/swapfile bs=1M count="${new_swap_mb}" status=progress
-        fi
-        
+        echo -e "${YELLOW}正在创建新的Swap文件，大小为 ${new_swap_mb}MB...${NC}"
+        fallocate -l ${new_swap_mb}M /swapfile
         chmod 600 /swapfile
         mkswap /swapfile
-        if swapon /swapfile; then
-            # Make it persistent
-            if ! grep -q "/swapfile" /etc/fstab; then
-                echo "/swapfile swap swap defaults 0 0" >> /etc/fstab
-            fi
-            echo -e "${GREEN}新的Swap已成功创建并启用。${NC}"
-        else
-            echo -e "${RED}错误: 无法启用Swap文件。${NC}"
+        swapon /swapfile
+
+        # Make it persistent
+        if ! grep -q "/swapfile swap swap defaults 0 0" /etc/fstab; then
+            echo "/swapfile swap swap defaults 0 0" >> /etc/fstab
         fi
+        echo -e "${GREEN}新的Swap已成功创建并启用。${NC}"
     else
         # Remove from fstab if swap is set to 0
-        sed -i '/\/swapfile/d' /etc/fstab
-        echo -e "${GREEN}Swap已成功禁用并移除配置。${NC}"
+        sed -i '/swapfile/d' /etc/fstab
+        echo -e "${GREEN}Swap已禁用。${NC}"
     fi
 
     echo ""
@@ -603,122 +590,65 @@ function accelerate_memory_clean() {
     echo -e "${BLUE}开始内存加速清理...${NC}"
     
     # 记录清理前内存状态
-    local mem_info_before=$(free -m | awk 'NR==2{print $2,$3,$4,$6,$7}')
-    local total_mem=$(echo $mem_info_before | awk '{print $1}')
-    local used_mem_before=$(echo $mem_info_before | awk '{print $2}')
-    local free_mem_before=$(echo $mem_info_before | awk '{print $3}')
-    local cache_mem_before=$(echo $mem_info_before | awk '{print $4}')
-    local avail_mem_before=$(echo $mem_info_before | awk '{print $5}')
+    MEM_BEFORE=$(free -m | awk 'NR==2{printf "Used: %sMB, Free: %sMB, Cached: %sMB", $3, $4, $6}')
     
     # 1. 同步数据到磁盘
-    echo -ne "${CYAN}[1/6] 正在同步磁盘缓存... ${NC}"
-    sync && echo -e "${GREEN}完成${NC}"
+    echo -e "${CYAN}[1/6] 同步数据到磁盘...${NC}"
+    sync
     
     # 2. 清理页面缓存
-    echo -ne "${CYAN}[2/6] 正在清理页面缓存 (PageCache)... ${NC}"
-    echo 1 > /proc/sys/vm/drop_caches 2>/dev/null && echo -e "${GREEN}完成${NC}"
+    echo -e "${CYAN}[2/6] 清理页面缓存...${NC}"
+    echo 1 > /proc/sys/vm/drop_caches 2>/dev/null
     
-    # 3. 清理目录项和 inode 缓存
-    echo -ne "${CYAN}[3/6] 正在清理目录项和 inode 缓存... ${NC}"
-    echo 2 > /proc/sys/vm/drop_caches 2>/dev/null && echo -e "${GREEN}完成${NC}"
+    # 3. 清理目录项和inode缓存
+    echo -e "${CYAN}[3/6] 清理目录项和inode缓存...${NC}"
+    echo 2 > /proc/sys/vm/drop_caches 2>/dev/null
     
-    # 4. 清理所有缓存
-    echo -ne "${CYAN}[4/6] 正在执行深度清理 (所有缓存)... ${NC}"
-    echo 3 > /proc/sys/vm/drop_caches 2>/dev/null && echo -e "${GREEN}完成${NC}"
+    # 4. 清理所有缓存（页面缓存+目录项+inode）
+    echo -e "${CYAN}[4/6] 清理所有缓存...${NC}"
+    echo 3 > /proc/sys/vm/drop_caches 2>/dev/null
     
-    # 5. 释放 Slab 占用的内存
-    echo -ne "${CYAN}[5/6] 正在尝试释放 Slab 可回收内存... ${NC}"
-    # 虽然 drop_caches 2/3 会处理可回收 slab，但某些系统可以手动触发
-    [ -f /proc/slabinfo ] && sleep 1
-    echo -e "${GREEN}完成${NC}"
+    # 5. 清理slab缓存
+    echo -e "${CYAN}[5/6] 清理slab缓存...${NC}"
+    if command -v slabtop >/dev/null 2>&1; then
+        echo -e "${YELLOW}优化slab分配器...${NC}"
+    fi
     
-    # 6. 重置swap（仅在剩余内存充足时进行，防止 OOM）
+    # 6. 重置swap（如果物理内存充足）
     echo -e "${CYAN}[6/6] 优化swap空间...${NC}"
-    local current_free=$(free -m | awk 'NR==2{print $4}')
-    local current_used_swap=$(free -m | awk 'NR==3{print $3}')
-    
-    if [ "$current_used_swap" -gt 0 ]; then
-        if [ "$current_free" -gt "$current_used_swap" ]; then
-            echo -e "${YELLOW}当前可用内存 (${current_free}MB) 充足，正在回收 Swap 内容到内存...${NC}"
-            swapoff -a 2>/dev/null && swapon -a 2>/dev/null
-            echo -e "${GREEN}✅ Swap 已清空并重新挂载${NC}"
-        else
-            echo -e "${YELLOW}⚠️ 内存不足 (${current_free}MB < Swap ${current_used_swap}MB)，跳过 Swap 回收以维持系统稳定${NC}"
-        fi
+    SWAP_USED=$(free | awk 'NR==3{print $3}')
+    if [ "$SWAP_USED" -gt 0 ]; then
+        echo -e "${YELLOW}检测到swap使用，尝试优化...${NC}"
+        swapoff -a 2>/dev/null && swapon -a 2>/dev/null
+        echo -e "${GREEN}✅ Swap空间已优化${NC}"
     else
-        echo -e "${GREEN}✅ Swap 暂未占用，无需优化${NC}"
+        echo -e "${GREEN}✅ Swap使用正常，无需优化${NC}"
     fi
     
     # 显示清理结果
-    local mem_info_after=$(free -m | awk 'NR==2{print $3,$4,$6,$7}')
-    local used_mem_after=$(echo $mem_info_after | awk '{print $1}')
-    local free_mem_after=$(echo $mem_info_after | awk '{print $2}')
-    local cache_mem_after=$(echo $mem_info_after | awk '{print $3}')
-    local avail_mem_after=$(echo $mem_info_after | awk '{print $4}')
-
     echo ""
-    echo -e "${GREEN}=========================================${NC}"
-    echo -e "${GREEN}             清理报告                   ${NC}"
-    echo -e "${GREEN}=========================================${NC}"
-    printf "${BLUE}%-15s %-10s %-10s %-10s${NC}\n" "项目" "清理前" "清理后" "变化"
-    printf "%-15s %-10s %-10s %-10s\n" "已用内存" "${used_mem_before}MB" "${used_mem_after}MB" "$((used_mem_after - used_mem_before))MB"
-    printf "%-15s %-10s %-10s %-10s\n" "空闲内存" "${free_mem_before}MB" "${free_mem_after}MB" "+$((free_mem_after - free_mem_before))MB"
-    printf "%-15s %-10s %-10s %-10s\n" "缓存占用" "${cache_mem_before}MB" "${cache_mem_after}MB" "$((cache_mem_after - cache_mem_before))MB"
-    printf "%-15s %-10s %-10s %-10s\n" "可用内存" "${avail_mem_before}MB" "${avail_mem_after}MB" "+$((avail_mem_after - avail_mem_before))MB"
-    echo -e "${GREEN}=========================================${NC}"
+    echo -e "${GREEN}=== 内存加速清理完成 ===${NC}"
+    echo -e "${BLUE}清理前: $MEM_BEFORE${NC}"
     
-    local total_freed=$((avail_mem_after - avail_mem_before))
-    if [ "$total_freed" -gt 0 ]; then
-        echo -e "${GREEN}🎉 成功为系统腾出了 ${total_freed}MB 可用内存！${NC}"
-    else
-        echo -e "${YELLOW}💡 系统内存状态已处于最优，未产生明显变化。${NC}"
+    MEM_AFTER=$(free -m | awk 'NR==2{printf "Used: %sMB, Free: %sMB, Cached: %sMB", $3, $4, $6}')
+    echo -e "${BLUE}清理后: $MEM_AFTER${NC}"
+    
+    # 显示释放的内存
+    FREE_BEFORE=$(echo "$MEM_BEFORE" | grep -o 'Free: [0-9]*' | cut -d' ' -f2)
+    FREE_AFTER=$(echo "$MEM_AFTER" | grep -o 'Free: [0-9]*' | cut -d' ' -f2)
+    if [ -n "$FREE_BEFORE" ] && [ -n "$FREE_AFTER" ]; then
+        MEM_FREED=$((FREE_AFTER - FREE_BEFORE))
+        if [ "$MEM_FREED" -gt 0 ]; then
+            echo -e "${GREEN}✅ 成功释放内存: ${MEM_FREED}MB${NC}"
+        else
+            echo -e "${YELLOW}⚠️ 内存释放效果不明显，可能已处于优化状态${NC}"
+        fi
     fi
     
     echo ""
     echo -e "${YELLOW}💡 提示：内存清理是临时性的，系统会根据需要重新建立缓存${NC}"
     
     read -p "按回车键返回菜单..."
-}
-
-# 内部函数：应用 DNS 设置
-function apply_dns_settings() {
-    local dns1=$1
-    local dns2=$2
-    local resolv_conf="/etc/resolv.conf"
-
-    echo -e "${YELLOW}正在应用 DNS 设置: $dns1 ${dns2:+& $dns2}...${NC}"
-
-    # 处理不可变属性 (chattr)
-    if command -v chattr &> /dev/null; then
-        chattr -i "$resolv_conf" 2>/dev/null
-    fi
-
-    # 备份
-    cp "$resolv_conf" "${resolv_conf}.bak"
-
-    # 写入配置
-    {
-        echo "nameserver $dns1"
-        [ -n "$dns2" ] && echo "nameserver $dns2"
-    } > "$resolv_conf"
-
-    # 针对 Debian/Ubuntu 的 resolvconf 工具
-    if command -v resolvconf &> /dev/null; then
-        {
-            echo "nameserver $dns1"
-            [ -n "$dns2" ] && echo "nameserver $dns2"
-        } | resolvconf -u
-    fi
-
-    # 针对 NetworkManager
-    if systemctl is-active --quiet NetworkManager; then
-        nmcli general reload 2>/dev/null
-    fi
-
-    # 锁定配置（可选，防止 DHCP 覆盖，这里不默认锁定，由用户决定）
-    # chattr +i "$resolv_conf" 2>/dev/null
-
-    echo -e "${GREEN}DNS 设置应用成功。${NC}"
 }
 
 # 修改DNS服务器
@@ -728,58 +658,44 @@ function modify_dns_server() {
     echo -e "${GREEN}          修改DNS服务器${NC}"
     echo -e "${CYAN}=========================================${NC}"
     echo -e "当前DNS服务器设置 (来自 /etc/resolv.conf):"
-    grep "nameserver" /etc/resolv.conf || echo -e "${YELLOW}未发现 nameserver 配置${NC}"
+    grep "nameserver" /etc/resolv.conf
     echo ""
     echo -e "请选择操作:"
     echo -e " ${GREEN}1.${NC} 设置为 Google DNS (8.8.8.8, 8.8.4.4)"
     echo -e " ${GREEN}2.${NC} 设置为 Cloudflare DNS (1.1.1.1, 1.0.0.1)"
-    echo -e " ${GREEN}3.${NC} 设置为自定义 DNS"
-    echo -e " ${GREEN}4.${NC} 锁定 /etc/resolv.conf (防止被覆盖)"
-    echo -e " ${GREEN}5.${NC} 解锁 /etc/resolv.conf"
+    echo -e " ${GREEN}3.${NC} 设置为自定义DNS"
     echo -e " ${RED}0.${NC} 返回"
-    read -p "请输入你的选择 (0-5): " choice
+    read -p "请输入你的选择 (0-3): " choice
 
     case $choice in
         1)
-            apply_dns_settings "8.8.8.8" "8.8.4.4"
+            echo "nameserver 8.8.8.8" > /etc/resolv.conf
+            echo "nameserver 8.8.4.4" >> /etc/resolv.conf
+            echo -e "${GREEN}已设置为 Google DNS。${NC}"
             ;;
         2)
-            apply_dns_settings "1.1.1.1" "1.0.0.1"
+            echo "nameserver 1.1.1.1" > /etc/resolv.conf
+            echo "nameserver 1.0.0.1" >> /etc/resolv.conf
+            echo -e "${GREEN}已设置为 Cloudflare DNS。${NC}"
             ;;
         3)
-            read -p "请输入主 DNS 服务器 IP: " primary_dns
-            if [[ ! "$primary_dns" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-                echo -e "${RED}错误: 无效的 IP 地址格式。${NC}"
+            read -p "请输入主DNS服务器: " primary_dns
+            if [[ -z "$primary_dns" ]]; then
+                echo -e "${RED}主DNS不能为空。${NC}"
             else
-                read -p "请输入备用 DNS 服务器 IP (可选): " secondary_dns
-                if [[ -n "$secondary_dns" && ! "$secondary_dns" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-                    echo -e "${RED}错误: 备用 DNS 格式无效。${NC}"
-                else
-                    apply_dns_settings "$primary_dns" "$secondary_dns"
+                read -p "请输入备用DNS服务器 (可选，留空则不设置): " secondary_dns
+                echo "nameserver $primary_dns" > /etc/resolv.conf
+                if [ -n "$secondary_dns" ]; then
+                    echo "nameserver $secondary_dns" >> /etc/resolv.conf
                 fi
-            fi
-            ;;
-        4)
-            if command -v chattr &> /dev/null; then
-                chattr +i /etc/resolv.conf
-                echo -e "${GREEN}/etc/resolv.conf 已锁定。${NC}"
-            else
-                echo -e "${RED}系统不支持 chattr 命令。${NC}"
-            fi
-            ;;
-        5)
-            if command -v chattr &> /dev/null; then
-                chattr -i /etc/resolv.conf
-                echo -e "${GREEN}/etc/resolv.conf 已解锁。${NC}"
-            else
-                echo -e "${RED}系统不支持 chattr 命令。${NC}"
+                echo -e "${GREEN}已设置为自定义DNS。${NC}"
             fi
             ;;
         0)
             return
             ;;
         *)
-            echo -e "${RED}无效的选择。${NC}"
+            echo -e "${RED}无效的选择，请重新输入。${NC}"
             ;;
     esac
     read -p "按任意键继续..."
@@ -1021,32 +937,11 @@ function disable_ddos_protection() {
     read -p "按任意键继续..."
 }
 
-# 检查防火墙冲突
-function check_firewall_conflicts() {
-    local conflicts=()
-    if systemctl is-active --quiet firewalld; then
-        conflicts+=("firewalld")
-    fi
-    if systemctl is-active --quiet ufw; then
-        conflicts+=("ufw")
-    fi
-    
-    if [ ${#conflicts[@]} -gt 0 ]; then
-        echo -e "${YELLOW}⚠️ 检测到正在运行的防火墙管理器: ${conflicts[*]}${NC}"
-        echo -e "${YELLOW}直接使用 iptables 命令可能与这些管理器产生冲突或在重启后失效。${NC}"
-        echo -e "${YELLOW}建议通过相应的防火墙管理器配置规则。${NC}"
-        echo ""
-    fi
-}
-
 function block_specified_country_ip() {
     clear
     echo -e "${CYAN}=========================================${NC}"
     echo -e "${GREEN}          阻止指定国家IP${NC}"
     echo -e "${CYAN}=========================================${NC}"
-    
-    check_firewall_conflicts
-    
     read -p "请输入要阻止的国家代码 (例如: CN): " country_code
     if [ -z "$country_code" ]; then
         echo -e "${RED}国家代码不能为空。${NC}"
@@ -1056,50 +951,18 @@ function block_specified_country_ip() {
         
         if ! command -v ipset &> /dev/null; then
             echo -e "${BLUE}正在安装 ipset...${NC}"
-            if command -v apt &>/dev/null; then
-                apt update && apt install -y ipset
-            elif command -v yum &>/dev/null; then
-                yum install -y ipset
-            fi
+            apt update && apt install -y ipset || yum install -y ipset
         fi
         
-        # 尝试从多个源下载
-        local urls=(
-            "http://www.ipdeny.com/ipblocks/data/countries/$country_code.zone"
-            "https://raw.githubusercontent.com/herrbischoff/country-ip-blocks/master/ipv4/$country_code.zone"
-        )
+        ipset create "block_$country_code" hash:net 2>/dev/null
+        curl -s -o "/tmp/$country_code.zone" "http://www.ipdeny.com/ipblocks/data/countries/$country_code.zone"
         
-        local download_success=false
-        for url in "${urls[@]}"; do
-            echo -e "${BLUE}尝试从 $url 下载...${NC}"
-            if curl -s -f -m 10 -o "/tmp/$country_code.zone" "$url"; then
-                if [ -s "/tmp/$country_code.zone" ]; then
-                    download_success=true
-                    break
-                fi
-            fi
-        done
-
-        if [ "$download_success" = true ]; then
-            local set_name="block_$country_code"
-            # 使用 ipset restore 批量导入，速度极快
-            echo "create $set_name hash:net -!" > "/tmp/$set_name.ipset"
+        if [ -s "/tmp/$country_code.zone" ]; then
             while read -r line; do
-                [[ -z "$line" || "$line" =~ ^# ]] && continue
-                echo "add $set_name $line" >> "/tmp/$set_name.ipset"
+                ipset add "block_$country_code" "$line" 2>/dev/null
             done < "/tmp/$country_code.zone"
-            
-            if ipset restore < "/tmp/$set_name.ipset"; then
-                # 应用 iptables 规则
-                if ! iptables -C INPUT -m set --match-set "$set_name" src -j DROP 2>/dev/null; then
-                    iptables -I INPUT -m set --match-set "$set_name" src -j DROP
-                fi
-                echo -e "${GREEN}已成功阻止来自 ${country_code^^} 的所有 IP。${NC}"
-                echo -e "${YELLOW}提示: 规则已生效，但重启后会失效。${NC}"
-            else
-                echo -e "${RED}ipset 规则应用失败。${NC}"
-            fi
-            rm -f "/tmp/$country_code.zone" "/tmp/$set_name.ipset"
+            iptables -I INPUT -m set --match-set "block_$country_code" src -j DROP
+            echo -e "${GREEN}已成功阻止来自 $country_code 的所有 IP。${NC}"
         else
             echo -e "${RED}获取 IP 列表失败，请检查国家代码或网络。${NC}"
         fi
@@ -1112,65 +975,31 @@ function allow_only_specified_country_ip() {
     echo -e "${CYAN}=========================================${NC}"
     echo -e "${GREEN}        仅允许指定国家IP${NC}"
     echo -e "${CYAN}=========================================${NC}"
-    
-    check_firewall_conflicts
-    
     read -p "请输入要允许的国家代码 (例如: CN): " country_code
     if [ -z "$country_code" ]; then
         echo -e "${RED}国家代码不能为空。${NC}"
     else
         country_code=$(echo "$country_code" | tr '[:upper:]' '[:lower:]')
         echo -e "${RED}⚠️ 警告：正在配置白名单策略，这可能导致您断开连接！${NC}"
-        echo -e "${YELLOW}请确保您的当前 IP 属于该国家，且已放行 SSH 端口。${NC}"
+        echo -e "${YELLOW}请确保您的当前 IP 属于该国家。${NC}"
         read -p "确认继续吗？(y/N): " confirm
         if [[ "$confirm" =~ ^[yY]$ ]]; then
             if ! command -v ipset &> /dev/null; then
                 echo -e "${BLUE}正在安装 ipset...${NC}"
-                if command -v apt &>/dev/null; then
-                    apt update && apt install -y ipset
-                elif command -v yum &>/dev/null; then
-                    yum install -y ipset
-                fi
+                apt update && apt install -y ipset || yum install -y ipset
             fi
-
-            # 尝试从多个源下载
-            local urls=(
-                "http://www.ipdeny.com/ipblocks/data/countries/$country_code.zone"
-                "https://raw.githubusercontent.com/herrbischoff/country-ip-blocks/master/ipv4/$country_code.zone"
-            )
-            
-            local download_success=false
-            for url in "${urls[@]}"; do
-                echo -e "${BLUE}尝试从 $url 下载...${NC}"
-                if curl -s -f -m 10 -o "/tmp/$country_code.zone" "$url"; then
-                    if [ -s "/tmp/$country_code.zone" ]; then
-                        download_success=true
-                        break
-                    fi
-                fi
-            done
-
-            if [ "$download_success" = true ]; then
-                local set_name="allow_$country_code"
-                echo "create $set_name hash:net -!" > "/tmp/$set_name.ipset"
+            ipset create "allow_$country_code" hash:net 2>/dev/null
+            curl -s -o "/tmp/$country_code.zone" "http://www.ipdeny.com/ipblocks/data/countries/$country_code.zone"
+            if [ -s "/tmp/$country_code.zone" ]; then
                 while read -r line; do
-                    [[ -z "$line" || "$line" =~ ^# ]] && continue
-                    echo "add $set_name $line" >> "/tmp/$set_name.ipset"
+                    ipset add "allow_$country_code" "$line" 2>/dev/null
                 done < "/tmp/$country_code.zone"
-                
-                if ipset restore < "/tmp/$set_name.ipset"; then
-                    # 允许已建立的连接，防止断开
-                    iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-                    iptables -A INPUT -i lo -j ACCEPT
-                    # 允许指定国家
-                    iptables -A INPUT -m set --match-set "$set_name" src -j ACCEPT
-                    # 设置默认策略为 DROP (危险操作)
-                    iptables -P INPUT DROP
-                    echo -e "${GREEN}现在仅允许来自 ${country_code^^} 的 IP 访问。${NC}"
-                else
-                    echo -e "${RED}ipset 规则应用失败。${NC}"
-                fi
-                rm -f "/tmp/$country_code.zone" "/tmp/$set_name.ipset"
+                # 允许指定国家，拒绝其他（除了本地和已建立的连接）
+                iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+                iptables -A INPUT -i lo -j ACCEPT
+                iptables -A INPUT -m set --match-set "allow_$country_code" src -j ACCEPT
+                iptables -P INPUT DROP
+                echo -e "${GREEN}现在仅允许来自 $country_code 的 IP 访问。${NC}"
             else
                 echo -e "${RED}获取 IP 列表失败。${NC}"
             fi
@@ -1189,64 +1018,17 @@ function unblock_specified_country_ip() {
         echo -e "${RED}国家代码不能为空。${NC}"
     else
         country_code=$(echo "$country_code" | tr '[:upper:]' '[:lower:]')
-        echo -e "${YELLOW}正在解除 $country_code 的限制并清理防火墙规则...${NC}"
+        echo -e "${YELLOW}正在解除 $country_code 的限制并清理 ipset 规则...${NC}"
         
-        # 恢复默认策略
-        iptables -P INPUT ACCEPT
-        
-        # 删除相关的 iptables 规则
         iptables -D INPUT -m set --match-set "block_$country_code" src -j DROP 2>/dev/null
         iptables -D INPUT -m set --match-set "allow_$country_code" src -j ACCEPT 2>/dev/null
+        iptables -P INPUT ACCEPT
         
-        # 销毁 ipset 集合
         ipset destroy "block_$country_code" 2>/dev/null
         ipset destroy "allow_$country_code" 2>/dev/null
         
-        echo -e "${GREEN}来自 ${country_code^^} 的所有 IP 限制已解除。${NC}"
+        echo -e "${GREEN}来自 $country_code 的所有 IP 限制已解除。${NC}"
     fi
-    read -p "按任意键继续..."
-}
-
-function view_country_ip_block_status() {
-    clear
-    echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}        查看国家IP限制状态${NC}"
-    echo -e "${CYAN}=========================================${NC}"
-    
-    local sets=$(ipset list -n | grep -E "^(block_|allow_)")
-    
-    if [ -z "$sets" ]; then
-        echo -e "${YELLOW}目前没有设置任何国家 IP 限制。${NC}"
-    else
-        echo -e "${BLUE}已配置的国家 IP 列表 (ipset):${NC}"
-        echo -e "-----------------------------------------"
-        printf "%-15s %-10s %-10s\n" "国家/类型" "规则数量" "防火墙状态"
-        
-        for set_name in $sets; do
-            local count=$(ipset list "$set_name" | grep "Number of entries:" | awk '{print $4}')
-            local type=$(echo "$set_name" | cut -d'_' -f1)
-            local country=$(echo "$set_name" | cut -d'_' -f2 | tr '[:lower:]' '[:upper:]')
-            
-            local fw_status="${RED}未应用${NC}"
-            if [ "$type" == "block" ]; then
-                if iptables -C INPUT -m set --match-set "$set_name" src -j DROP 2>/dev/null; then
-                    fw_status="${GREEN}生效中 (DROP)${NC}"
-                fi
-            elif [ "$type" == "allow" ]; then
-                if iptables -C INPUT -m set --match-set "$set_name" src -j ACCEPT 2>/dev/null; then
-                    fw_status="${GREEN}生效中 (ACCEPT)${NC}"
-                fi
-            fi
-            
-            printf "%-15s %-10s %b\n" "$country ($type)" "$count" "$fw_status"
-        done
-        
-        local current_policy=$(iptables -L INPUT -n | grep "Chain INPUT (policy" | awk '{print $4}')
-        echo -e "-----------------------------------------"
-        echo -e "当前 INPUT 链默认策略: ${YELLOW}$current_policy${NC}"
-    fi
-    
-    echo ""
     read -p "按任意键继续..."
 }
 
@@ -1356,8 +1138,9 @@ function switch_ip_priority() {
     case $choice in
         1)
             echo -e "${YELLOW}正在设置为IPv4优先...${NC}"
-            sed -i '/precedence ::ffff:0:0\/96  100/d' /etc/gai.conf
-            echo 'precedence ::ffff:0:0/96  100' >> /etc/gai.conf
+            sed -i '/^#precedence ::ffff:0:0\/96  100/d' /etc/gai.conf
+            sed -i '/^precedence ::ffff:0:0\/96  100/d' /etc/gai.conf
+            sed -i '$a\precedence ::ffff:0:0/96  100' /etc/gai.conf
             echo -e "${GREEN}IPv4优先设置完成。${NC}"
             ;;
         2)
