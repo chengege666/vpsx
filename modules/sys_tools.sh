@@ -1087,8 +1087,34 @@ function change_ssh_port() {
         return
     fi
 
+    # 检查端口是否被占用
+    if command -v ss >/dev/null 2>&1; then
+        if ss -tuln | grep -q ":$new_port "; then
+            echo -e "${RED}错误: 端口 $new_port 已被占用，请选择其他端口。${NC}"
+            read -p "按任意键继续..."
+            return
+        fi
+    elif command -v netstat >/dev/null 2>&1; then
+        if netstat -tuln | grep -q ":$new_port "; then
+            echo -e "${RED}错误: 端口 $new_port 已被占用，请选择其他端口。${NC}"
+            read -p "按任意键继续..."
+            return
+        fi
+    fi
+
     echo -e "${YELLOW}正在修改SSH配置文件...${NC}"
     sed -i "s/^#*Port .*/Port $new_port/g" /etc/ssh/sshd_config
+
+    # 放行防火墙端口
+    echo -e "${YELLOW}正在配置防火墙放行新端口 $new_port...${NC}"
+    if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
+        ufw allow $new_port/tcp
+    elif command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld; then
+        firewall-cmd --permanent --add-port=$new_port/tcp
+        firewall-cmd --reload
+    elif command -v iptables >/dev/null 2>&1; then
+        iptables -I INPUT -p tcp --dport $new_port -j ACCEPT
+    fi
 
     echo -e "${YELLOW}正在重启SSH服务...${NC}"
     if command -v systemctl >/dev/null 2>&1; then
