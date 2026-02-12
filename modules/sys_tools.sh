@@ -1087,12 +1087,18 @@ function change_ssh_port() {
         return
     fi
 
-    echo -e "${YELLOW}正在修改SSH配置文件...${NC}"
+    echo -e "${YELLOW}正在修改配置文件并开放防火墙端口...${NC}"
+    # 自动识别并放行新端口
+    if command -v ufw &> /dev/null; then
+        ufw allow "$new_port"/tcp
+    elif command -v firewall-cmd &> /dev/null; then
+        firewall-cmd --permanent --add-port="$new_port"/tcp
+        firewall-cmd --reload
+    fi
+    # 备份并修改
+    cp -p /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
     sed -i "s/^#*Port .*/Port $new_port/g" /etc/ssh/sshd_config
-
-    echo -e "${YELLOW}正在重启SSH服务...${NC}"
-    if command -v systemctl >/dev/null 2>&1; then
-        systemctl restart sshd
+    systemctl restart sshd
     elif command -v service >/dev/null 2>&1; then
         service ssh restart
     else
