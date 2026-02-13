@@ -671,55 +671,75 @@ function accelerate_memory_clean() {
     read -p "按回车键返回菜单..."
 }
 
-# 修改DNS服务器
+# 修改DNS服务器（永久生效版）
 function modify_dns_server() {
     clear
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}          修改DNS服务器${NC}"
+    echo -e "${GREEN}          修改DNS服务器 (永久生效)${NC}"
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "当前DNS服务器设置 (来自 /etc/resolv.conf):"
-    grep "nameserver" /etc/resolv.conf
+    
+    # 获取当前生效的 DNS
+    echo -e "当前系统解析状态:"
+    if command -v resolvectl &> /dev/null; then
+        resolvectl status | grep "DNS Servers" || grep "nameserver" /etc/resolv.conf
+    else
+        grep "nameserver" /etc/resolv.conf
+    fi
     echo ""
+    
     echo -e "请选择操作:"
     echo -e " ${GREEN}1.${NC} 设置为 Google DNS (8.8.8.8, 8.8.4.4)"
     echo -e " ${GREEN}2.${NC} 设置为 Cloudflare DNS (1.1.1.1, 1.0.0.1)"
-    echo -e " ${GREEN}3.${NC} 设置为自定义DNS"
+    echo -e " ${GREEN}3.${NC} 设置为 阿里/腾讯 DNS (223.5.5.5, 119.29.29.29)"
+    echo -e " ${GREEN}4.${NC} 设置为自定义DNS"
     echo -e " ${RED}0.${NC} 返回"
-    read -p "请输入你的选择 (0-3): " choice
+    read -p "请输入你的选择 (0-4): " choice
 
     case $choice in
-        1)
-            echo "nameserver 8.8.8.8" > /etc/resolv.conf
-            echo "nameserver 8.8.4.4" >> /etc/resolv.conf
-            echo -e "${GREEN}已设置为 Google DNS。${NC}"
+        1) dns_main="8.8.8.8"; dns_backup="8.8.4.4" ;;
+        2) dns_main="1.1.1.1"; dns_backup="1.0.0.1" ;;
+        3) dns_main="223.5.5.5"; dns_backup="119.29.29.29" ;;
+        4)
+            read -p "请输入主DNS服务器: " dns_main
+            read -p "请输入备用DNS服务器 (可选): " dns_backup
             ;;
-        2)
-            echo "nameserver 1.1.1.1" > /etc/resolv.conf
-            echo "nameserver 1.0.0.1" >> /etc/resolv.conf
-            echo -e "${GREEN}已设置为 Cloudflare DNS。${NC}"
-            ;;
-        3)
-            read -p "请输入主DNS服务器: " primary_dns
-            if [[ -z "$primary_dns" ]]; then
-                echo -e "${RED}主DNS不能为空。${NC}"
-            else
-                read -p "请输入备用DNS服务器 (可选，留空则不设置): " secondary_dns
-                echo "nameserver $primary_dns" > /etc/resolv.conf
-                if [ -n "$secondary_dns" ]; then
-                    echo "nameserver $secondary_dns" >> /etc/resolv.conf
-                fi
-                echo -e "${GREEN}已设置为自定义DNS。${NC}"
-            fi
-            ;;
-        0)
-            return
-            ;;
-        *)
-            echo -e "${RED}无效的选择，请重新输入。${NC}"
-            ;;
+        0) return ;;
+        *) echo -e "${RED}无效选择${NC}"; sleep 1; return ;;
     esac
+
+    if [[ -n "$dns_main" ]]; then
+        echo -e "${YELLOW}正在配置永久 DNS...${NC}"
+
+        # 核心逻辑：判断并修改 systemd-resolved 配置
+        if [ -f /etc/systemd/resolved.conf ]; then
+            # 1. 修改配置文件，确保 DNS 行被正确设置
+            sed -i "s/^#\?DNS=.*/DNS=$dns_main $dns_backup/" /etc/systemd/resolved.conf
+            # 2. 确保 FallbackDNS 也有备选
+            sed -i "s/^#\?FallbackDNS=.*/FallbackDNS=1.1.1.1 8.8.8.8/" /etc/systemd/resolved.conf
+            
+            # 3. 重启服务使配置生效
+            systemctl restart systemd-resolved
+            
+            # 4. 解决部分系统 /etc/resolv.conf 没同步的问题
+            # 强制将 resolv.conf 指向 systemd-resolved 的运行时配置文件
+            ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+            
+            echo -e "${GREEN}✅ 已通过 systemd-resolved 完成永久配置。${NC}"
+        else
+            # 传统方式 (非 systemd 系统)
+            echo "nameserver $dns_main" > /etc/resolv.conf
+            [ -n "$dns_backup" ] && echo "nameserver $dns_backup" >> /etc/resolv.conf
+            # 锁定文件防止被覆盖 (可选)
+            # chattr +i /etc/resolv.conf 
+            echo -e "${GREEN}✅ 已修改 /etc/resolv.conf。${NC}"
+        fi
+        
+        echo -e "${BLUE}当前生效的 DNS 为:${NC}"
+        grep "nameserver" /etc/resolv.conf
+    fi
     read -p "按任意键继续..."
 }
+
 function close_specified_port() {
     clear
     echo -e "${CYAN}=========================================${NC}"
