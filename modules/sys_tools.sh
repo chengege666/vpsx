@@ -614,15 +614,32 @@ function accelerate_memory_clean() {
         echo -e "${YELLOW}优化slab分配器...${NC}"
     fi
     
-    # 6. 重置swap（如果物理内存充足）
+    # 6. 重置swap（增加安全检查，防止内存溢出导致失联）
     echo -e "${CYAN}[6/6] 优化swap空间...${NC}"
-    SWAP_USED=$(free | awk 'NR==3{print $3}')
-    if [ "$SWAP_USED" -gt 0 ]; then
-        echo -e "${YELLOW}检测到swap使用，尝试优化...${NC}"
-        swapoff -a 2>/dev/null && swapon -a 2>/dev/null
-        echo -e "${GREEN}✅ Swap空间已优化${NC}"
+    # 获取当前内存和Swap信息 (MB)
+    local mem_info=$(free -m)
+    local ram_free=$(echo "$mem_info" | awk '/Mem:/ {print $4 + $6 + $7}') # Free + Buffers + Cached
+    local swap_used=$(echo "$mem_info" | awk '/Swap:/ {print $3}')
+    
+    if [ "$swap_used" -gt 0 ]; then
+        # 预留 100MB 缓冲空间
+        local required_mem=$((swap_used + 100))
+        echo -e "${YELLOW}检测到已使用 Swap: ${swap_used}MB, 可用物理内存(含缓存): ${ram_free}MB${NC}"
+        
+        if [ "$ram_free" -gt "$required_mem" ]; then
+            echo -e "${YELLOW}内存充足，正在尝试优化 Swap...${NC}"
+            # 异步执行，并设置超时，防止挂死
+            if timeout 60s swapoff -a && swapon -a; then
+                echo -e "${GREEN}✅ Swap 空间已优化${NC}"
+            else
+                echo -e "${RED}❌ Swap 优化失败或超时，已跳过${NC}"
+                swapon -a 2>/dev/null # 确保 swap 重新开启
+            fi
+        else
+            echo -e "${RED}⚠️ 物理内存不足以容纳 Swap 数据（缺口 $((required_mem - ram_free))MB），已跳过 Swap 优化以防失联${NC}"
+        fi
     else
-        echo -e "${GREEN}✅ Swap使用正常，无需优化${NC}"
+        echo -e "${GREEN}✅ Swap 使用正常，无需优化${NC}"
     fi
     
     # 显示清理结果
