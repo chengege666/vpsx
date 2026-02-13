@@ -689,6 +689,15 @@ function modify_dns_server() {
     echo -e "当前系统 DNS 管理模式: ${YELLOW}$dns_mode${NC}"
     echo -e "当前DNS设置 (来自 /etc/resolv.conf):"
     grep "nameserver" /etc/resolv.conf | head -n 3
+    
+    if [ "$dns_mode" == "systemd-resolved" ]; then
+        echo -e "${BLUE}上游 DNS (systemd-resolved):${NC}"
+        if command -v resolvectl &> /dev/null; then
+            resolvectl status | grep "DNS Servers" | awk '{print $3, $4, $5}' | sed 's/^/  /'
+        elif command -v systemd-resolve &> /dev/null; then
+            systemd-resolve --status | grep "DNS Servers" | awk '{print $3, $4, $5}' | sed 's/^/  /'
+        fi
+    fi
     echo ""
     echo -e "请选择操作:"
     echo -e " ${GREEN}1.${NC} 设置为 Google DNS (8.8.8.8, 8.8.4.4)"
