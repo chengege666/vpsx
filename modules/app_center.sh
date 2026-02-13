@@ -2555,8 +2555,15 @@ function uninstall_watchtower() {
     
     if [[ "$confirm" =~ ^[yY]$ ]]; then
         echo "正在停止并删除容器..."
-        docker stop watchtower >/dev/null 2>&1
-        docker rm watchtower >/dev/null 2>&1
+        local deploy_dir="/opt/watchtower"
+        if [ -d "$deploy_dir" ]; then
+            cd "$deploy_dir" && (docker compose down || docker-compose down) >/dev/null 2>&1
+            rm -rf "$deploy_dir"
+            echo -e "${GREEN}✅ 已清理部署目录: ${deploy_dir}${NC}"
+        else
+            docker stop watchtower >/dev/null 2>&1
+            docker rm watchtower >/dev/null 2>&1
+        fi
         
         echo -e "${GREEN}✅ Watchtower 卸载完成！${NC}"
         echo -e "${YELLOW}提示：您的其他容器将不再自动更新。${NC}"
