@@ -2162,10 +2162,21 @@ function install_watchtower() {
     echo -e "${CYAN}          安装/部署 Watchtower${NC}"
     echo -e "${CYAN}==========================================${NC}"
     
+    # 检查 Docker Compose 是否可用
+    if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+        echo -e "${RED}❌ 错误: 未检测到 Docker Compose，请先安装。${NC}"
+        return
+    fi
+
+    # 创建部署目录
+    local deploy_dir="/root/vpsx/apps/watchtower"
+    mkdir -p "$deploy_dir"
+    cd "$deploy_dir" || return
+
     # 检查容器是否已存在
     if docker ps -a --format '{{.Names}}' | grep -q "^watchtower$"; then
         echo -e "${YELLOW}⚠️  Watchtower 容器已存在。${NC}"
-        read -p "是否删除现有容器并重新安装？(y/N): " reinstall
+        read -p "是否停止并使用 Docker Compose 重新部署？(y/N): " reinstall
         if [[ ! "$reinstall" =~ ^[yY]$ ]]; then
             return
         fi
@@ -2180,20 +2191,17 @@ function install_watchtower() {
     echo ""
     read -p "请选择模式 [1-3]: " mode
     
+    local env_file=".env"
+    local compose_file="docker-compose.yml"
+    
+    # 初始化环境变量文件
+    echo "TZ=$(timedatectl | grep "Time zone" | awk '{print $3}' || echo "Asia/Shanghai")" > "$env_file"
+    
     case $mode in
         1)
             # 基础模式
-            echo "正在安装 Watchtower（基础模式）..."
-            if docker run -d \
-                --name watchtower \
-                --restart unless-stopped \
-                -v /var/run/docker.sock:/var/run/docker.sock \
-                containrrr/watchtower; then
-                echo -e "${GREEN}✅ Watchtower 安装成功！${NC}"
-                echo -e "配置：每24小时自动检查所有容器更新"
-            else
-                echo -e "${RED}❌ 安装失败，请检查错误信息。${NC}"
-            fi
+            echo "WATCHTOWER_POLL_INTERVAL=86400" >> "$env_file"
+            local containers=""
             ;;
         2)
             # 自定义模式
@@ -2201,139 +2209,116 @@ function install_watchtower() {
             echo -e "${YELLOW}自定义配置选项：${NC}"
             read -p "检查间隔（默认 24h，支持 30m、2h 等）: " interval
             interval=${interval:-"24h"}
+            # 转换为秒（Watchtower 环境变量支持秒或间隔）
+            echo "WATCHTOWER_POLL_INTERVAL=${interval}" >> "$env_file"
             
             read -p "是否启用通知？(y/N): " enable_notifications
-            notifications=""
             if [[ "$enable_notifications" =~ ^[yY]$ ]]; then
                 read -p "通知类型（shoutrrr URL，如 slack://、discord://）: " notify_url
                 if [ -n "$notify_url" ]; then
-                    notifications="-e WATCHTOWER_NOTIFICATIONS=shoutrrr -e WATCHTOWER_NOTIFICATION_URL=${notify_url}"
+                    echo "WATCHTOWER_NOTIFICATIONS=shoutrrr" >> "$env_file"
+                    echo "WATCHTOWER_NOTIFICATION_URL=${notify_url}" >> "$env_file"
                 fi
             fi
             
             read -p "是否监控所有容器？(Y/n): " monitor_all
             monitor_all=${monitor_all:-"Y"}
             
-            cmd="docker run -d --name watchtower --restart unless-stopped"
-            cmd="$cmd -v /var/run/docker.sock:/var/run/docker.sock"
-            
-            if [ -n "$notifications" ]; then
-                cmd="$cmd $notifications"
-            fi
-            
-            if [[ "$monitor_all" =~ ^[yY]$ ]]; then
-                cmd="$cmd containrrr/watchtower --interval ${interval}"
-            else
-                # 获取容器列表供选择
+            local containers=""
+            if [[ ! "$monitor_all" =~ ^[yY]$ ]]; then
                 echo ""
                 echo -e "可监控的容器列表："
                 docker ps --format "{{.Names}}" | grep -v "watchtower" | nl
                 echo ""
                 read -p "输入要监控的容器编号（多个用空格分隔）: " container_nums
                 
-                if [ -z "$container_nums" ]; then
-                    echo -e "${RED}❌ 未选择任何容器。${NC}"
-                    return
-                fi
-                
-                containers=""
-                for num in $container_nums; do
-                    container_name=$(docker ps --format "{{.Names}}" | grep -v "watchtower" | sed -n "${num}p")
-                    if [ -n "$container_name" ]; then
-                        containers="$containers $container_name"
-                    fi
-                done
-                
-                cmd="$cmd containrrr/watchtower --interval ${interval} $containers"
-            fi
-            
-            echo ""
-            echo -e "${YELLOW}执行命令：${NC}"
-            echo "$cmd"
-            echo ""
-            read -p "确认安装？(Y/n): " confirm
-            if [[ ! "$confirm" =~ ^[nN]$ ]]; then
-                eval $cmd
-                if [ $? -eq 0 ]; then
-                    echo -e "${GREEN}✅ Watchtower 安装成功！${NC}"
-                else
-                    echo -e "${RED}❌ 安装失败。${NC}"
+                if [ -n "$container_nums" ]; then
+                    for num in $container_nums; do
+                        local name=$(docker ps --format "{{.Names}}" | grep -v "watchtower" | sed -n "${num}p")
+                        [ -n "$name" ] && containers="$containers $name"
+                    done
                 fi
             fi
             ;;
         3)
             # 白名单模式
+            echo "WATCHTOWER_POLL_INTERVAL=86400" >> "$env_file"
             echo ""
-            echo -e "${YELLOW}选择要监控的容器（白名单模式）：${NC}"
-            echo "可监控的容器列表："
+            echo -e "可监控的容器列表："
             docker ps --format "{{.Names}}" | grep -v "watchtower" | nl
             echo ""
             read -p "输入要监控的容器编号（多个用空格分隔）: " container_nums
             
-            if [ -z "$container_nums" ]; then
-                echo -e "${RED}❌ 未选择任何容器。${NC}"
-                return
-            fi
-            
-            containers=""
-            for num in $container_nums; do
-                container_name=$(docker ps --format "{{.Names}}" | grep -v "watchtower" | sed -n "${num}p")
-                if [ -n "$container_name" ]; then
-                    containers="$containers $container_name"
-                fi
-            done
-            
-            echo "正在安装 Watchtower（白名单模式）..."
-            if docker run -d \
-                --name watchtower \
-                --restart unless-stopped \
-                -v /var/run/docker.sock:/var/run/docker.sock \
-                containrrr/watchtower \
-                --interval 24h \
-                $containers; then
-                echo -e "${GREEN}✅ Watchtower 安装成功！${NC}"
-                echo -e "监控容器：${containers}"
-            else
-                echo -e "${RED}❌ 安装失败，请检查错误信息。${NC}"
+            local containers=""
+            if [ -n "$container_nums" ]; then
+                for num in $container_nums; do
+                    local name=$(docker ps --format "{{.Names}}" | grep -v "watchtower" | sed -n "${num}p")
+                    [ -n "$name" ] && containers="$containers $name"
+                done
             fi
             ;;
         *)
             echo -e "${RED}❌ 无效选择。${NC}"
+            return
             ;;
     esac
+
+    # 生成 docker-compose.yml
+    cat > "$compose_file" <<EOF
+version: '3'
+services:
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    env_file: .env
+EOF
+
+    # 如果有指定容器，添加到 command
+    if [ -n "$containers" ]; then
+        echo "    command: $containers" >> "$compose_file"
+    fi
+
+    echo -e "${BLUE}正在使用 Docker Compose 部署 Watchtower...${NC}"
+    if docker compose up -d || docker-compose up -d; then
+        echo -e "${GREEN}✅ Watchtower 部署成功！${NC}"
+        echo -e "部署目录: ${deploy_dir}"
+    else
+        echo -e "${RED}❌ 部署失败，请检查 Docker Compose 状态。${NC}"
+    fi
 }
 function start_watchtower() {
-    clear
-    echo "正在启动 Watchtower..."
-    
-    if docker start watchtower 2>/dev/null; then
-        echo -e "${GREEN}✅ Watchtower 启动成功！${NC}"
+    local deploy_dir="/root/vpsx/apps/watchtower"
+    if [ -d "$deploy_dir" ]; then
+        cd "$deploy_dir" && (docker compose start || docker-compose start)
+        echo -e "${GREEN}✅ Watchtower 已启动${NC}"
     else
-        echo -e "${RED}❌ 启动失败，容器可能不存在。${NC}"
+        docker start watchtower 2>/dev/null && echo -e "${GREEN}✅ Watchtower 已启动${NC}"
     fi
 }
 
 function stop_watchtower() {
-    clear
-    echo "正在停止 Watchtower..."
-    
-    if docker stop watchtower 2>/dev/null; then
-        echo -e "${GREEN}✅ Watchtower 停止成功！${NC}"
+    local deploy_dir="/root/vpsx/apps/watchtower"
+    if [ -d "$deploy_dir" ]; then
+        cd "$deploy_dir" && (docker compose stop || docker-compose stop)
+        echo -e "${GREEN}✅ Watchtower 已停止${NC}"
     else
-        echo -e "${RED}❌ 停止失败，容器可能不存在。${NC}"
+        docker stop watchtower 2>/dev/null && echo -e "${GREEN}✅ Watchtower 已停止${NC}"
     fi
 }
 
 function restart_watchtower() {
-    clear
-    echo "正在重启 Watchtower..."
-    
-    if docker restart watchtower 2>/dev/null; then
-        echo -e "${GREEN}✅ Watchtower 重启成功！${NC}"
+    local deploy_dir="/root/vpsx/apps/watchtower"
+    if [ -d "$deploy_dir" ]; then
+        cd "$deploy_dir" && (docker compose restart || docker-compose restart)
+        echo -e "${GREEN}✅ Watchtower 已重启${NC}"
     else
-        echo -e "${RED}❌ 重启失败，容器可能不存在。${NC}"
+        docker restart watchtower 2>/dev/null && echo -e "${GREEN}✅ Watchtower 已重启${NC}"
     fi
 }
+
 function configure_watchtower() {
     clear
     echo -e "${CYAN}==========================================${NC}"
