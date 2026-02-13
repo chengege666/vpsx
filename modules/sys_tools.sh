@@ -671,34 +671,96 @@ function accelerate_memory_clean() {
     read -p "按回车键返回菜单..."
 }
 
-# 修改DNS服务器
+# ===================== 辅助函数（可内嵌或独立） =====================
+
+# 验证 IPv4 或 IPv6 地址格式
+validate_ip() {
+    local ip=$1
+    # IPv4
+    if [[ $ip =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+        for octet in ${ip//./ }; do
+            if ((octet < 0 || octet > 255)); then
+                return 1
+            fi
+        done
+        return 0
+    fi
+    # IPv6 (简化验证)
+    if [[ $ip =~ ^([0-9a-fA-F]{1,4}:){1,7}[0-9a-fA-F]{1,4}$ ]] || [[ $ip =~ ^::[0-9a-fA-F]+ ]]; then
+        return 0
+    fi
+    return 1
+}
+
+# 检测当前网络管理工具及 DNS 配置方式
+detect_dns_manager() {
+    if systemctl is-active --quiet systemd-resolved; then
+        echo "systemd-resolved"
+    elif command -v resolvconf &>/dev/null; then
+        echo "resolvconf"
+    elif systemctl is-active --quiet NetworkManager; then
+        echo "NetworkManager"
+    elif systemctl is-active --quiet systemd-networkd; then
+        echo "systemd-networkd"
+    elif [ -f /etc/network/interfaces ]; then
+        echo "ifupdown"
+    else
+        echo "direct"
+    fi
+}
+
+# 显示当前所有生效的 DNS 服务器（来自多个来源）
+show_current_dns() {
+    echo -e "${BLUE}当前系统 DNS 配置详情：${NC}"
+    echo -e "${YELLOW}--- /etc/resolv.conf 内容 ---${NC}"
+    if [ -f /etc/resolv.conf ]; then
+        grep '^nameserver' /etc/resolv.conf | sed 's/^/  /' || echo "  无 nameserver 条目"
+    else
+        echo "  /etc/resolv.conf 不存在"
+    fi
+
+    local manager=$(detect_dns_manager)
+    echo -e "${YELLOW}--- 检测到的 DNS 管理器: ${manager} ---${NC}"
+
+    case $manager in
+        systemd-resolved)
+            echo -e "${YELLOW}--- systemd-resolved 上游 DNS ---${NC}"
+            if command -v resolvectl &>/dev/null; then
+                resolvectl status | awk '/DNS Servers:/{flag=1; next} /^$/{flag=0} flag' | sed 's/^/  /'
+            else
+                systemd-resolve --status 2>/dev/null | awk '/DNS Servers:/{flag=1; next} /^$/{flag=0} flag' | sed 's/^/  /'
+            fi
+            ;;
+        NetworkManager)
+            echo -e "${YELLOW}--- NetworkManager 连接 DNS ---${NC}"
+            nmcli dev show | grep DNS | sed 's/^/  /' || echo "  未找到 DNS 信息"
+            ;;
+        systemd-networkd)
+            echo -e "${YELLOW}--- systemd-networkd 配置 ---${NC}"
+            networkctl status 2>/dev/null | awk '/DNS:/{print "  " $0}' || echo "  无 DNS 信息"
+            ;;
+        resolvconf)
+            echo -e "${YELLOW}--- resolvconf 管理 ---${NC}"
+            echo "  由 resolvconf 动态管理"
+            ;;
+        ifupdown)
+            echo -e "${YELLOW}--- /etc/network/interfaces 静态配置 ---${NC}"
+            grep 'dns-nameservers' /etc/network/interfaces | sed 's/^/  /' || echo "  未找到 dns-nameservers 条目"
+            ;;
+    esac
+}
+
+# ===================== 主函数 =====================
+
 function modify_dns_server() {
     clear
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}          修改DNS服务器${NC}"
+    echo -e "${GREEN}          修改DNS服务器（持久化）${NC}"
     echo -e "${CYAN}=========================================${NC}"
-    
-    # 检查当前系统 DNS 管理方式
-    local dns_mode="direct"
-    if command -v resolvconf &> /dev/null; then
-        dns_mode="resolvconf"
-    elif systemctl is-active --quiet systemd-resolved; then
-        dns_mode="systemd-resolved"
-    fi
 
-    echo -e "当前系统 DNS 管理模式: ${YELLOW}$dns_mode${NC}"
-    echo -e "当前DNS设置 (来自 /etc/resolv.conf):"
-    grep "nameserver" /etc/resolv.conf | head -n 3
-    
-    if [ "$dns_mode" == "systemd-resolved" ]; then
-        echo -e "${BLUE}有效上游 DNS 服务器:${NC}"
-        # 获取所有接口的 DNS，过滤掉本地回环地址，提取 IPv4 和 IPv6 并去重
-        local dns_list=$(resolvectl status 2>/dev/null | grep -E "([0-9]{1,3}\.){3}[0-9]{1,3}|([a-fA-F0-9:]+:+)+[a-fA-F0-9]+" | grep -v "127.0.0.53" | awk '{for(i=1;i<=NF;i++) if($i ~ /[0-9]|:/) print $i}' | sort -u)
-        if [ -z "$dns_list" ]; then
-            dns_list=$(systemd-resolve --status 2>/dev/null | grep -E "([0-9]{1,3}\.){3}[0-9]{1,3}|([a-fA-F0-9:]+:+)+[a-fA-F0-9]+" | grep -v "127.0.0.53" | awk '{for(i=1;i<=NF;i++) if($i ~ /[0-9]|:/) print $i}' | sort -u)
-        fi
-        [ -n "$dns_list" ] && echo "$dns_list" | sed 's/^/  /' || echo "  未检测到外部 DNS"
-    fi
+    # 显示当前 DNS 配置（调用辅助函数）
+    show_current_dns
+
     echo ""
     echo -e "请选择操作:"
     echo -e " ${GREEN}1.${NC} 设置为 Google DNS (8.8.8.8, 8.8.4.4)"
@@ -720,12 +782,19 @@ function modify_dns_server() {
             dns2="1.0.0.1"
             ;;
         3)
-            read -p "请输入主DNS服务器: " dns1
-            if [[ -z "$dns1" ]]; then
-                echo -e "${RED}主DNS不能为空。${NC}"
-                return
-            fi
+            while true; do
+                read -p "请输入主DNS服务器: " dns1
+                if validate_ip "$dns1"; then
+                    break
+                else
+                    echo -e "${RED}无效的IP地址，请重新输入${NC}"
+                fi
+            done
             read -p "请输入备用DNS服务器 (可选): " dns2
+            if [ -n "$dns2" ] && ! validate_ip "$dns2"; then
+                echo -e "${RED}备用DNS格式无效，将忽略${NC}"
+                dns2=""
+            fi
             ;;
         0) return ;;
         *) echo -e "${RED}无效的选择。${NC}"; return ;;
@@ -733,65 +802,109 @@ function modify_dns_server() {
 
     echo -e "${YELLOW}正在配置持久化 DNS...${NC}"
 
-    # 1. 尝试修改网卡配置 (针对 Debian/Ubuntu 的 /etc/network/interfaces)
-    if [ -f /etc/network/interfaces ]; then
-        if grep -q "dns-nameservers" /etc/network/interfaces; then
-            sed -i "s/dns-nameservers.*/dns-nameservers $dns1 $dns2/" /etc/network/interfaces
-        else
-            # 简单追加到末尾可能不准确，但通常能生效
-            echo "dns-nameservers $dns1 $dns2" >> /etc/network/interfaces
-        fi
-    fi
+    # 检测当前 DNS 管理器
+    local manager=$(detect_dns_manager)
+    echo -e "检测到的 DNS 管理器: ${YELLOW}${manager}${NC}"
 
-    # 2. 针对不同模式应用配置
-    case "$dns_mode" in
-        "resolvconf")
-            # 修改 resolvconf 的头部文件
-            echo "nameserver $dns1" > /etc/resolvconf/resolv.conf.d/head
-            [ -n "$dns2" ] && echo "nameserver $dns2" >> /etc/resolvconf/resolv.conf.d/head
-            resolvconf -u
-            ;;
-        "systemd-resolved")
-            # 1. 识别默认网卡并强制应用配置（这是覆盖 ISP DNS 的关键）
-            local default_interface=$(ip route | grep default | awk '{print $5}' | head -n 1)
-            if [ -n "$default_interface" ]; then
-                echo -e "${YELLOW}检测到默认网卡: $default_interface，正在强制覆盖接口 DNS...${NC}"
-                resolvectl dns "$default_interface" $dns1 $dns2 2>/dev/null
-                resolvectl domain "$default_interface" "~." 2>/dev/null
-            fi
-
-            # 2. 修改全局 systemd-resolved 配置
-            if [ ! -d /etc/systemd/resolved.conf.d ]; then
-                mkdir -p /etc/systemd/resolved.conf.d
-            fi
+    # ========== 根据不同管理器执行持久化配置 ==========
+    case $manager in
+        systemd-resolved)
+            mkdir -p /etc/systemd/resolved.conf.d
             cat > /etc/systemd/resolved.conf.d/dns.conf <<EOF
 [Resolve]
 DNS=$dns1 $dns2
-FallbackDNS=
 Domains=~.
 EOF
             systemctl restart systemd-resolved
+            echo -e "${GREEN}systemd-resolved 配置已更新${NC}"
             ;;
-        *)
-            # 兜底方案：锁定 /etc/resolv.conf
-            # 先解锁
+
+        resolvconf)
+            # 备份原 head 文件
+            [ -f /etc/resolvconf/resolv.conf.d/head ] && cp /etc/resolvconf/resolv.conf.d/head /etc/resolvconf/resolv.conf.d/head.bak
+            echo "nameserver $dns1" > /etc/resolvconf/resolv.conf.d/head
+            [ -n "$dns2" ] && echo "nameserver $dns2" >> /etc/resolvconf/resolv.conf.d/head
+            resolvconf -u
+            echo -e "${GREEN}resolvconf 配置已更新${NC}"
+            ;;
+
+        NetworkManager)
+            # 获取当前活动连接（取第一个有DNS设置的）
+            local conn=$(nmcli -t -f NAME,TYPE con show --active | grep -v loopback | head -1 | cut -d: -f1)
+            if [ -n "$conn" ]; then
+                nmcli con mod "$conn" ipv4.dns "$dns1 $dns2"
+                nmcli con mod "$conn" ipv4.ignore-auto-dns yes
+                nmcli con down "$conn" && nmcli con up "$conn"
+                echo -e "${GREEN}NetworkManager 连接 '$conn' DNS 已更新${NC}"
+            else
+                echo -e "${RED}未找到活动的 NetworkManager 连接，请手动配置${NC}"
+            fi
+            ;;
+
+        systemd-networkd)
+            # 找到第一个 .network 配置文件（通常位于 /etc/systemd/network/ 或 /lib/systemd/network/）
+            local net_file=$(find /etc/systemd/network /lib/systemd/network -name '*.network' -type f 2>/dev/null | head -1)
+            if [ -n "$net_file" ]; then
+                # 如果文件已有 [Network] 段，追加或替换 DNS=
+                if grep -q '^\[Network\]' "$net_file"; then
+                    sed -i '/^\[Network\]/,/^\[/ s/^DNS=.*/DNS='"$dns1 $dns2"'/' "$net_file"
+                    if ! grep -q '^DNS=' "$net_file"; then
+                        sed -i '/^\[Network\]/a DNS='"$dns1 $dns2" "$net_file"
+                    fi
+                else
+                    echo -e "\n[Network]\nDNS=$dns1 $dns2" >> "$net_file"
+                fi
+                systemctl restart systemd-networkd
+                echo -e "${GREEN}systemd-networkd 配置已更新${NC}"
+            else
+                echo -e "${RED}未找到 systemd-networkd 的 .network 文件，请手动创建${NC}"
+            fi
+            ;;
+
+        ifupdown)
+            # 修改 /etc/network/interfaces
+            if grep -q '^iface' /etc/network/interfaces; then
+                # 尝试找到主接口并添加 dns-nameservers
+                if grep -q 'dns-nameservers' /etc/network/interfaces; then
+                    sed -i "s/dns-nameservers.*/dns-nameservers $dns1 $dns2/" /etc/network/interfaces
+                else
+                    # 在第一个 iface 块末尾添加
+                    sed -i '/^iface/ {n; s/$/\\n    dns-nameservers '"$dns1 $dns2"'/}' /etc/network/interfaces
+                fi
+                echo -e "${GREEN}/etc/network/interfaces 已更新，重启网络生效${NC}"
+                echo -e "${YELLOW}建议执行: systemctl restart networking 或 ifdown/ifup${NC}"
+            else
+                echo -e "${RED}/etc/network/interfaces 中没有有效的 iface 定义，请手动配置${NC}"
+            fi
+            ;;
+
+        direct)
+            # 直接修改 /etc/resolv.conf 并尝试锁定以防止被覆盖
             chattr -i /etc/resolv.conf 2>/dev/null
             echo "nameserver $dns1" > /etc/resolv.conf
             [ -n "$dns2" ] && echo "nameserver $dns2" >> /etc/resolv.conf
-            # 提示用户可能被覆盖
-            echo -e "${YELLOW}提示：系统未检测到高级 DNS 管理器，已直接修改 /etc/resolv.conf。${NC}"
+            # 询问是否锁定文件
+            read -p "是否锁定 /etc/resolv.conf 防止被覆盖？(y/n): " lock_choice
+            if [[ "$lock_choice" =~ ^[Yy]$ ]]; then
+                chattr +i /etc/resolv.conf && echo -e "${GREEN}文件已锁定${NC}"
+            else
+                echo -e "${YELLOW}文件未锁定，可能被其他服务覆盖${NC}"
+            fi
             ;;
     esac
 
-    # 3. 再次确保 /etc/resolv.conf 更新 (针对某些静态系统)
-    if [ "$dns_mode" != "systemd-resolved" ]; then
-        echo "nameserver $dns1" > /etc/resolv.conf
-        [ -n "$dns2" ] && echo "nameserver $dns2" >> /etc/resolv.conf
+    # 额外步骤：对于某些情况，确保 /etc/resolv.conf 同步（避免立即失效）
+    if [ "$manager" != "systemd-resolved" ] && [ "$manager" != "direct" ]; then
+        # 大多数管理器会更新 /etc/resolv.conf，但以防万一，可以刷新
+        sleep 2
+        echo -e "${YELLOW}当前 /etc/resolv.conf 内容:${NC}"
+        grep 'nameserver' /etc/resolv.conf | sed 's/^/  /'
     fi
 
-    echo -e "${GREEN}DNS 修改完成并尝试持久化生效。${NC}"
+    echo -e "${GREEN}DNS 修改完成并已尝试持久化。${NC}"
     read -p "按任意键继续..."
 }
+
 function close_specified_port() {
     clear
     echo -e "${CYAN}=========================================${NC}"
