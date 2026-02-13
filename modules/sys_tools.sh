@@ -677,8 +677,18 @@ function modify_dns_server() {
     echo -e "${CYAN}=========================================${NC}"
     echo -e "${GREEN}          修改DNS服务器${NC}"
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "当前DNS服务器设置 (来自 /etc/resolv.conf):"
-    grep "nameserver" /etc/resolv.conf
+    
+    # 检查当前系统 DNS 管理方式
+    local dns_mode="direct"
+    if command -v resolvconf &> /dev/null; then
+        dns_mode="resolvconf"
+    elif systemctl is-active --quiet systemd-resolved; then
+        dns_mode="systemd-resolved"
+    fi
+
+    echo -e "当前系统 DNS 管理模式: ${YELLOW}$dns_mode${NC}"
+    echo -e "当前DNS设置 (来自 /etc/resolv.conf):"
+    grep "nameserver" /etc/resolv.conf | head -n 3
     echo ""
     echo -e "请选择操作:"
     echo -e " ${GREEN}1.${NC} 设置为 Google DNS (8.8.8.8, 8.8.4.4)"
@@ -687,37 +697,79 @@ function modify_dns_server() {
     echo -e " ${RED}0.${NC} 返回"
     read -p "请输入你的选择 (0-3): " choice
 
+    local dns1=""
+    local dns2=""
+
     case $choice in
         1)
-            echo "nameserver 8.8.8.8" > /etc/resolv.conf
-            echo "nameserver 8.8.4.4" >> /etc/resolv.conf
-            echo -e "${GREEN}已设置为 Google DNS。${NC}"
+            dns1="8.8.8.8"
+            dns2="8.8.4.4"
             ;;
         2)
-            echo "nameserver 1.1.1.1" > /etc/resolv.conf
-            echo "nameserver 1.0.0.1" >> /etc/resolv.conf
-            echo -e "${GREEN}已设置为 Cloudflare DNS。${NC}"
+            dns1="1.1.1.1"
+            dns2="1.0.0.1"
             ;;
         3)
-            read -p "请输入主DNS服务器: " primary_dns
-            if [[ -z "$primary_dns" ]]; then
+            read -p "请输入主DNS服务器: " dns1
+            if [[ -z "$dns1" ]]; then
                 echo -e "${RED}主DNS不能为空。${NC}"
-            else
-                read -p "请输入备用DNS服务器 (可选，留空则不设置): " secondary_dns
-                echo "nameserver $primary_dns" > /etc/resolv.conf
-                if [ -n "$secondary_dns" ]; then
-                    echo "nameserver $secondary_dns" >> /etc/resolv.conf
-                fi
-                echo -e "${GREEN}已设置为自定义DNS。${NC}"
+                return
             fi
+            read -p "请输入备用DNS服务器 (可选): " dns2
             ;;
-        0)
-            return
+        0) return ;;
+        *) echo -e "${RED}无效的选择。${NC}"; return ;;
+    esac
+
+    echo -e "${YELLOW}正在配置持久化 DNS...${NC}"
+
+    # 1. 尝试修改网卡配置 (针对 Debian/Ubuntu 的 /etc/network/interfaces)
+    if [ -f /etc/network/interfaces ]; then
+        if grep -q "dns-nameservers" /etc/network/interfaces; then
+            sed -i "s/dns-nameservers.*/dns-nameservers $dns1 $dns2/" /etc/network/interfaces
+        else
+            # 简单追加到末尾可能不准确，但通常能生效
+            echo "dns-nameservers $dns1 $dns2" >> /etc/network/interfaces
+        fi
+    fi
+
+    # 2. 针对不同模式应用配置
+    case "$dns_mode" in
+        "resolvconf")
+            # 修改 resolvconf 的头部文件
+            echo "nameserver $dns1" > /etc/resolvconf/resolv.conf.d/head
+            [ -n "$dns2" ] && echo "nameserver $dns2" >> /etc/resolvconf/resolv.conf.d/head
+            resolvconf -u
+            ;;
+        "systemd-resolved")
+            # 修改 systemd-resolved 配置
+            if [ ! -d /etc/systemd/resolved.conf.d ]; then
+                mkdir -p /etc/systemd/resolved.conf.d
+            fi
+            cat > /etc/systemd/resolved.conf.d/dns.conf <<EOF
+[Resolve]
+DNS=$dns1 $dns2
+EOF
+            systemctl restart systemd-resolved
             ;;
         *)
-            echo -e "${RED}无效的选择，请重新输入。${NC}"
+            # 兜底方案：锁定 /etc/resolv.conf
+            # 先解锁
+            chattr -i /etc/resolv.conf 2>/dev/null
+            echo "nameserver $dns1" > /etc/resolv.conf
+            [ -n "$dns2" ] && echo "nameserver $dns2" >> /etc/resolv.conf
+            # 提示用户可能被覆盖
+            echo -e "${YELLOW}提示：系统未检测到高级 DNS 管理器，已直接修改 /etc/resolv.conf。${NC}"
             ;;
     esac
+
+    # 3. 再次确保 /etc/resolv.conf 更新 (针对某些静态系统)
+    if [ "$dns_mode" != "systemd-resolved" ]; then
+        echo "nameserver $dns1" > /etc/resolv.conf
+        [ -n "$dns2" ] && echo "nameserver $dns2" >> /etc/resolv.conf
+    fi
+
+    echo -e "${GREEN}DNS 修改完成并尝试持久化生效。${NC}"
     read -p "按任意键继续..."
 }
 function close_specified_port() {
