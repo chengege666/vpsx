@@ -692,12 +692,12 @@ function modify_dns_server() {
     
     if [ "$dns_mode" == "systemd-resolved" ]; then
         echo -e "${BLUE}有效上游 DNS 服务器:${NC}"
-        # 使用更健壮的解析逻辑，避免破坏 IPv6 地址
-        local dns_list=$(resolvectl status 2>/dev/null | awk '/DNS Servers:/{for(i=3;i<=NF;i++) print $i}' | sort -u)
+        # 获取所有接口的 DNS，过滤掉本地回环地址，提取 IPv4 和 IPv6 并去重
+        local dns_list=$(resolvectl status 2>/dev/null | grep -E "([0-9]{1,3}\.){3}[0-9]{1,3}|([a-fA-F0-9:]+:+)+[a-fA-F0-9]+" | grep -v "127.0.0.53" | awk '{for(i=1;i<=NF;i++) if($i ~ /[0-9]|:/) print $i}' | sort -u)
         if [ -z "$dns_list" ]; then
-            dns_list=$(systemd-resolve --status 2>/dev/null | awk '/DNS Servers:/{for(i=3;i<=NF;i++) print $i}' | sort -u)
+            dns_list=$(systemd-resolve --status 2>/dev/null | grep -E "([0-9]{1,3}\.){3}[0-9]{1,3}|([a-fA-F0-9:]+:+)+[a-fA-F0-9]+" | grep -v "127.0.0.53" | awk '{for(i=1;i<=NF;i++) if($i ~ /[0-9]|:/) print $i}' | sort -u)
         fi
-        echo "$dns_list" | sed 's/^/  /'
+        [ -n "$dns_list" ] && echo "$dns_list" | sed 's/^/  /' || echo "  未检测到外部 DNS"
     fi
     echo ""
     echo -e "请选择操作:"
@@ -752,13 +752,22 @@ function modify_dns_server() {
             resolvconf -u
             ;;
         "systemd-resolved")
-            # 修改 systemd-resolved 配置
+            # 1. 识别默认网卡并强制应用配置（这是覆盖 ISP DNS 的关键）
+            local default_interface=$(ip route | grep default | awk '{print $5}' | head -n 1)
+            if [ -n "$default_interface" ]; then
+                echo -e "${YELLOW}检测到默认网卡: $default_interface，正在强制覆盖接口 DNS...${NC}"
+                resolvectl dns "$default_interface" $dns1 $dns2 2>/dev/null
+                resolvectl domain "$default_interface" "~." 2>/dev/null
+            fi
+
+            # 2. 修改全局 systemd-resolved 配置
             if [ ! -d /etc/systemd/resolved.conf.d ]; then
                 mkdir -p /etc/systemd/resolved.conf.d
             fi
             cat > /etc/systemd/resolved.conf.d/dns.conf <<EOF
 [Resolve]
 DNS=$dns1 $dns2
+FallbackDNS=
 Domains=~.
 EOF
             systemctl restart systemd-resolved
