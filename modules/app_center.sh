@@ -2169,7 +2169,7 @@ function install_watchtower() {
     fi
 
     # 创建部署目录
-    local deploy_dir="/root/vpsx/apps/watchtower"
+    local deploy_dir="/opt/vpsx/apps/watchtower"
     mkdir -p "$deploy_dir"
     cd "$deploy_dir" || return
 
@@ -2290,7 +2290,7 @@ EOF
     fi
 }
 function start_watchtower() {
-    local deploy_dir="/root/vpsx/apps/watchtower"
+    local deploy_dir="/opt/vpsx/apps/watchtower"
     if [ -d "$deploy_dir" ]; then
         cd "$deploy_dir" && (docker compose start || docker-compose start)
         echo -e "${GREEN}✅ Watchtower 已启动${NC}"
@@ -2300,7 +2300,7 @@ function start_watchtower() {
 }
 
 function stop_watchtower() {
-    local deploy_dir="/root/vpsx/apps/watchtower"
+    local deploy_dir="/opt/vpsx/apps/watchtower"
     if [ -d "$deploy_dir" ]; then
         cd "$deploy_dir" && (docker compose stop || docker-compose stop)
         echo -e "${GREEN}✅ Watchtower 已停止${NC}"
@@ -2310,7 +2310,7 @@ function stop_watchtower() {
 }
 
 function restart_watchtower() {
-    local deploy_dir="/root/vpsx/apps/watchtower"
+    local deploy_dir="/opt/vpsx/apps/watchtower"
     if [ -d "$deploy_dir" ]; then
         cd "$deploy_dir" && (docker compose restart || docker-compose restart)
         echo -e "${GREEN}✅ Watchtower 已重启${NC}"
@@ -2325,6 +2325,12 @@ function configure_watchtower() {
     echo -e "${CYAN}          配置 Watchtower 选项${NC}"
     echo -e "${CYAN}==========================================${NC}"
     
+    local deploy_dir="/opt/vpsx/apps/watchtower"
+    local use_compose=false
+    if [ -d "$deploy_dir" ] && [ -f "$deploy_dir/docker-compose.yml" ]; then
+        use_compose=true
+    fi
+
     if ! docker ps -a --format '{{.Names}}' | grep -q "^watchtower$"; then
         echo -e "${RED}❌ Watchtower 容器不存在，请先安装。${NC}"
         return
@@ -2346,18 +2352,15 @@ function configure_watchtower() {
         1)
             read -p "新的检查间隔（如 24h、12h、30m）: " new_interval
             if [ -n "$new_interval" ]; then
-                echo "停止并重新创建容器..."
-                docker stop watchtower >/dev/null 2>&1
-                docker rm watchtower >/dev/null 2>&1
-                
-                # 获取原有参数并重新创建
-                docker run -d \
-                    --name watchtower \
-                    --restart unless-stopped \
-                    -v /var/run/docker.sock:/var/run/docker.sock \
-                    containrrr/watchtower \
-                    --interval $new_interval
-                
+                if [ "$use_compose" = true ]; then
+                    sed -i "s/WATCHTOWER_POLL_INTERVAL=.*/WATCHTOWER_POLL_INTERVAL=${new_interval}/" "$deploy_dir/.env"
+                    cd "$deploy_dir" && (docker compose up -d || docker-compose up -d)
+                else
+                    echo "停止并重新创建容器..."
+                    docker stop watchtower >/dev/null 2>&1
+                    docker rm watchtower >/dev/null 2>&1
+                    docker run -d --name watchtower --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower --interval $new_interval
+                fi
                 echo -e "${GREEN}✅ 检查间隔已更新为 ${new_interval}${NC}"
             fi
             ;;
@@ -2368,27 +2371,25 @@ function configure_watchtower() {
             echo ""
             read -p "请输入 shoutrrr URL（留空则禁用通知）: " notify_url
             
-            docker stop watchtower >/dev/null 2>&1
-            docker rm watchtower >/dev/null 2>&1
-            
-            if [ -z "$notify_url" ]; then
-                # 无通知
-                docker run -d \
-                    --name watchtower \
-                    --restart unless-stopped \
-                    -v /var/run/docker.sock:/var/run/docker.sock \
-                    containrrr/watchtower
-                echo -e "${GREEN}✅ 已禁用通知${NC}"
+            if [ "$use_compose" = true ]; then
+                if [ -z "$notify_url" ]; then
+                    sed -i "/WATCHTOWER_NOTIFICATIONS/d" "$deploy_dir/.env"
+                    sed -i "/WATCHTOWER_NOTIFICATION_URL/d" "$deploy_dir/.env"
+                else
+                    grep -q "WATCHTOWER_NOTIFICATIONS" "$deploy_dir/.env" && sed -i "s|WATCHTOWER_NOTIFICATIONS=.*|WATCHTOWER_NOTIFICATIONS=shoutrrr|" "$deploy_dir/.env" || echo "WATCHTOWER_NOTIFICATIONS=shoutrrr" >> "$deploy_dir/.env"
+                    grep -q "WATCHTOWER_NOTIFICATION_URL" "$deploy_dir/.env" && sed -i "s|WATCHTOWER_NOTIFICATION_URL=.*|WATCHTOWER_NOTIFICATION_URL=${notify_url}|" "$deploy_dir/.env" || echo "WATCHTOWER_NOTIFICATION_URL=${notify_url}" >> "$deploy_dir/.env"
+                fi
+                cd "$deploy_dir" && (docker compose up -d || docker-compose up -d)
             else
-                # 带通知
-                docker run -d \
-                    --name watchtower \
-                    --restart unless-stopped \
-                    -v /var/run/docker.sock:/var/run/docker.sock \
-                    -e WATCHTOWER_NOTIFICATIONS=shoutrrr \
-                    -e WATCHTOWER_NOTIFICATION_URL="$notify_url" \
-                    containrrr/watchtower
-                echo -e "${GREEN}✅ 通知配置已更新${NC}"
+                docker stop watchtower >/dev/null 2>&1
+                docker rm watchtower >/dev/null 2>&1
+                if [ -z "$notify_url" ]; then
+                    docker run -d --name watchtower --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower
+                    echo -e "${GREEN}✅ 已禁用通知${NC}"
+                else
+                    docker run -d --name watchtower --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock -e WATCHTOWER_NOTIFICATIONS=shoutrrr -e WATCHTOWER_NOTIFICATION_URL="$notify_url" containrrr/watchtower
+                    echo -e "${GREEN}✅ 通知配置已更新${NC}"
+                fi
             fi
             ;;
         3)
@@ -2397,43 +2398,45 @@ function configure_watchtower() {
             echo "2. 只监控指定容器"
             read -p "选择监控模式: " monitor_mode
             
-            docker stop watchtower >/dev/null 2>&1
-            docker rm watchtower >/dev/null 2>&1
-            
-            if [ "$monitor_mode" = "1" ]; then
-                docker run -d \
-                    --name watchtower \
-                    --restart unless-stopped \
-                    -v /var/run/docker.sock:/var/run/docker.sock \
-                    containrrr/watchtower
-                echo -e "${GREEN}✅ 已切换为监控所有容器${NC}"
+            if [ "$use_compose" = true ]; then
+                if [ "$monitor_mode" = "1" ]; then
+                    sed -i "/command:/d" "$deploy_dir/docker-compose.yml"
+                else
+                    echo "可监控的容器列表："
+                    docker ps --format "{{.Names}}" | grep -v "watchtower" | nl
+                    echo ""
+                    read -p "输入要监控的容器名称（多个用空格分隔）: " containers
+                    sed -i "/command:/d" "$deploy_dir/docker-compose.yml"
+                    echo "    command: $containers" >> "$deploy_dir/docker-compose.yml"
+                fi
+                cd "$deploy_dir" && (docker compose up -d || docker-compose up -d)
             else
-                echo "可监控的容器列表："
-                docker ps --format "{{.Names}}" | grep -v "watchtower" | nl
-                echo ""
-                read -p "输入要监控的容器名称（多个用空格分隔）: " containers
-                
-                docker run -d \
-                    --name watchtower \
-                    --restart unless-stopped \
-                    -v /var/run/docker.sock:/var/run/docker.sock \
-                    containrrr/watchtower \
-                    $containers
-                echo -e "${GREEN}✅ 已设置为监控指定容器${NC}"
+                docker stop watchtower >/dev/null 2>&1
+                docker rm watchtower >/dev/null 2>&1
+                if [ "$monitor_mode" = "1" ]; then
+                    docker run -d --name watchtower --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower
+                    echo -e "${GREEN}✅ 已切换为监控所有容器${NC}"
+                else
+                    echo "可监控的容器列表："
+                    docker ps --format "{{.Names}}" | grep -v "watchtower" | nl
+                    echo ""
+                    read -p "输入要监控的容器名称（多个用空格分隔）: " containers
+                    docker run -d --name watchtower --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower $containers
+                    echo -e "${GREEN}✅ 已设置为监控指定容器${NC}"
+                fi
             fi
             ;;
         4)
             read -p "是否启用自动清理旧镜像？(y/N): " enable_cleanup
             if [[ "$enable_cleanup" =~ ^[yY]$ ]]; then
-                docker stop watchtower >/dev/null 2>&1
-                docker rm watchtower >/dev/null 2>&1
-                
-                docker run -d \
-                    --name watchtower \
-                    --restart unless-stopped \
-                    -v /var/run/docker.sock:/var/run/docker.sock \
-                    containrrr/watchtower \
-                    --cleanup
+                if [ "$use_compose" = true ]; then
+                    grep -q "WATCHTOWER_CLEANUP" "$deploy_dir/.env" && sed -i "s/WATCHTOWER_CLEANUP=.*/WATCHTOWER_CLEANUP=true/" "$deploy_dir/.env" || echo "WATCHTOWER_CLEANUP=true" >> "$deploy_dir/.env"
+                    cd "$deploy_dir" && (docker compose up -d || docker-compose up -d)
+                else
+                    docker stop watchtower >/dev/null 2>&1
+                    docker rm watchtower >/dev/null 2>&1
+                    docker run -d --name watchtower --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower --cleanup
+                fi
                 echo -e "${GREEN}✅ 已启用自动清理旧镜像${NC}"
             fi
             ;;
