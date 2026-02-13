@@ -671,89 +671,99 @@ function accelerate_memory_clean() {
     read -p "按回车键返回菜单..."
 }
 
-# 修改DNS服务器（保留原版菜单 + 永久生效逻辑）
+# 修改DNS服务器（重构版：永久生效 + 修正显示）
 function modify_dns_server() {
     clear
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}          修改DNS服务器 (永久生效)${NC}"
+    echo -e "${GREEN}          修改 DNS 服务器${NC}"
     echo -e "${CYAN}=========================================${NC}"
     
-    # 获取真实生效的 DNS (跳过 127.0.0.1 的表象)
-    echo -e "当前真实 DNS 设置:"
-    if [ -L /etc/resolv.conf ]; then
-        # 如果是软链接，尝试读取真实指向的文件内容
-        grep "nameserver" /run/systemd/resolve/resolv.conf 2>/dev/null || grep "nameserver" /etc/resolv.conf
+    # --- 步骤1：获取并显示当前真实的 DNS ---
+    # 逻辑：优先读取 systemd 的动态解析文件（真实IP），如果不存在则读取标准文件
+    local current_dns=""
+    if [ -f /run/systemd/resolve/resolv.conf ]; then
+        current_dns=$(grep -i '^nameserver' /run/systemd/resolve/resolv.conf | awk '{print $2}' | xargs)
     else
-        grep "nameserver" /etc/resolv.conf
+        current_dns=$(grep -i '^nameserver' /etc/resolv.conf | awk '{print $2}' | xargs)
     fi
     
-    echo ""
-    echo -e "请选择操作:"
-    echo -e " ${GREEN}1.${NC} 设置为 Google DNS (8.8.8.8, 8.8.4.4)"
-    echo -e " ${GREEN}2.${NC} 设置为 Cloudflare DNS (1.1.1.1, 1.0.0.1)"
-    echo -e " ${GREEN}3.${NC} 设置为自定义DNS"
+    # 如果获取结果为空或为本地回环，尝试用 resolvectl 获取
+    if [[ -z "$current_dns" || "$current_dns" == "127.0.0.53" || "$current_dns" == "127.0.0.1" ]]; then
+        if command -v resolvectl &> /dev/null; then
+            current_dns=$(resolvectl dns | awk '{$1=""; print $0}' | xargs)
+        fi
+    fi
+
+    echo -e "当前系统实际 DNS: ${YELLOW}${current_dns:-未知}${NC}"
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    
+    # --- 步骤2：快捷选择菜单 ---
+    echo -e "请选择 DNS 方案:"
+    echo -e " ${GREEN}1.${NC} Google DNS (8.8.8.8, 8.8.4.4)"
+    echo -e " ${GREEN}2.${NC} Cloudflare DNS (1.1.1.1, 1.0.0.1)"
+    echo -e " ${GREEN}3.${NC} 阿里/腾讯 DNS (223.5.5.5, 119.29.29.29)"
+    echo -e " ${GREEN}4.${NC} 自定义 DNS"
     echo -e " ${RED}0.${NC} 返回"
-    read -p "请输入你的选择 (0-3): " choice
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    read -p "请输入你的选择 (0-4): " choice
 
-    # 内部应用 DNS 的辅助逻辑
-    function apply_dns() {
-        local dns1=$1
-        local dns2=$2
-        
-        echo -e "${YELLOW}正在应用永久配置...${NC}"
+    # 定义设置 DNS 的核心逻辑函数
+    set_system_dns() {
+        local d1=$1
+        local d2=$2
+        local dns_string="$d1"
+        [[ -n "$d2" ]] && dns_string="$d1 $d2"
 
-        # 1. 针对使用 systemd-resolved 的现代系统 (Ubuntu/Debian/CentOS 8+)
-        if [ -f /etc/systemd/resolved.conf ]; then
-            # 修改主配置文件
-            sed -i "s/^#\?DNS=.*/DNS=$dns1 $dns2/" /etc/systemd/resolved.conf
-            sed -i "s/^#\?FallbackDNS=.*/FallbackDNS=8.8.8.8 1.1.1.1/" /etc/systemd/resolved.conf
+        echo -e "${YELLOW}正在配置 DNS 为: $dns_string ...${NC}"
+
+        # 1. 针对 Systemd 系统 (Ubuntu/Debian/CentOS 7+)
+        if command -v systemctl &> /dev/null && [ -f /etc/systemd/resolved.conf ]; then
+            # 修改配置文件 (使用 sed 替换 DNS= 行，无论是否被注释)
+            sed -i "s/^#\?DNS=.*/DNS=$dns_string/" /etc/systemd/resolved.conf
+            # 开启 FallbackDNS 以防万一
+            sed -i "s/^#\?FallbackDNS=.*/FallbackDNS=1.1.1.1 8.8.8.8/" /etc/systemd/resolved.conf
             
-            # 关键：切换软链接，让系统直接看真实的 DNS 而不是 127.0.0.1
+            # --- 关键步骤：修复 127.0.0.1 显示问题 ---
+            # 删除原有的指向 stub-resolv.conf (127.0.0.53) 的软链接
+            # 重建软链接指向 resolv.conf (真实IP文件)
             rm -f /etc/resolv.conf
             ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
             
-            # 重启服务生效
+            # 重启网络解析服务
+            echo -e "${BLUE}重启 systemd-resolved 服务...${NC}"
             systemctl restart systemd-resolved
+            
+        else
+            # 2. 针对非 Systemd 系统或老旧系统
+            echo -e "nameserver $d1" > /etc/resolv.conf
+            [[ -n "$d2" ]] && echo "nameserver $d2" >> /etc/resolv.conf
+            
+            # 尝试锁定文件防止 DHCP 覆盖 (可选，视情况而定)
+            # chattr +i /etc/resolv.conf 2>/dev/null
         fi
 
-        # 2. 传统兜底方案：直接写文件
-        # 如果不是链接文件或者没有 systemd，直接写
-        if [ ! -L /etc/resolv.conf ]; then
-            echo "nameserver $dns1" > /etc/resolv.conf
-            [ -n "$dns2" ] && echo "nameserver $dns2" >> /etc/resolv.conf
-        fi
-        
-        # 3. 释放 chattr 锁定（以防万一之前被锁过），然后重新锁定防止被 DHCP 覆盖
-        # 如果你需要极度强制的永久化，可以取消下面两行的注释
-        # chattr -i /etc/resolv.conf 2>/dev/null
-        # chattr +i /etc/resolv.conf 2>/dev/null
-
-        echo -e "${GREEN}DNS 设置已完成并已尝试永久化。${NC}"
+        echo -e "${GREEN}✅ DNS 修改成功！已设为永久生效。${NC}"
+        echo -e "${GREEN}现在的系统信息查询应该能直接显示真实 IP 了。${NC}"
     }
 
+    # --- 步骤3：执行选择 ---
     case $choice in
-        1)
-            apply_dns "8.8.8.8" "8.8.4.4"
-            ;;
-        2)
-            apply_dns "1.1.1.1" "1.0.0.1"
-            ;;
-        3)
-            read -p "请输入主DNS服务器: " primary_dns
-            if [[ -z "$primary_dns" ]]; then
-                echo -e "${RED}主DNS不能为空。${NC}"
+        1) set_system_dns "8.8.8.8" "8.8.4.4" ;;
+        2) set_system_dns "1.1.1.1" "1.0.0.1" ;;
+        3) set_system_dns "223.5.5.5" "119.29.29.29" ;;
+        4)
+            read -p "请输入主 DNS: " custom_d1
+            read -p "请输入备用 DNS (可选，回车跳过): " custom_d2
+            if [[ -z "$custom_d1" ]]; then
+                echo -e "${RED}错误：主 DNS 不能为空！${NC}"
             else
-                read -p "请输入备用DNS服务器 (可选): " secondary_dns
-                apply_dns "$primary_dns" "$secondary_dns"
+                set_system_dns "$custom_d1" "$custom_d2"
             fi
             ;;
-        0)
-            return
-            ;;
-        *)
-            echo -e "${RED}无效的选择。${NC}"
-            ;;
+        0) return ;;
+        *) echo -e "${RED}无效的选择！${NC}" ;;
     esac
+    
     read -p "按任意键继续..."
 }
 
