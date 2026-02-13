@@ -693,9 +693,9 @@ function modify_dns_server() {
     if [ "$dns_mode" == "systemd-resolved" ]; then
         echo -e "${BLUE}上游 DNS (systemd-resolved):${NC}"
         if command -v resolvectl &> /dev/null; then
-            resolvectl status | grep "DNS Servers" | awk '{print $3, $4, $5}' | sed 's/^/  /'
+            resolvectl status | grep "DNS Servers" | awk -F: '{print $2}' | xargs | tr ' ' '\n' | sort -u | sed 's/^/  /'
         elif command -v systemd-resolve &> /dev/null; then
-            systemd-resolve --status | grep "DNS Servers" | awk '{print $3, $4, $5}' | sed 's/^/  /'
+            systemd-resolve --status | grep "DNS Servers" | awk -F: '{print $2}' | xargs | tr ' ' '\n' | sort -u | sed 's/^/  /'
         fi
     fi
     echo ""
@@ -758,6 +758,7 @@ function modify_dns_server() {
             cat > /etc/systemd/resolved.conf.d/dns.conf <<EOF
 [Resolve]
 DNS=$dns1 $dns2
+Domains=~.
 EOF
             systemctl restart systemd-resolved
             ;;
