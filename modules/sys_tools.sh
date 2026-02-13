@@ -675,68 +675,47 @@ function accelerate_memory_clean() {
 function modify_dns_server() {
     clear
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}          修改DNS服务器 (永久生效)${NC}"
+    echo -e "${GREEN}          修改 DNS 服务器${NC}"
     echo -e "${CYAN}=========================================${NC}"
     
-    # 获取当前生效的 DNS
-    echo -e "当前系统解析状态:"
-    if command -v resolvectl &> /dev/null; then
-        resolvectl status | grep "DNS Servers" || grep "nameserver" /etc/resolv.conf
-    else
-        grep "nameserver" /etc/resolv.conf
-    fi
-    echo ""
-    
+    # 定义要设置的 DNS
     echo -e "请选择操作:"
-    echo -e " ${GREEN}1.${NC} 设置为 Google DNS (8.8.8.8, 8.8.4.4)"
-    echo -e " ${GREEN}2.${NC} 设置为 Cloudflare DNS (1.1.1.1, 1.0.0.1)"
-    echo -e " ${GREEN}3.${NC} 设置为 阿里/腾讯 DNS (223.5.5.5, 119.29.29.29)"
-    echo -e " ${GREEN}4.${NC} 设置为自定义DNS"
-    echo -e " ${RED}0.${NC} 返回"
-    read -p "请输入你的选择 (0-4): " choice
+    echo -e " ${GREEN}1.${NC} Google DNS (8.8.8.8)"
+    echo -e " ${GREEN}2.${NC} Cloudflare DNS (1.1.1.1)"
+    echo -e " ${GREEN}3.${NC} 自定义 DNS"
+    read -p "选择: " dns_choice
 
-    case $choice in
-        1) dns_main="8.8.8.8"; dns_backup="8.8.4.4" ;;
-        2) dns_main="1.1.1.1"; dns_backup="1.0.0.1" ;;
-        3) dns_main="223.5.5.5"; dns_backup="119.29.29.29" ;;
-        4)
-            read -p "请输入主DNS服务器: " dns_main
-            read -p "请输入备用DNS服务器 (可选): " dns_backup
-            ;;
-        0) return ;;
-        *) echo -e "${RED}无效选择${NC}"; sleep 1; return ;;
+    case $dns_choice in
+        1) dns_list="8.8.8.8 8.8.4.4" ;;
+        2) dns_list="1.1.1.1 1.0.0.1" ;;
+        3) read -p "输入主DNS: " d1; read -p "输入备DNS: " d2; dns_list="$d1 $d2" ;;
+        *) return ;;
     esac
 
-    if [[ -n "$dns_main" ]]; then
-        echo -e "${YELLOW}正在配置永久 DNS...${NC}"
+    echo -e "${YELLOW}正在应用永久配置...${NC}"
 
-        # 核心逻辑：判断并修改 systemd-resolved 配置
-        if [ -f /etc/systemd/resolved.conf ]; then
-            # 1. 修改配置文件，确保 DNS 行被正确设置
-            sed -i "s/^#\?DNS=.*/DNS=$dns_main $dns_backup/" /etc/systemd/resolved.conf
-            # 2. 确保 FallbackDNS 也有备选
-            sed -i "s/^#\?FallbackDNS=.*/FallbackDNS=1.1.1.1 8.8.8.8/" /etc/systemd/resolved.conf
-            
-            # 3. 重启服务使配置生效
-            systemctl restart systemd-resolved
-            
-            # 4. 解决部分系统 /etc/resolv.conf 没同步的问题
-            # 强制将 resolv.conf 指向 systemd-resolved 的运行时配置文件
-            ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
-            
-            echo -e "${GREEN}✅ 已通过 systemd-resolved 完成永久配置。${NC}"
-        else
-            # 传统方式 (非 systemd 系统)
-            echo "nameserver $dns_main" > /etc/resolv.conf
-            [ -n "$dns_backup" ] && echo "nameserver $dns_backup" >> /etc/resolv.conf
-            # 锁定文件防止被覆盖 (可选)
-            # chattr +i /etc/resolv.conf 
-            echo -e "${GREEN}✅ 已修改 /etc/resolv.conf。${NC}"
-        fi
-        
-        echo -e "${BLUE}当前生效的 DNS 为:${NC}"
-        grep "nameserver" /etc/resolv.conf
+    # 1. 修改 systemd-resolved 配置文件
+    if [ -d /etc/systemd/resolved.conf.d ]; then
+        # 推荐做法：创建独立配置文件
+        cat > /etc/systemd/resolved.conf.d/dns_custom.conf <<EOF
+[Resolve]
+DNS=$dns_list
+EOF
+    else
+        # 备选做法：直接修改主配置
+        sed -i "s/^#\?DNS=.*/DNS=$dns_list/" /etc/systemd/resolved.conf
     fi
+
+    # 2. 关键步骤：解决 127.0.0.1 的显示问题
+    # 强制将 /etc/resolv.conf 软链接到包含真实 DNS 的文件
+    rm -f /etc/resolv.conf
+    ln -s /run/systemd/resolve/resolv.conf /etc/resolv.conf
+
+    # 3. 重启服务
+    systemctl restart systemd-resolved
+    
+    echo -e "${GREEN}DNS 已永久修改为: $dns_list${NC}"
+    echo -e "${YELLOW}现在查询系统信息，应该不再显示 127.0.0.1 了。${NC}"
     read -p "按任意键继续..."
 }
 
