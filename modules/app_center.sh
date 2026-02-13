@@ -2169,7 +2169,7 @@ function install_watchtower() {
     fi
 
     # 创建部署目录
-    local deploy_dir="/opt/vpsx/apps/watchtower"
+    local deploy_dir="/opt/watchtower"
     mkdir -p "$deploy_dir"
     cd "$deploy_dir" || return
 
@@ -2290,7 +2290,7 @@ EOF
     fi
 }
 function start_watchtower() {
-    local deploy_dir="/opt/vpsx/apps/watchtower"
+    local deploy_dir="/opt/watchtower"
     if [ -d "$deploy_dir" ]; then
         cd "$deploy_dir" && (docker compose start || docker-compose start)
         echo -e "${GREEN}✅ Watchtower 已启动${NC}"
@@ -2300,7 +2300,7 @@ function start_watchtower() {
 }
 
 function stop_watchtower() {
-    local deploy_dir="/opt/vpsx/apps/watchtower"
+    local deploy_dir="/opt/watchtower"
     if [ -d "$deploy_dir" ]; then
         cd "$deploy_dir" && (docker compose stop || docker-compose stop)
         echo -e "${GREEN}✅ Watchtower 已停止${NC}"
@@ -2310,7 +2310,7 @@ function stop_watchtower() {
 }
 
 function restart_watchtower() {
-    local deploy_dir="/opt/vpsx/apps/watchtower"
+    local deploy_dir="/opt/watchtower"
     if [ -d "$deploy_dir" ]; then
         cd "$deploy_dir" && (docker compose restart || docker-compose restart)
         echo -e "${GREEN}✅ Watchtower 已重启${NC}"
@@ -2325,7 +2325,7 @@ function configure_watchtower() {
     echo -e "${CYAN}          配置 Watchtower 选项${NC}"
     echo -e "${CYAN}==========================================${NC}"
     
-    local deploy_dir="/opt/vpsx/apps/watchtower"
+    local deploy_dir="/opt/watchtower"
     local use_compose=false
     if [ -d "$deploy_dir" ] && [ -f "$deploy_dir/docker-compose.yml" ]; then
         use_compose=true
