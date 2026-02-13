@@ -550,9 +550,12 @@ function change_swap_size() {
         mkswap /swapfile
         swapon /swapfile
 
-        # Make it persistent
-        if ! grep -q "/swapfile swap swap defaults 0 0" /etc/fstab; then
+        # Make it persistent (Check if already exists)
+        if ! grep -q "^/swapfile" /etc/fstab; then
             echo "/swapfile swap swap defaults 0 0" >> /etc/fstab
+            echo -e "${GREEN}Swap 已添加至 /etc/fstab 实现持久化。${NC}"
+        else
+            echo -e "${YELLOW}Swap 条目已存在于 /etc/fstab 中，跳过写入。${NC}"
         fi
         echo -e "${GREEN}新的Swap已成功创建并启用。${NC}"
     else

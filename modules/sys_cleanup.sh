@@ -26,10 +26,14 @@ function system_cleanup() {
         # 1. 清理包管理器缓存
         echo -e "${BLUE}[步骤1/8] 清理APT缓存和旧包...${NC}"
         # 修复 'Malformed entry' 错误，删除可能损坏的 docker.list 文件
-        rm -f /etc/apt/sources.list.d/docker.list 2>/dev/null
+        if [ -f /etc/apt/sources.list.d/docker.list ]; then
+            mv /etc/apt/sources.list.d/docker.list /etc/apt/sources.list.d/docker.list.bak
+            echo -e "${YELLOW}已备份并移除可能损坏的 docker.list${NC}"
+        fi
         apt clean
         apt autoclean
-        apt autoremove --purge -y
+        # 仅自动移除不再需要的包，不强制 purge，降低误删系统组件风险
+        apt autoremove -y
         
         # 安装并使用 deborphan 清理孤立软件包
         if ! command -v deborphan >/dev/null 2>&1; then
@@ -41,15 +45,18 @@ function system_cleanup() {
             deborphan | xargs apt -y purge 2>/dev/null
         fi
         
-        # 2. 清理旧内核 (更彻底的方法)
+        # 2. 清理旧内核 (增强安全性：确保不删除当前内核及其配套文件)
         echo -e "${BLUE}[步骤2/8] 清理旧内核...${NC}"
-        current_kernel=$(uname -r | sed 's/-*[a-z]//g' | sed 's/-386//g')
-        installed_kernels=$(dpkg -l | grep linux-image | awk '{print $2}')
-        for kernel in $installed_kernels; do
-            if [[ "$kernel" != *"$current_kernel"* ]]; then
-                apt purge -y "$kernel" 2>/dev/null
-            fi
-        done
+        local current_kernel=$(uname -r)
+        # 查找所有已安装的内核包，但不包括当前运行的内核版本
+        local kernel_pkgs=$(dpkg-query -W -f='${Package}\n' 'linux-image-[0-9]*' 'linux-headers-[0-9]*' | grep -v "$current_kernel")
+        
+        if [ -n "$kernel_pkgs" ]; then
+            echo -e "${YELLOW}发现旧内核包，准备清理...${NC}"
+            echo "$kernel_pkgs" | xargs apt-get -y purge
+        else
+            echo -e "${GREEN}未发现需要清理的旧内核。${NC}"
+        fi
         
         # 3. 清理日志文件 (更彻底)
         echo -e "${BLUE}[步骤3/8] 清理日志文件...${NC}"
