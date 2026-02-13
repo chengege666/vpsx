@@ -1203,50 +1203,66 @@ function change_ssh_port() {
     read -p "按任意键继续..."
 }
 
-# 切换优先IPV4/IPV6
 function switch_ip_priority() {
     clear
     echo -e "${CYAN}=========================================${NC}"
     echo -e "${GREEN}          切换优先IPV4/IPV6${NC}"
     echo -e "${CYAN}=========================================${NC}"
 
-    if [ ! -f /etc/gai.conf ]; then
-        echo -e "${RED}错误: /etc/gai.conf 文件不存在。${NC}"
+    local gai_file="/etc/gai.conf"
+
+    if [ ! -f "$gai_file" ]; then
+        echo -e "${RED}错误: $gai_file 文件不存在。${NC}"
+        # 可以在此处添加自动创建文件的逻辑，但在不知道发行版默认策略时，返回是安全的
         read -p "按任意键继续..."
         return
     fi
 
-    # Check current preference
-    if grep -q "^precedence ::ffff:0:0/96  100" /etc/gai.conf; then
-        current_preference="IPv4优先"
+    # 检测当前状态：匹配行首的 precedence，且包含 ::ffff:0:0/96，忽略中间的空格数量
+    if grep -qE "^precedence\s+::ffff:0:0/96\s+100" "$gai_file"; then
+        current_preference="${GREEN}IPv4优先${NC}"
+        is_ipv4=true
     else
-        current_preference="IPv6优先"
+        current_preference="${BLUE}IPv6优先 (默认)${NC}"
+        is_ipv4=false
     fi
 
-    echo -e "当前优先设置: ${YELLOW}$current_preference${NC}"
-    echo -e "请选择要切换到的优先设置:"
-    echo -e " ${GREEN}1.${NC} IPv4优先"
-    echo -e " ${GREEN}2.${NC} IPv6优先"
+    echo -e "当前优先设置: ${current_preference}"
+    echo -e "-----------------------------------------"
+    echo -e " ${GREEN}1.${NC} 设置为 IPv4 优先"
+    echo -e " ${GREEN}2.${NC} 设置为 IPv6 优先"
     echo -e " ${RED}0.${NC} 返回"
+    echo -e "-----------------------------------------"
     read -p "请输入你的选择 (0-2): " choice
 
     case $choice in
         1)
-            echo -e "${YELLOW}正在设置为IPv4优先...${NC}"
-            sed -i '/^#precedence ::ffff:0:0\/96  100/d' /etc/gai.conf
-            sed -i '/^precedence ::ffff:0:0\/96  100/d' /etc/gai.conf
-            sed -i '$a\precedence ::ffff:0:0/96  100' /etc/gai.conf
-            echo -e "${GREEN}IPv4优先设置完成。${NC}"
+            echo -e "${YELLOW}正在设置为 IPv4 优先...${NC}"
+            # 1. 删除所有相关的配置行（包括注释掉的，防止干扰）
+            sed -i '/::ffff:0:0\/96/d' "$gai_file"
+            
+            # 2. 确保文件末尾有换行符
+            [ -n "$(tail -c1 "$gai_file")" ] && echo "" >> "$gai_file"
+            
+            # 3. 追加配置
+            echo "precedence ::ffff:0:0/96  100" >> "$gai_file"
+            
+            echo -e "${GREEN}设置完成。DNS 解析将优先使用 IPv4。${NC}"
             ;;
         2)
-            echo -e "${YELLOW}正在设置为IPv6优先...${NC}"
-            sed -i '/^precedence ::ffff:0:0\/96  100/d' /etc/gai.conf
-            echo -e "${GREEN}IPv6优先设置完成。${NC}"
+            echo -e "${YELLOW}正在设置为 IPv6 优先 (恢复默认)...${NC}"
+            # 删除生效的配置行（恢复系统默认排序）
+            sed -i '/^precedence\s*::ffff:0:0\/96\s*100/d' "$gai_file"
+            
+            # 可选：如果为了美观，可以把默认注释写回去，但这不影响功能
+            # echo "#precedence ::ffff:0:0/96  100" >> "$gai_file"
+            
+            echo -e "${GREEN}设置完成。已恢复 IPv6 优先。${NC}"
             ;;
         0)
             ;;
         *)
-            echo -e "${RED}无效的选择，请重新输入。${NC}"
+            echo -e "${RED}无效的选择。${NC}"
             ;;
     esac
     read -p "按任意键继续..."
