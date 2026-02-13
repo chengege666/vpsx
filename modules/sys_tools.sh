@@ -691,12 +691,13 @@ function modify_dns_server() {
     grep "nameserver" /etc/resolv.conf | head -n 3
     
     if [ "$dns_mode" == "systemd-resolved" ]; then
-        echo -e "${BLUE}上游 DNS (systemd-resolved):${NC}"
-        if command -v resolvectl &> /dev/null; then
-            resolvectl status | grep "DNS Servers" | awk -F: '{print $2}' | xargs | tr ' ' '\n' | sort -u | sed 's/^/  /'
-        elif command -v systemd-resolve &> /dev/null; then
-            systemd-resolve --status | grep "DNS Servers" | awk -F: '{print $2}' | xargs | tr ' ' '\n' | sort -u | sed 's/^/  /'
+        echo -e "${BLUE}有效上游 DNS 服务器:${NC}"
+        # 使用更健壮的解析逻辑，避免破坏 IPv6 地址
+        local dns_list=$(resolvectl status 2>/dev/null | awk '/DNS Servers:/{for(i=3;i<=NF;i++) print $i}' | sort -u)
+        if [ -z "$dns_list" ]; then
+            dns_list=$(systemd-resolve --status 2>/dev/null | awk '/DNS Servers:/{for(i=3;i<=NF;i++) print $i}' | sort -u)
         fi
+        echo "$dns_list" | sed 's/^/  /'
     fi
     echo ""
     echo -e "请选择操作:"
