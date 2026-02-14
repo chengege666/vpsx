@@ -27,11 +27,10 @@ function app_center_menu() {
         echo -e " ${GREEN}16.${NC} 雷池WAF安全防护系统"
         echo -e " ${GREEN}17.${NC} AkileCloud专用脚本"
         echo -e " ${GREEN}18.${NC} VScode 网页版 (code-server)"
-        echo -e " ${GREEN}19.${NC} Web SSH 终端 (ttyd)"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-19): " app_choice
+        read -p "请输入你的选择 (0-18): " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
@@ -52,7 +51,6 @@ function app_center_menu() {
             16) safeline_waf_management ;;
             17) akilecloud_management ;;
             18) vscode_management ;;
-            19) webssh_management ;;
             0) break ;; 
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -6114,162 +6112,4 @@ function view_vscode_info() {
         echo -e "${RED}未检测到安装信息。${NC}"
     fi
     read -p "按回车键继续..."
-}
-
-# =================================================================
-# Web SSH 终端 (ttyd) 管理模块
-# =================================================================
-
-function webssh_management() {
-    while true; do
-        clear
-        echo -e "${CYAN}=========================================${NC}"
-        echo -e "${GREEN}           Web SSH 终端管理 (ttyd)${NC}"
-        
-        # 状态检测
-        local status_text="${RED}未安装${NC}"
-        if docker ps -a --format '{{.Names}}' | grep -q "^webssh$"; then
-            if docker ps --format '{{.Names}}' | grep -q "^webssh$"; then
-                status_text="${GREEN}运行中${NC}"
-            else
-                status_text="${YELLOW}已停止${NC}"
-            fi
-        fi
-
-        echo -e "          状态: ${status_text}"
-        echo -e "${CYAN}=========================================${NC}"
-        echo -e " ${GREEN}1.${NC} 安装 Web SSH 终端"
-        echo -e " ${GREEN}2.${NC} 启动 Web SSH"
-        echo -e " ${GREEN}3.${NC} 停止 Web SSH"
-        echo -e " ${GREEN}4.${NC} 重启 Web SSH"
-        echo -e " ${GREEN}5.${NC} 修改访问密码/端口"
-        echo -e " ${GREEN}6.${NC} 查看访问信息与日志"
-        echo -e " ${GREEN}7.${NC} 卸载 Web SSH"
-        echo -e "${CYAN}-----------------------------------------${NC}"
-        echo -e " ${RED}0.${NC} 返回上级菜单"
-        echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择: " webssh_choice
-
-        case "$webssh_choice" in
-            1) install_webssh ;;
-            2) manage_webssh_container "start" ;;
-            3) manage_webssh_container "stop" ;;
-            4) manage_webssh_container "restart" ;;
-            5) configure_webssh ;;
-            6) view_webssh_info ;;
-            7) uninstall_webssh ;;
-            0) break ;;
-            *) echo -e "${RED}无效的选择！${NC}"; sleep 1 ;;
-        esac
-    done
-}
-
-function install_webssh() {
-    clear
-    echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}          安装 Web SSH 终端 (ttyd)${NC}"
-    echo -e "${CYAN}=========================================${NC}"
-
-    if ! command -v docker &> /dev/null; then
-        echo -e "${RED}错误: 未检测到 Docker 环境。${NC}"
-        read -p "按回车键继续..."
-        return
-    fi
-
-    # 1. 配置端口
-    read -p "请输入宿主机映射端口 (默认 7681): " host_port
-    host_port=${host_port:-7681}
-
-    # 2. 配置密码 (可选)
-    read -p "是否设置访问密码？(y/N): " set_pass
-    local pass_option=""
-    local v_pass=""
-    if [[ "$set_pass" =~ ^[yY]$ ]]; then
-        read -p "请输入登录密码 (留空则随机生成): " v_pass
-        if [ -z "$v_pass" ]; then
-            v_pass=$(date +%s | sha256sum | base64 | head -c 12)
-            echo -e "生成的随机密码: ${GREEN}${v_pass}${NC}"
-        fi
-        pass_option="-c ${v_pass}"
-    fi
-
-    # 3. 配置工作目录 (可选)
-    read -p "是否限制工作目录？(y/N): " limit_dir
-    local working_dir="/root"
-    if [[ "$limit_dir" =~ ^[yY]$ ]]; then
-        read -p "请输入工作目录绝对路径 (默认 /root): " custom_dir
-        working_dir=${custom_dir:-/root}
-    fi
-
-    # 4. 创建安装目录和 docker-compose.yml
-    local install_dir="/opt/webssh"
-    mkdir -p "$install_dir"
-
-    echo -e "${BLUE}正在生成配置文件...${NC}"
-    cat > "$install_dir/docker-compose.yml" <<EOF
-services:
-  webssh:
-    image: tsl0922/ttyd:latest
-    container_name: webssh
-    restart: always
-    ports:
-      - "${host_port}:7681"
-    environment:
-      - TZ=Asia/Shanghai
-    command: $pass_option bash
-    working_dir: $working_dir
-    user: root
-EOF
-
-    echo -e "${BLUE}正在启动容器...${NC}"
-    cd "$install_dir" && docker compose up -d
-
-    if [ $? -eq 0 ]; then
-        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
-        echo -e "${GREEN}✅ Web SSH 安装成功！${NC}"
-        echo -e "访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
-        if [ -n "$v_pass" ]; then
-            echo -e "登录密码: ${GREEN}${v_pass}${NC}"
-        else
-            echo -e "登录密码: ${YELLOW}无 (如需设置请使用选项5)${NC}"
-        fi
-        echo -e "工作目录: ${BLUE}${working_dir}${NC}"
-    else
-        echo -e "${RED}❌ 启动失败，请检查 Docker 日志。${NC}"
-    fi
-    read -p "按回车键继续..."
-}
-
-function manage_webssh_container() {
-    local action=$1
-    if [ ! -d "/opt/webssh" ]; then
-        echo -e "${RED}未安装 Web SSH，请先安装。${NC}"
-        read -p "按回车键继续..."
-        return
-    fi
-    echo -e "${BLUE}正在执行 ${action} 操作...${NC}"
-    cd /opt/webssh && docker compose "$action"
-    read -p "按回车键继续..."
-}
-
-function configure_webssh() {
-    clear
-    echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}          修改 Web SSH 配置${NC}"
-    echo -e "${CYAN}=========================================${NC}"
-
-    if [ ! -f "/opt/webssh/docker-compose.yml" ]; then
-        echo -e "${RED}未找到配置文件，请先安装。${NC}"
-        read -p "按回车键继续..."
-        return
-    fi
-
-    echo -e "当前配置:"
-    local current_port=$(grep -oP 'ports:\s*-\s*"\K[0-9]+(?=:7681)' /opt/webssh/docker-compose.yml)
-    local current_pass=$(grep 'command:' /opt/webssh/docker-compose.yml | grep -oP '(?<=-c\s)[^\s]+' || echo "无")
-    echo -e "端口: ${GREEN}${current_port:-7681}${NC}"
-    echo -e "密码: ${GREEN}${current_pass:-无}${NC}"
-
-    echo ""
-    ec
 }
