@@ -193,7 +193,7 @@ function view_one_panel_info() {
     fi
 }
 
-# 哪吒探针 (Agent) 管理模块 - 纯 Docker Compose 版
+# 哪吒探针 (Agent) 管理模块 - 官方脚本版
 
 function nezha_probe_management() {
     while true; do
@@ -201,24 +201,24 @@ function nezha_probe_management() {
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}          哪吒探针 (Agent) 管理${NC}"
         
-        # 状态检测逻辑
+        # 状态检测逻辑 (检测 Systemd 服务)
         local status_text="${RED}未安装${NC}"
-        if docker ps -a --format '{{.Names}}' | grep -q "^nezha-agent$"; then
-            if docker ps --format '{{.Names}}' | grep -q "^nezha-agent$"; then
-                status_text="${GREEN}运行中 (Docker)${NC}"
+        if [ -f "/etc/systemd/system/nezha-agent.service" ]; then
+            if systemctl is-active --quiet nezha-agent; then
+                status_text="${GREEN}运行中 (Systemd)${NC}"
             else
-                status_text="${YELLOW}已停止 (Docker)${NC}"
+                status_text="${YELLOW}已停止 (Systemd)${NC}"
             fi
         fi
 
         echo -e "          状态: ${status_text}"
         echo -e "${CYAN}=========================================${NC}"
-        echo -e " ${GREEN}1.${NC}  安装/重装 Agent (Docker Compose)"
+        echo -e " ${GREEN}1.${NC}  安装/更新 Agent (官方脚本)"
         echo -e " ${GREEN}2.${NC}  启动 Agent"
         echo -e " ${GREEN}3.${NC}  停止 Agent"
         echo -e " ${GREEN}4.${NC}  重启 Agent"
-        echo -e " ${GREEN}5.${NC}  查看实时日志"
-        echo -e " ${GREEN}6.${NC}  修改配置 (Server/Secret/TLS)"
+        echo -e " ${GREEN}5.${NC}  查看服务状态 (Status)"
+        echo -e " ${GREEN}6.${NC}  查看实时日志 (Logs)"
         echo -e " ${GREEN}7.${NC}  卸载 Agent"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回上一级菜单"
@@ -226,148 +226,60 @@ function nezha_probe_management() {
         read -p "请输入你的选择: " nezha_choice
 
         case "$nezha_choice" in
-            1) install_nezha_docker ;;
-            2) manage_nezha_docker "start" ;;
-            3) manage_nezha_docker "stop" ;;
-            4) manage_nezha_docker "restart" ;;
-            5) docker logs --tail 50 -f nezha-agent ;;
-            6) modify_nezha_docker_config ;;
-            7) uninstall_nezha_docker ;;
+            1) install_nezha_official ;;
+            2) sudo systemctl start nezha-agent; echo -e "${GREEN}启动指令已发送${NC}"; sleep 1 ;;
+            3) sudo systemctl stop nezha-agent; echo -e "${YELLOW}停止指令已发送${NC}"; sleep 1 ;;
+            4) sudo systemctl restart nezha-agent; echo -e "${GREEN}重启指令已发送${NC}"; sleep 1 ;;
+            5) systemctl status nezha-agent; read -p "按回车键继续..." ;;
+            6) journalctl -u nezha-agent -n 50 -f ;;
+            7) uninstall_nezha_official ;;
             0) break ;;
             *) echo -e "${RED}无效的选择！${NC}"; sleep 1 ;;
         esac
     done
 }
 
-# 优化后的安装函数 (支持镜像加速)
-function install_nezha_docker() {
+# 调用官方脚本进行安装
+function install_official_script() {1
+    local param=$1
+    echo -e "${BLUE}正在从 GitHub 获取官方安装脚本...${NC}"
+    # 使用官方推荐命令
+    curl -L https://raw.githubusercontent.com/nezhahq/scripts/refs/heads/main/install.sh -o nezha.sh && chmod +x nezha.sh
+    
+    if [ $? -eq 0 ]; then
+        # 如果有参数（如卸载）则带参数运行，否则直接运行进入交互菜单
+        if [ -n "$param" ]; then
+            sudo ./nezha.sh "$param"
+        else
+            sudo ./nezha.sh
+        fi
+        rm -f nezha.sh
+    else
+        echo -e "${RED}❌ 脚本下载失败，请检查网络连接或 GitHub 访问权限。${NC}"
+        read -p "按回车键继续..."
+    fi
+}
+
+function install_nezha_official() {
     clear
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}       安装哪吒探针 (Docker Compose)${NC}"
+    echo -e "${GREEN}        调用官方脚本安装/更新${NC}"
     echo -e "${CYAN}=========================================${NC}"
-
-    if ! command -v docker &> /dev/null; then
-        echo -e "${RED}错误: 未检测到 Docker 环境，请先安装。${NC}"
-        read -p "按回车键继续..."
-        return
-    fi
-
-    # --- 镜像源选择逻辑 ---
-    echo -e "${YELLOW}请选择镜像下载源：${NC}"
-    echo "1. GitHub 官方源 (ghcr.io) - [需海外网络]"
-    echo "2. 国内加速源 (ghcr.nju.edu.cn) - [南京大学]"
-    echo "3. 国内加速源 (ghcr.mirrors.sjtug.sjtu.edu.cn) - [上海交大]"
-    read -p "请输入选择 (默认 2): " image_choice
-    image_choice=${image_choice:-2}
-
-    local agent_image="ghcr.io/nezhahq/agent:latest"
-    case "$image_choice" in
-        1) agent_image="ghcr.io/nezhahq/agent:latest" ;;
-        2) agent_image="ghcr.nju.edu.cn/nezhahq/agent:latest" ;;
-        3) agent_image="ghcr.mirrors.sjtug.sjtu.edu.cn/nezhahq/agent:latest" ;;
-        *) agent_image="ghcr.nju.edu.cn/nezhahq/agent:latest" ;;
-    esac
-    # -------------------
-
+    echo -e "${YELLOW}提示：脚本启动后请选择 '安装监控 Agent' 并按提示输入信息。${NC}"
     echo ""
-    echo -e "${YELLOW}请准备好哪吒面板提供的接入信息：${NC}"
-    read -p "请输入面板服务器地址 (例: nezha.example.com:5555): " d_server
-    read -p "请输入 Agent 密钥 (Secret): " d_secret
-    read -p "是否启用 TLS? (y/N): " d_tls
-
-    local tls_flag=""
-    [[ "$d_tls" =~ ^[yY]$ ]] && tls_flag="--tls"
-
-    local install_dir="/opt/nezha-agent"
-    mkdir -p "$install_dir"
-
-    echo -e "${BLUE}正在生成 docker-compose.yml...${NC}"
-    cat > "$install_dir/docker-compose.yml" <<EOF
-services:
-  nezha-agent:
-    image: ${agent_image}
-    container_name: nezha-agent
-    restart: always
-    network_mode: host
-    volumes:
-      - /:/host:ro,rslave
-      - /etc/os-release:/etc/os-release:ro
-    command: -s ${d_server} -p ${d_secret} ${tls_flag} --report-delay 2 --disable-auto-update --disable-command-execute
-EOF
-
-    echo -e "${BLUE}正在从 ${agent_image} 启动容器...${NC}"
-    cd "$install_dir" && docker compose up -d
-
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✅ 哪吒探针安装成功！${NC}"
-    else
-        echo -e "${RED}❌ 安装失败，即使使用了加速站也无法连接，请检查服务器 DNS 或防火墙设置。${NC}"
-    fi
-    read -p "按回车键继续..."
+    install_official_script
 }
 
-# 统一管理函数 (启动/停止/重启)
-function manage_nezha_docker() {
-    local action=$1
-    local install_dir="/opt/nezha-agent"
-    
-    if [ ! -f "$install_dir/docker-compose.yml" ]; then
-        echo -e "${RED}错误: 未检测到配置文件，请先安装。${NC}"
-    else
-        echo -e "${BLUE}正在执行 ${action} 操作...${NC}"
-        cd "$install_dir" && docker compose "$action"
-        echo -e "${GREEN}操作已完成。${NC}"
-    fi
-    read -p "按回车键继续..."
-}
-
-# 修改配置函数
-function modify_nezha_docker_config() {
-    local install_dir="/opt/nezha-agent"
-    if [ ! -f "$install_dir/docker-compose.yml" ]; then
-        echo -e "${RED}未检测到安装信息。${NC}"
-        read -p "按回车键继续..."
-        return
-    fi
-
-    echo -e "${YELLOW}当前配置：${NC}"
-    grep "command:" "$install_dir/docker-compose.yml"
-    echo ""
-    echo -e "1. 手动编辑配置文件 (vi)"
-    echo -e "2. 快速重置服务器和密钥"
-    echo -e "0. 取消"
-    read -p "请选择修改方式: " mod_type
-
-    case "$mod_type" in
-        1) vi "$install_dir/docker-compose.yml" ;;
-        2)
-            read -p "新服务器地址: " n_server
-            read -p "新密钥 Secret: " n_secret
-            sed -i "s/-s [^ ]*/-s ${n_server}/" "$install_dir/docker-compose.yml"
-            sed -i "s/-p [^ ]*/-p ${n_secret}/" "$install_dir/docker-compose.yml"
-            ;;
-        *) return ;;
-    esac
-
-    echo -e "${BLUE}正在重启以应用新配置...${NC}"
-    cd "$install_dir" && docker compose up -d --force-recreate
-    echo -e "${GREEN}配置已更新！${NC}"
-    read -p "按回车键继续..."
-}
-
-# 卸载函数
-function uninstall_nezha_docker() {
-    local install_dir="/opt/nezha-agent"
+function uninstall_nezha_official() {
+    clear
+    echo -e "${RED}=========================================${NC}"
+    echo -e "${RED}             卸载哪吒探针${NC}"
+    echo -e "${RED}=========================================${NC}"
     read -p "确定要彻底卸载哪吒 Agent 吗？(y/N): " confirm
     if [[ "$confirm" =~ ^[yY]$ ]]; then
-        if [ -d "$install_dir" ]; then
-            cd "$install_dir" && docker compose down
-            rm -rf "$install_dir"
-            echo -e "${GREEN}卸载完成，相关文件已清理。${NC}"
-        else
-            echo -e "${YELLOW}未发现安装目录，正在尝试停止容器...${NC}"
-            docker stop nezha-agent && docker rm nezha-agent
-        fi
+        # 官方脚本卸载参数通常是 uninstall_agent
+        install_official_script "uninstall_agent"
+        echo -e "${GREEN}卸载流程执行完毕。${NC}"
     fi
     read -p "按回车键继续..."
 }
