@@ -411,60 +411,80 @@ function process_management() {
     done
 }
 
-# 系统环境修复 (权限/磁盘/APT)
+# 系统环境修复 (进阶版)
 function system_environment_repair() {
     clear
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}             系统环境修复工具${NC}"
+    echo -e "${GREEN}             系统环境深度修复工具${NC}"
     echo -e "${CYAN}=========================================${NC}"
     
-    # 1. 检查磁盘空间
-    echo -e "${BLUE}[1/4] 检查磁盘空间使用情况...${NC}"
-    df -h | grep -E '^Filesystem|/dev/|/$'
-    echo ""
-    
-    # 2. 修复 /tmp 权限
-    echo -e "${BLUE}[2/4] 正在修复 /tmp 目录权限 (1777)...${NC}"
-    if [ ! -d /tmp ]; then
-        echo -e "${YELLOW}检测到 /tmp 目录不存在，正在尝试创建...${NC}"
-        mkdir -p /tmp
-    fi
-    chmod 1777 /tmp
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✅ /tmp 权限已重置。${NC}"
-    else
-        echo -e "${RED}❌ 权限修复失败，请检查是否具有 root 权限。${NC}"
+    # 1. 诊断阶段：检查磁盘与 Inode
+    echo -e "${BLUE}[1/7] 正在诊断磁盘空间与 Inode 使用率...${NC}"
+    df -h / | grep -v "Filesystem"
+    # 检查 Inode (很多时候磁盘有空间但文件数满了也会报错)
+    inode_usage=$(df -i / | awk 'NR==2 {print $5}' | cut -d'%' -f1)
+    if [ "$inode_usage" -gt 95 ]; then
+        echo -e "${RED}⚠️ 警告: Inode 使用率过高 ($inode_usage%)，建议清理小文件！${NC}"
     fi
     echo ""
-    
-    # 3. 清理 APT 缓存
-    echo -e "${BLUE}[3/4] 正在清理包管理器缓存...${NC}"
+
+    # 2. 修复包管理器锁 (针对 Debian/Ubuntu)
     if command -v apt &> /dev/null; then
-        apt-get clean
-        echo -e "${GREEN}✅ APT 缓存已清理。${NC}"
+        echo -e "${BLUE}[2/7] 正在解除 APT 进程锁 (防止其他安装任务占用)...${NC}"
+        rm -f /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock /var/cache/apt/archives/lock
+        dpkg --configure -a
+        echo -e "${GREEN}✅ 锁文件检查完成。${NC}"
+    fi
+    echo ""
+
+    # 3. 修复损坏的依赖
+    echo -e "${BLUE}[3/7] 正在尝试修复损坏的软件包依赖...${NC}"
+    if command -v apt &> /dev/null; then
+        apt-get install -f -y
     elif command -v yum &> /dev/null; then
-        yum clean all
-        echo -e "${GREEN}✅ YUM 缓存已清理。${NC}"
+        yum check
+    fi
+    echo -e "${GREEN}✅ 依赖关系审计完成。${NC}"
+    echo ""
+
+    # 4. 深度清理日志 (清理 1 天前的系统日志)
+    echo -e "${BLUE}[4/7] 正在清理 systemd 日志以释放空间...${NC}"
+    if command -v journalctl &> /dev/null; then
+        journalctl --vacuum-time=1d
+        echo -e "${GREEN}✅ 系统日志已压缩至最近24小时。${NC}"
     fi
     echo ""
-    
-    # 4. 更新软件源
-    echo -e "${BLUE}[4/4] 正在尝试同步软件源...${NC}"
-    echo -e "${YELLOW}提示：如果此步报错，请检查网络连接或磁盘是否已满。${NC}"
+
+    # 5. 时间同步 (防止 SSL/TLS 握手失败)
+    echo -e "${BLUE}[5/7] 正在校准系统时间 (NTP 同步)...${NC}"
+    if command -v timedatectl &> /dev/null; then
+        timedatectl set-ntp true
+        echo -e "${GREEN}✅ NTP 同步已启用，当前时间: $(date)${NC}"
+    fi
+    echo ""
+
+    # 6. 权限修复 (关键目录)
+    echo -e "${BLUE}[6/7] 正在修复标准目录权限...${NC}"
+    [ -d /tmp ] && chmod 1777 /tmp && echo -e "${CYAN}- /tmp (1777) OK${NC}"
+    [ -d /var/tmp ] && chmod 1777 /var/tmp && echo -e "${CYAN}- /var/tmp (1777) OK${NC}"
+    echo ""
+
+    # 7. 软件源同步
+    echo -e "${BLUE}[7/7] 正在执行最终的仓库数据同步...${NC}"
     if command -v apt &> /dev/null; then
-        apt-get update
+        apt-get update -y
     elif command -v yum &> /dev/null; then
         yum makecache
     fi
-    
+
     if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✅ 软件源同步成功！系统环境已基本恢复正常。${NC}"
+        echo -e "${GREEN}✅ 系统环境修复成功！${NC}"
     else
-        echo -e "${RED}❌ 软件源同步失败。请根据上方错误信息进一步排查。${NC}"
+        echo -e "${RED}❌ 软件源同步仍有异常，请检查网络连接。${NC}"
     fi
     
     echo -e "${CYAN}=========================================${NC}"
-    read -p "按任意键返回菜单..."
+    read -p "修复流程结束，按任意键返回菜单..."
 }
 
  # 系统时区调整
