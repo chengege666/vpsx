@@ -196,71 +196,158 @@ function nezha_probe_management() {
     while true; do
         clear
         echo -e "${CYAN}=========================================${NC}"
-        echo -e "${GREEN}          哪吒探针VPS监控面板${NC}"
-        if systemctl list-units --type=service --all | grep -q "nezha-agent"; then
-            echo -e "          状态: ${GREEN}已安装${NC}"
-        else
-            echo -e "          状态: ${RED}未安装${NC}"
+        echo -e "${GREEN}          哪吒探针 (Agent) 管理${NC}"
+        
+        # 状态检测逻辑
+        local install_type="未安装"
+        local status_text="${RED}未运行${NC}"
+
+        # 检测 Native (Systemd)
+        if systemctl list-units --type=service --all | grep -q "nezha-agent.service"; then
+            install_type="独立安装 (Systemd)"
+            if systemctl is-active --quiet nezha-agent; then
+                status_text="${GREEN}运行中${NC}"
+            else
+                status_text="${YELLOW}已停止${NC}"
+            fi
+        # 检测 Docker
+        elif docker ps -a --format '{{.Names}}' | grep -q "^nezha-agent$"; then
+            install_type="Docker 容器"
+            if docker ps --format '{{.Names}}' | grep -q "^nezha-agent$"; then
+                status_text="${GREEN}运行中${NC}"
+            else
+                status_text="${YELLOW}已停止${NC}"
+            fi
         fi
+
+        echo -e "          模式: ${BLUE}${install_type}${NC}"
+        echo -e "          状态: ${status_text}"
         echo -e "${CYAN}=========================================${NC}"
-        echo -e " ${GREEN}1.${NC}  安装/更新哪吒探针 Agent"
-        echo -e " ${GREEN}2.${NC}  卸载哪吒探针 Agent"
-        echo -e " ${GREEN}3.${NC}  启动哪吒探针 Agent"
-        echo -e " ${GREEN}4.${NC}  停止哪吒探针 Agent"
-        echo -e " ${GREEN}5.${NC}  重启哪吒探针 Agent"
-        echo -e " ${GREEN}6.${NC}  查看哪吒探针 Agent 状态"
+        echo -e " ${GREEN}1.${NC}  安装 Agent (Docker Compose) [推荐]"
+        echo -e " ${GREEN}2.${NC}  安装 Agent (官方脚本/独立安装)"
+        echo -e " ${GREEN}3.${NC}  启动 Agent"
+        echo -e " ${GREEN}4.${NC}  停止 Agent"
+        echo -e " ${GREEN}5.${NC}  重启 Agent"
+        echo -e " ${GREEN}6.${NC}  查看日志"
+        echo -e " ${GREEN}7.${NC}  修改配置 (仅限 Docker)"
+        echo -e " ${GREEN}8.${NC}  卸载 Agent"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回上一级菜单"
         echo -e "${CYAN}=========================================${NC}"
         read -p "请输入你的选择: " nezha_choice
 
         case "$nezha_choice" in
-            1) install_update_nezha_agent ;;
-            2) uninstall_nezha_agent ;;
-            3) start_nezha_agent ;;
-            4) stop_nezha_agent ;;
-            5) restart_nezha_agent ;;
-            6) view_nezha_agent_status ;;
+            1) install_nezha_docker ;;
+            2) install_nezha_native ;;
+            3) manage_nezha_service "start" ;;
+            4) manage_nezha_service "stop" ;;
+            5) manage_nezha_service "restart" ;;
+            6) view_nezha_logs ;;
+            7) modify_nezha_docker_config ;;
+            8) uninstall_nezha ;;
             0) break ;;
-            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; read -p "按回车键继续..." ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
     done
 }
 
-# 哪吒探针功能实现
-function install_update_nezha_agent() {
+# Docker Compose 安装哪吒探针
+function install_nezha_docker() {
     clear
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}        安装/更新哪吒探针 Agent${NC}"
+    echo -e "${GREEN}       安装哪吒探针 (Docker Compose)${NC}"
     echo -e "${CYAN}=========================================${NC}"
 
-    if systemctl list-units --type=service --all | grep -q "nezha-agent"; then
-        echo -e "检测到哪吒探针 Agent 服务已存在。"
-        read -p "是否要更新哪吒探针 Agent？(y/N): " update_choice
-        if [[ "$update_choice" =~ ^[yY]$ ]]; then
-            echo -e "${BLUE}开始执行哪吒探针 Agent 安装/更新脚本...${NC}"
-            curl -L https://raw.githubusercontent.com/nezhahq/scripts/refs/heads/main/install.sh -o nezha.sh && chmod +x nezha.sh && ./nezha.sh
-            if [ $? -eq 0 ]; then
-                echo -e "${GREEN}哪吒探针 Agent 安装/更新脚本执行成功。${NC}"
-            else
-                echo -e "${RED}哪吒探针 Agent 安装/更新脚本执行失败。${NC}"
-            fi
-            rm -f nezha.sh # Clean up
-        else
-            echo "取消更新。"
-        fi
+    # 环境检测
+    if ! command -v docker &> /dev/null; then
+        echo -e "${RED}未检测到 Docker 环境，请先安装 Docker。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    # 冲突检测
+    if systemctl list-units --type=service --all | grep -q "nezha-agent.service"; then
+        echo -e "${RED}检测到已存在独立安装的 Agent，请先卸载后再使用 Docker 安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${YELLOW}请准备好面板提供的接入信息 (服务器地址、密钥)${NC}"
+    echo ""
+
+    read -p "请输入面板服务器地址 (例如: nezha.example.com:5555): " dashboard_server
+    if [[ -z "$dashboard_server" ]]; then
+        echo -e "${RED}服务器地址不能为空。${NC}"
+        return
+    fi
+
+    read -p "请输入 Agent 密钥 (Secret): " agent_secret
+    if [[ -z "$agent_secret" ]]; then
+        echo -e "${RED}密钥不能为空。${NC}"
+        return
+    fi
+
+    read -p "是否启用 TLS/SSL 加密? (y/N): " enable_tls
+    local tls_flag=""
+    if [[ "$enable_tls" =~ ^[yY]$ ]]; then
+        tls_flag="--tls"
+        echo -e "TLS: ${GREEN}启用${NC}"
     else
-        echo -e "${BLUE}开始执行哪吒探针 Agent 安装/更新脚本...${NC}"
-        curl -L https://raw.githubusercontent.com/nezhahq/scripts/refs/heads/main/install.sh -o nezha.sh && chmod +x nezha.sh && ./nezha.sh
-        if [ $? -eq 0 ]; then
-            echo -e "${GREEN}哪吒探针 Agent 安装/更新脚本执行成功。${NC}"
-        else
-            echo -e "${RED}哪吒探针 Agent 安装/更新脚本执行失败。${NC}"
-        fi
-        rm -f nezha.sh # Clean up
+        echo -e "TLS: ${YELLOW}禁用${NC}"
+    fi
+
+    echo ""
+    echo -e "${BLUE}正在生成配置文件...${NC}"
+    local install_dir="/opt/nezha-agent"
+    mkdir -p "$install_dir"
+
+    # 创建 docker-compose.yml
+    # 注意：使用 host 网络模式以获取准确的流量统计和系统负载
+    cat > "$install_dir/docker-compose.yml" <<EOF
+services:
+  nezha-agent:
+    image: ghcr.io/nezhahq/agent:latest
+    container_name: nezha-agent
+    restart: always
+    network_mode: host
+    volumes:
+      - /:/host:ro,rslave
+      - /etc/os-release:/etc/os-release:ro
+    command: -s ${dashboard_server} -p ${agent_secret} ${tls_flag} --report-delay 2 --disable-auto-update --disable-command-execute
+EOF
+
+    echo -e "${BLUE}正在启动容器...${NC}"
+    cd "$install_dir"
+    
+    if docker compose version &> /dev/null; then
+        docker compose up -d
+    else
+        docker-compose up -d
+    fi
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ 哪吒探针 (Docker) 安装并启动成功！${NC}"
+    else
+        echo -e "${RED}❌ 启动失败，请检查 Docker 日志。${NC}"
     fi
     read -p "按回车键继续..."
 }
+
+# 原生脚本安装 (调用官方)
+function install_nezha_native() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}        安装哪吒探针 (官方脚本)${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    # 冲突检测
+    if docker ps -a --format '{{.Names}}' | grep -q "^nezha-agent$"; then
+        echo -e "${RED}检测到已存在 Docker 安装的 Agent，请先卸载后再使用独立安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${YELL
 
 # GitHub 加速站管理
 function github_proxy_management() {
