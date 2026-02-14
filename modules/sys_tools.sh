@@ -1224,7 +1224,6 @@ function change_ssh_port() {
 }
 
 function switch_ip_priority() {
-function switch_ip_priority() {
     while true; do
         clear
         echo -e "${CYAN}=========================================${NC}"
