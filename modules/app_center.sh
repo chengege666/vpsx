@@ -6113,3 +6113,13 @@ function view_vscode_info() {
     fi
     read -p "按回车键继续..."
 }
+
+function uninstall_vscode() {
+    read -p "确定要卸载 VScode 吗？数据目录将保留 (y/N): " confirm
+    if [[ "$confirm" =~ ^[yY]$ ]]; then
+        cd /opt/vscode && docker compose down
+        rm -rf /opt/vscode/docker-compose.yml
+        echo -e "${GREEN}卸载完成。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
