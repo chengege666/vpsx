@@ -193,15 +193,14 @@ function view_one_panel_info() {
     fi
 }
 
-# 哪吒探针 (Agent) 管理模块 - 官方脚本版
-
+# 哪吒探针 (Agent) 管理模块 - 官方脚本重构版
 function nezha_probe_management() {
     while true; do
         clear
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}          哪吒探针 (Agent) 管理${NC}"
         
-        # 状态检测逻辑 (检测 Systemd 服务)
+        # 状态检测逻辑
         local status_text="${RED}未安装${NC}"
         if [ -f "/etc/systemd/system/nezha-agent.service" ]; then
             if systemctl is-active --quiet nezha-agent; then
@@ -217,45 +216,44 @@ function nezha_probe_management() {
         echo -e " ${GREEN}2.${NC}  启动 Agent"
         echo -e " ${GREEN}3.${NC}  停止 Agent"
         echo -e " ${GREEN}4.${NC}  重启 Agent"
-        echo -e " ${GREEN}5.${NC}  查看服务状态 (Status)"
-        echo -e " ${GREEN}6.${NC}  查看实时日志 (Logs)"
+        echo -e " ${GREEN}5.${NC}  查看服务详细状态"
+        echo -e " ${GREEN}6.${NC}  查看实时日志"
         echo -e " ${GREEN}7.${NC}  卸载 Agent"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回上一级菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择: " nezha_choice
+        read -p "请输入你的选择 (0-7): " nezha_choice
 
         case "$nezha_choice" in
-            1) install_official_script ;;
-            2) sudo systemctl start nezha-agent; echo -e "${GREEN}启动指令已发送${NC}"; sleep 1 ;;
-            3) sudo systemctl stop nezha-agent; echo -e "${YELLOW}停止指令已发送${NC}"; sleep 1 ;;
-            4) sudo systemctl restart nezha-agent; echo -e "${GREEN}重启指令已发送${NC}"; sleep 1 ;;
-            5) systemctl status nezha-agent; read -p "按回车键继续..." ;;
-            6) journalctl -u nezha-agent -n 50 -f ;;
+            1) install_nezha_official ;;
+            2) sudo systemctl start nezha-agent && echo -e "${GREEN}启动指令已发送${NC}" || echo -e "${RED}启动失败${NC}"; sleep 1 ;;
+            3) sudo systemctl stop nezha-agent && echo -e "${YELLOW}停止指令已发送${NC}" || echo -e "${RED}停止失败${NC}"; sleep 1 ;;
+            4) sudo systemctl restart nezha-agent && echo -e "${GREEN}重启指令已发送${NC}" || echo -e "${RED}重启失败${NC}"; sleep 1 ;;
+            5) clear; systemctl status nezha-agent; read -p "按回车键继续..." ;;
+            6) clear; echo -e "${BLUE}正在查看实时日志 (按 Ctrl+C 退出):${NC}"; journalctl -u nezha-agent -n 50 -f ;;
             7) uninstall_nezha_official ;;
             0) break ;;
-            *) echo -e "${RED}无效的选择！${NC}"; sleep 1 ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
     done
 }
 
-# 调用官方脚本进行安装
-function install_official_script() {1
-    local param=$1
-    echo -e "${BLUE}正在从 GitHub 获取官方安装脚本...${NC}"
-    # 使用官方推荐命令
-    curl -L https://raw.githubusercontent.com/nezhahq/scripts/refs/heads/main/install.sh -o nezha.sh && chmod +x nezha.sh
+# 调用官方脚本进行安装/管理
+function run_nezha_script() {
+    local cmd_param=$1
+    echo -e "${BLUE}正在连接 GitHub 获取官方脚本...${NC}"
+    # 下载脚本
+    curl -L https://raw.githubusercontent.com/nezhahq/scripts/refs/heads/main/install.sh -o nezha_script.sh && chmod +x nezha_script.sh
     
     if [ $? -eq 0 ]; then
-        # 如果有参数（如卸载）则带参数运行，否则直接运行进入交互菜单
-        if [ -n "$param" ]; then
-            sudo ./nezha.sh "$param"
+        if [ -n "$cmd_param" ]; then
+            sudo ./nezha_script.sh "$cmd_param"
         else
-            sudo ./nezha.sh
+            sudo ./nezha_script.sh
         fi
-        rm -f nezha.sh
+        rm -f nezha_script.sh
     else
-        echo -e "${RED}❌ 脚本下载失败，请检查网络连接或 GitHub 访问权限。${NC}"
+        echo -e "${RED}❌ 脚本下载失败，请检查网络（尝试使用代理或检查 GitHub 访问）${NC}"
         read -p "按回车键继续..."
     fi
 }
@@ -263,25 +261,26 @@ function install_official_script() {1
 function install_nezha_official() {
     clear
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}        调用官方脚本安装/更新${NC}"
+    echo -e "${GREEN}        安装/更新哪吒探针 Agent${NC}"
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "${YELLOW}提示：脚本启动后请选择 '安装监控 Agent' 并按提示输入信息。${NC}"
+    echo -e "${YELLOW}提示：进入脚本后请选择 '安装监控 Agent'。${NC}"
+    echo -e "${YELLOW}你需要准备好面板域名和密钥 (Secret)。${NC}"
     echo ""
-    install_official_script
+    read -p "确认开始？(y/n): " confirm
+    [[ "$confirm" =~ ^[yY]$ ]] && run_nezha_script
 }
 
 function uninstall_nezha_official() {
     clear
     echo -e "${RED}=========================================${NC}"
-    echo -e "${RED}             卸载哪吒探针${NC}"
+    echo -e "${RED}             卸载哪吒探针 Agent${NC}"
     echo -e "${RED}=========================================${NC}"
-    read -p "确定要彻底卸载哪吒 Agent 吗？(y/N): " confirm
+    read -p "确定要卸载吗？此操作不可逆 (y/n): " confirm
     if [[ "$confirm" =~ ^[yY]$ ]]; then
-        # 官方脚本卸载参数通常是 uninstall_agent
-        install_official_script "uninstall_agent"
-        echo -e "${GREEN}卸载流程执行完毕。${NC}"
+        run_nezha_script "uninstall_agent"
+        echo -e "${GREEN}卸载流程已完成。${NC}"
+        sleep 1
     fi
-    read -p "按回车键继续..."
 }
 
 # GitHub 加速站管理
