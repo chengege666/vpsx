@@ -26,10 +26,11 @@ function app_center_menu() {
         echo -e " ${GREEN}15.${NC} FRP内网穿透管理"
         echo -e " ${GREEN}16.${NC} 雷池WAF安全防护系统"
         echo -e " ${GREEN}17.${NC} AkileCloud专用脚本"
+        echo -e " ${GREEN}18.${NC} VScode 网页版 (code-server)"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-17): " app_choice
+        read -p "请输入你的选择 (0-18): " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
@@ -49,6 +50,7 @@ function app_center_menu() {
             15) frp_management ;;
             16) safeline_waf_management ;;
             17) akilecloud_management ;;
+            18) vscode_management ;;
             0) break ;; 
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -6131,13 +6133,168 @@ function akilecloud_management() {
     read -p "按回车键继续..."
 }
 
-# 功能扩展占位
-function app_center() {
+# VScode 网页版 (code-server) 管理模块
+
+function vscode_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}             VScode 网页版管理${NC}"
+        
+        # 状态检测逻辑
+        local status_text="${RED}未安装${NC}"
+        if docker ps -a --format '{{.Names}}' | grep -q "^vscode-server$"; then
+            if docker ps --format '{{.Names}}' | grep -q "^vscode-server$"; then
+                status_text="${GREEN}运行中${NC}"
+            else
+                status_text="${YELLOW}已停止${NC}"
+            fi
+        fi
+
+        echo -e "          状态: ${status_text}"
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e " ${GREEN}1.${NC} 安装 VScode (code-server)"
+        echo -e " ${GREEN}2.${NC} 启动 VScode"
+        echo -e " ${GREEN}3.${NC} 停止 VScode"
+        echo -e " ${GREEN}4.${NC} 重启 VScode"
+        echo -e " ${GREEN}5.${NC} 修改登录密码"
+        echo -e " ${GREEN}6.${NC} 查看访问信息与日志"
+        echo -e " ${GREEN}7.${NC} 卸载 VScode"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC} 返回上一级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择: " vscode_choice
+
+        case "$vscode_choice" in
+            1) install_vscode ;;
+            2) manage_vscode_container "start" ;;
+            3) manage_vscode_container "stop" ;;
+            4) manage_vscode_container "restart" ;;
+            5) change_vscode_password ;;
+            6) view_vscode_info ;;
+            7) uninstall_vscode ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择！${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+function install_vscode() {
     clear
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}          应用中心${NC}"
+    echo -e "${GREEN}          安装 VScode 网页版${NC}"
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "${BLUE}正在执行应用中心脚本...${NC}"
-    wget -qO- https://raw.githubusercontent.com/akile-network/aktools/refs/heads/main/akapp.sh | bash
+
+    if ! command -v docker &> /dev/null; then
+        echo -e "${RED}错误: 未检测到 Docker 环境。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    # 1. 配置端口
+    read -p "请输入宿主机映射端口 (默认 8080): " host_port
+    host_port=${host_port:-8080}
+
+    # 2. 配置密码
+    read -p "请输入登录密码 (留空则随机生成): " v_pass
+    if [ -z "$v_pass" ]; then
+        v_pass=$(date +%s | sha256sum | base64 | head -c 12)
+    fi
+
+    # 3. 配置工作目录
+    read -p "是否映射本地工作目录？(y/N): " map_dir
+    local workspace_dir="/root"
+    if [[ "$map_dir" =~ ^[yY]$ ]]; then
+        read -p "请输入要映射的本地绝对路径 (默认 /root): " custom_dir
+        workspace_dir=${custom_dir:-/root}
+    fi
+
+    echo -e "${BLUE}正在准备配置文件...${NC}"
+    local install_dir="/opt/vscode"
+    mkdir -p "$install_dir"
+
+    cat > "$install_dir/docker-compose.yml" <<EOF
+services:
+  vscode-server:
+    image: codercom/code-server:latest
+    container_name: vscode-server
+    restart: always
+    ports:
+      - "${host_port}:8080"
+    environment:
+      - PASSWORD=${v_pass}
+      - TZ=Asia/Shanghai
+    volumes:
+      - "${install_dir}/config:/home/coder/.config"
+      - "${workspace_dir}:/home/coder/project"
+    user: "$(id -u):$(id -g)"
+EOF
+
+    echo -e "${BLUE}正在启动容器...${NC}"
+    cd "$install_dir" && docker compose up -d
+
+    if [ $? -eq 0 ]; then
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        echo -e "${GREEN}✅ VScode 安装成功！${NC}"
+        echo -e "访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+        echo -e "登录密码: ${GREEN}${v_pass}${NC}"
+        echo -e "工作目录: ${BLUE}${workspace_dir}${NC}"
+    else
+        echo -e "${RED}❌ 启动失败，请检查 Docker 日志。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function manage_vscode_container() {
+    local action=$1
+    echo -e "${BLUE}正在执行 ${action} 操作...${NC}"
+    cd /opt/vscode && docker compose "$action"
+    read -p "按回车键继续..."
+}
+
+function change_vscode_password() {
+    if [ ! -f /opt/vscode/docker-compose.yml ]; then
+        echo -e "${RED}未找到安装配置。${NC}"
+        return
+    fi
+    read -p "请输入新密码: " new_pass
+    if [ -n "$new_pass" ]; then
+        sed -i "s/PASSWORD=.*/PASSWORD=${new_pass}/" /opt/vscode/docker-compose.yml
+        echo -e "${BLUE}正在应用新密码并重启...${NC}"
+        cd /opt/vscode && docker compose up -d
+        echo -e "${GREEN}密码修改成功！${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function view_vscode_info() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          VScode 运行信息${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if [ -f /opt/vscode/docker-compose.yml ]; then
+        local port=$(grep "ports:" -A 1 /opt/vscode/docker-compose.yml | grep -o "[0-9]*" | head -1)
+        local pass=$(grep "PASSWORD=" /opt/vscode/docker-compose.yml | cut -d= -f2)
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        
+        echo -e "访问地址: ${YELLOW}http://${ipv4}:${port}${NC}"
+        echo -e "当前密码: ${GREEN}${pass}${NC}"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e "${BLUE}最近 10 行日志:${NC}"
+        docker logs --tail 10 vscode-server
+    else
+        echo -e "${RED}未检测到安装信息。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function uninstall_vscode() {
+    read -p "确定要卸载 VScode 吗？数据目录将保留 (y/N): " confirm
+    if [[ "$confirm" =~ ^[yY]$ ]]; then
+        cd /opt/vscode && docker compose down
+        rm -rf /opt/vscode/docker-compose.yml
+        echo -e "${GREEN}卸载完成。${NC}"
+    fi
     read -p "按回车键继续..."
 }
