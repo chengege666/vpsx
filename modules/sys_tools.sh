@@ -1224,68 +1224,81 @@ function change_ssh_port() {
 }
 
 function switch_ip_priority() {
-    clear
-    echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}          切换优先IPV4/IPV6${NC}"
-    echo -e "${CYAN}=========================================${NC}"
+function switch_ip_priority() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}          切换 IP 网络优先级${NC}"
+        echo -e "${CYAN}=========================================${NC}"
+        
+        # --- 1. 获取当前状态 ---
+        local gai_file="/etc/gai.conf"
+        local status_v4_pri="${BLUE}未知${NC}"
+        local status_v6_kernel="${GREEN}启用${NC}"
 
-    local gai_file="/etc/gai.conf"
+        if [ -f "$gai_file" ] && grep -qE "^precedence\s+::ffff:0:0/96\s+100" "$gai_file"; then
+            status_v4_pri="${GREEN}IPv4 优先${NC}"
+        else
+            status_v4_pri="${BLUE}IPv6 优先 (系统默认)${NC}"
+        fi
 
-    if [ ! -f "$gai_file" ]; then
-        echo -e "${RED}错误: $gai_file 文件不存在。${NC}"
-        # 可以在此处添加自动创建文件的逻辑，但在不知道发行版默认策略时，返回是安全的
-        read -p "按任意键继续..."
-        return
-    fi
+        if [ "$(sysctl -n net.ipv6.conf.all.disable_ipv6)" == "1" ]; then
+            status_v6_kernel="${RED}已完全禁用${NC}"
+        fi
 
-    # 检测当前状态：匹配行首的 precedence，且包含 ::ffff:0:0/96，忽略中间的空格数量
-    if grep -qE "^precedence\s+::ffff:0:0/96\s+100" "$gai_file"; then
-        current_preference="${GREEN}IPv4优先${NC}"
-        is_ipv4=true
-    else
-        current_preference="${BLUE}IPv6优先 (默认)${NC}"
-        is_ipv4=false
-    fi
+        echo -e "当前解析策略: $status_v4_pri"
+        echo -e "内核 IPv6 状态: $status_v6_kernel"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${GREEN}1.${NC} 设置 IPv4 优先 (推荐: 解决国内连接慢)"
+        echo -e " ${GREEN}2.${NC} 恢复 IPv6 优先 (默认)"
+        echo -e " ${GREEN}3.${NC} 完全禁用系统 IPv6 (慎用)"
+        echo -e " ${GREEN}4.${NC} 重新启用系统 IPv6"
+        echo -e " ${GREEN}5.${NC} 测试当前实际出口 IP"
+        echo -e " ${RED}0.${NC} 返回上一级"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入选择: " choice
 
-    echo -e "当前优先设置: ${current_preference}"
-    echo -e "-----------------------------------------"
-    echo -e " ${GREEN}1.${NC} 设置为 IPv4 优先"
-    echo -e " ${GREEN}2.${NC} 设置为 IPv6 优先"
-    echo -e " ${RED}0.${NC} 返回"
-    echo -e "-----------------------------------------"
-    read -p "请输入你的选择 (0-2): " choice
-
-    case $choice in
-        1)
-            echo -e "${YELLOW}正在设置为 IPv4 优先...${NC}"
-            # 1. 删除所有相关的配置行（包括注释掉的，防止干扰）
-            sed -i '/::ffff:0:0\/96/d' "$gai_file"
-            
-            # 2. 确保文件末尾有换行符
-            [ -n "$(tail -c1 "$gai_file")" ] && echo "" >> "$gai_file"
-            
-            # 3. 追加配置
-            echo "precedence ::ffff:0:0/96  100" >> "$gai_file"
-            
-            echo -e "${GREEN}设置完成。DNS 解析将优先使用 IPv4。${NC}"
-            ;;
-        2)
-            echo -e "${YELLOW}正在设置为 IPv6 优先 (恢复默认)...${NC}"
-            # 删除生效的配置行（恢复系统默认排序）
-            sed -i '/^precedence\s*::ffff:0:0\/96\s*100/d' "$gai_file"
-            
-            # 可选：如果为了美观，可以把默认注释写回去，但这不影响功能
-            # echo "#precedence ::ffff:0:0/96  100" >> "$gai_file"
-            
-            echo -e "${GREEN}设置完成。已恢复 IPv6 优先。${NC}"
-            ;;
-        0)
-            ;;
-        *)
-            echo -e "${RED}无效的选择。${NC}"
-            ;;
-    esac
-    read -p "按任意键继续..."
+        case $choice in
+            1)
+                echo -e "${YELLOW}正在修改 $gai_file ...${NC}"
+                [ ! -f "$gai_file" ] && touch "$gai_file"
+                sed -i '/::ffff:0:0\/96/d' "$gai_file"
+                echo "precedence ::ffff:0:0/96  100" >> "$gai_file"
+                echo -e "${GREEN}✅ 已设置为 IPv4 优先。${NC}"
+                sleep 2
+                ;;
+            2)
+                echo -e "${YELLOW}正在恢复系统默认策略...${NC}"
+                sed -i '/^precedence\s*::ffff:0:0\/96\s*100/d' "$gai_file"
+                echo -e "${GREEN}✅ 已恢复 IPv6 优先。${NC}"
+                sleep 2
+                ;;
+            3)
+                echo -e "${RED}正在内核层面禁用 IPv6...${NC}"
+                sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null
+                sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null
+                sysctl -w net.ipv6.conf.lo.disable_ipv6=1 >/dev/null
+                echo -e "${GREEN}✅ IPv6 已彻底禁用。${NC}"
+                sleep 2
+                ;;
+            4)
+                echo -e "${YELLOW}正在重新启用 IPv6...${NC}"
+                sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null
+                sysctl -w net.ipv6.conf.default.disable_ipv6=0 >/dev/null
+                sysctl -w net.ipv6.conf.lo.disable_ipv6=0 >/dev/null
+                echo -e "${GREEN}✅ IPv6 已启用。${NC}"
+                sleep 2
+                ;;
+            5)
+                echo -e "${BLUE}正在检测出口 IP (使用 ip.sb)...${NC}"
+                local ip_detect=$(curl -sS --max-time 5 https://api.ip.sb/ip || echo "连接超时")
+                echo -e "${YELLOW}当前公网出口 IP: ${GREEN}$ip_detect${NC}"
+                read -p "按回车键继续..."
+                ;;
+            0) break ;;
+            *) echo -e "${RED}无效选择！${NC}"; sleep 1 ;;
+        esac
+    done
 }
 
 # 修改主机名
