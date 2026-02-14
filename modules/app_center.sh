@@ -239,7 +239,7 @@ function nezha_probe_management() {
     done
 }
 
-# 安装函数
+# 优化后的安装函数 (支持镜像加速)
 function install_nezha_docker() {
     clear
     echo -e "${CYAN}=========================================${NC}"
@@ -252,6 +252,24 @@ function install_nezha_docker() {
         return
     fi
 
+    # --- 镜像源选择逻辑 ---
+    echo -e "${YELLOW}请选择镜像下载源：${NC}"
+    echo "1. GitHub 官方源 (ghcr.io) - [需海外网络]"
+    echo "2. 国内加速源 (ghcr.nju.edu.cn) - [南京大学]"
+    echo "3. 国内加速源 (ghcr.mirrors.sjtug.sjtu.edu.cn) - [上海交大]"
+    read -p "请输入选择 (默认 2): " image_choice
+    image_choice=${image_choice:-2}
+
+    local agent_image="ghcr.io/nezhahq/agent:latest"
+    case "$image_choice" in
+        1) agent_image="ghcr.io/nezhahq/agent:latest" ;;
+        2) agent_image="ghcr.nju.edu.cn/nezhahq/agent:latest" ;;
+        3) agent_image="ghcr.mirrors.sjtug.sjtu.edu.cn/nezhahq/agent:latest" ;;
+        *) agent_image="ghcr.nju.edu.cn/nezhahq/agent:latest" ;;
+    esac
+    # -------------------
+
+    echo ""
     echo -e "${YELLOW}请准备好哪吒面板提供的接入信息：${NC}"
     read -p "请输入面板服务器地址 (例: nezha.example.com:5555): " d_server
     read -p "请输入 Agent 密钥 (Secret): " d_secret
@@ -267,7 +285,7 @@ function install_nezha_docker() {
     cat > "$install_dir/docker-compose.yml" <<EOF
 services:
   nezha-agent:
-    image: ghcr.io/nezhahq/agent:latest
+    image: ${agent_image}
     container_name: nezha-agent
     restart: always
     network_mode: host
@@ -277,13 +295,13 @@ services:
     command: -s ${d_server} -p ${d_secret} ${tls_flag} --report-delay 2 --disable-auto-update --disable-command-execute
 EOF
 
-    echo -e "${BLUE}正在启动容器...${NC}"
+    echo -e "${BLUE}正在从 ${agent_image} 启动容器...${NC}"
     cd "$install_dir" && docker compose up -d
 
     if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✅ 哪吒探针安装成功并已在后台运行！${NC}"
+        echo -e "${GREEN}✅ 哪吒探针安装成功！${NC}"
     else
-        echo -e "${RED}❌ 安装失败，请检查网络或 Docker 状态。${NC}"
+        echo -e "${RED}❌ 安装失败，即使使用了加速站也无法连接，请检查服务器 DNS 或防火墙设置。${NC}"
     fi
     read -p "按回车键继续..."
 }
