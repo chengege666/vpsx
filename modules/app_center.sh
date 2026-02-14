@@ -6125,8 +6125,20 @@ function uninstall_vscode() {
     fi
     read -p "按回车键继续..."
 
+      1) install_webssh ;;
+            2) docker start webssh && echo -e "${GREEN}启动成功${NC}" || echo -e "${RED}启动失败${NC}"; sleep 1 ;;
+            3) docker stop webssh && echo -e "${YELLOW}停止成功${NC}" || echo -e "${RED}停止失败${NC}"; sleep 1 ;;
+            4) docker restart webssh && echo -e "${GREEN}重启成功${NC}" || echo -e "${RED}重启失败${NC}"; sleep 1 ;;
+            5) view_webssh_info ;;
+            6) uninstall_webssh ;;
+            0) break ;;
+            *) echo -e "${RED}无效选择！${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
 # =================================================================
-# WebSSH 管理模块 (基于 huashengdun/webssh)
+# WebSSH 管理模块 (huashengdun/webssh)
 # =================================================================
 
 function webssh_management() {
@@ -6135,7 +6147,6 @@ function webssh_management() {
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}             WebSSH 网页终端管理${NC}"
         
-        # 状态检测逻辑
         local status_text="${RED}未安装${NC}"
         if docker ps -a --format '{{.Names}}' | grep -q "^webssh$"; then
             if docker ps --format '{{.Names}}' | grep -q "^webssh$"; then
@@ -6147,8 +6158,8 @@ function webssh_management() {
 
         echo -e "          状态: ${status_text}"
         echo -e "${CYAN}=========================================${NC}"
-        echo -e "WebSSH 是一个基于 Web 的终端模拟器，支持 SSH 连接。"
-        echo -e "${YELLOW}提示：建议通过 Nginx Proxy Manager 配置访问授权。${NC}"
+        echo -e "WebSSH 是一个轻量级的网页版 SSH 客户端。"
+        echo -e "${YELLOW}连接建议：宿主机 IP 输入 172.17.0.1 (Docker 网桥)${NC}"
         echo ""
         echo -e " ${GREEN}1.${NC} 安装 WebSSH"
         echo -e " ${GREEN}2.${NC} 启动 WebSSH"
@@ -6159,7 +6170,7 @@ function webssh_management() {
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC} 返回上一级菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-6): " wssh_choice
+        read -p "请输入你的选择: " wssh_choice
 
         case "$wssh_choice" in
             1) install_webssh ;;
@@ -6181,45 +6192,30 @@ function install_webssh() {
     echo -e "${CYAN}=========================================${NC}"
 
     if ! command -v docker &> /dev/null; then
-        echo -e "${RED}错误: 未检测到 Docker 环境，请先安装 Docker。${NC}"
+        echo -e "${RED}错误: 未检测到 Docker，请先安装。${NC}"
         read -p "按回车键继续..."
         return
     fi
 
-    # 端口配置
     read -p "请输入网页访问端口 (默认 8888): " w_port
     w_port=${w_port:-8888}
 
-    # 验证端口占用
     if ss -tuln | grep -q ":${w_port} " &>/dev/null; then
-        echo -e "${RED}❌ 端口 ${w_port} 已被占用，请更换端口重新安装。${NC}"
+        echo -e "${RED}❌ 端口 ${w_port} 已被占用。${NC}"
         read -p "按回车键继续..."
         return
     fi
 
-    echo -e "${BLUE}正在拉取镜像并部署 WebSSH...${NC}"
-    
-    # 资深开发者选项：--xsrf 开启跨站保护，--wb 启用白板背景（可选）
-    docker run -d \
-        --name webssh \
-        --restart always \
-        -p "${w_port}:8888" \
-        huashengdun/webssh:latest
+    echo -e "${BLUE}正在部署 WebSSH 容器...${NC}"
+    docker run -d --name webssh --restart always -p "${w_port}:8888" huashengdun/webssh:latest
 
     if [ $? -eq 0 ]; then
+        # 兼容你脚本中的 get_access_ips 函数
         IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
         echo -e "${GREEN}✅ WebSSH 安装成功！${NC}"
-        echo -e "IPv4 地址: ${YELLOW}http://${ipv4}:${w_port}${NC}"
-        echo ""
-        echo -e "${CYAN}使用说明：${NC}"
-        echo -e "1. 在浏览器打开上方地址"
-        echo -e "2. Hostname 输入 ${GREEN}127.0.0.1${NC} (代表连接 VPS 本身)"
-        echo -e "3. 输入 root 账号和密码即可登录"
-        echo ""
-        echo -e "${RED}安全警告：${NC}"
-        echo -e "当前服务暴露在公网且无登录验证，请立即使用 NPM 配置反代及访问限制！"
+        echo -e "访问地址: ${YELLOW}http://${ipv4}:${w_port}${NC}"
     else
-        echo -e "${RED}❌ 安装失败，请检查 Docker 日志。${NC}"
+        echo -e "${RED}❌ 安装失败。${NC}"
     fi
     read -p "按回车键继续..."
 }
@@ -6227,25 +6223,22 @@ function install_webssh() {
 function view_webssh_info() {
     clear
     if ! docker ps -a --format '{{.Names}}' | grep -q "^webssh$"; then
-        echo -e "${RED}未检测到 WebSSH 安装。${NC}"
+        echo -e "${RED}未安装。${NC}"
     else
         local port=$(docker inspect webssh --format='{{(index (index .NetworkSettings.Ports "8888/tcp") 0).HostPort}}')
         IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
-        echo -e "${GREEN}WebSSH 访问信息：${NC}"
-        echo -e "URL: ${YELLOW}http://${ipv4}:${port}${NC}"
-        echo -e "状态: ${GREEN}$(docker inspect -f '{{.State.Status}}' webssh)${NC}"
+        echo -e "访问地址: ${YELLOW}http://${ipv4}:${port}${NC}"
         echo -e "${CYAN}-----------------------------------------${NC}"
-        echo -e "${BLUE}容器日志 (最后 10 行):${NC}"
         docker logs --tail 10 webssh
     fi
     read -p "按回车键继续..."
 }
 
 function uninstall_webssh() {
-    read -p "确定要卸载 WebSSH 吗？(y/N): " confirm
+    read -p "确定卸载？(y/N): " confirm
     if [[ "$confirm" =~ ^[yY]$ ]]; then
         docker rm -f webssh &>/dev/null
-        echo -e "${GREEN}WebSSH 已成功移除。${NC}"
-        sleep 2
+        echo -e "${GREEN}卸载完成。${NC}"
+        sleep 1
     fi
 }
