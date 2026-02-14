@@ -226,7 +226,7 @@ function nezha_probe_management() {
         read -p "请输入你的选择: " nezha_choice
 
         case "$nezha_choice" in
-            1) install_nezha_official ;;
+            1) install_official_script ;;
             2) sudo systemctl start nezha-agent; echo -e "${GREEN}启动指令已发送${NC}"; sleep 1 ;;
             3) sudo systemctl stop nezha-agent; echo -e "${YELLOW}停止指令已发送${NC}"; sleep 1 ;;
             4) sudo systemctl restart nezha-agent; echo -e "${GREEN}重启指令已发送${NC}"; sleep 1 ;;
