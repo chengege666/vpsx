@@ -2374,8 +2374,9 @@ function check_updates_now() {
     
     if [[ ! "$confirm" =~ ^[nN]$ ]]; then
         echo "正在执行更新检查..."
-        # 使用 --run-once 参数运行一次性检查
+        # 修复点：添加环境变量强制使用 1.44 版本的 API
         docker run --rm \
+            -e DOCKER_API_VERSION=1.44 \
             -v /var/run/docker.sock:/var/run/docker.sock \
             containrrr/watchtower \
             --run-once \
