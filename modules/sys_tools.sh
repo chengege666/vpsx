@@ -695,7 +695,7 @@ function accelerate_memory_clean() {
 function modify_dns_server() {
     clear
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}       修改 DNS 服务器 (独裁模式)${NC}"
+    echo -e "${GREEN}           修改 DNS 服务器${NC}"
     echo -e "${CYAN}=========================================${NC}"
     
     # --- 1. 显示当前实际生效的 DNS ---
