@@ -27,6 +27,7 @@ function app_center_menu() {
         echo -e " ${GREEN}16.${NC} 雷池WAF安全防护系统"
         echo -e " ${GREEN}17.${NC} AkileCloud专用脚本"
         echo -e " ${GREEN}18.${NC} VScode 网页版 (code-server)"
+        echo -e " ${GREEN}19.${NC} Lucky (大神级 DDNS/反代/SSL工具)"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
@@ -51,6 +52,7 @@ function app_center_menu() {
             16) safeline_waf_management ;;
             17) akilecloud_management ;;
             18) vscode_management ;;
+            19) lucky_management ;;
             0) break ;; 
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -6121,6 +6123,170 @@ function uninstall_vscode() {
         cd /opt/vscode && docker compose down
         rm -rf /opt/vscode/docker-compose.yml
         echo -e "${GREEN}卸载完成。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+
+function lucky_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}             Lucky 管理菜单${NC}"
+        
+        # 状态检测逻辑
+        local status_text="${RED}未安装${NC}"
+        if docker ps -a --format '{{.Names}}' | grep -q "^lucky$"; then
+            if docker ps --format '{{.Names}}' | grep -q "^lucky$"; then
+                status_text="${GREEN}运行中${NC}"
+            else
+                status_text="${YELLOW}已停止${NC}"
+            fi
+        fi
+
+        echo -e "          状态: ${status_text}"
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "Lucky 是一款集 DDNS、反向代理、SSL证书申请、WOL等"
+        echo -e "于一体的超强大工具，资源占用极低。"
+        echo ""
+        echo -e " ${GREEN}1.${NC} 安装 Lucky (Docker 版)"
+        echo -e " ${GREEN}2.${NC} 启动 Lucky"
+        echo -e " ${GREEN}3.${NC} 停止 Lucky"
+        echo -e " ${GREEN}4.${NC} 重启 Lucky"
+        echo -e " ${GREEN}5.${NC} 查看 Lucky 运行日志"
+        echo -e " ${GREEN}6.${NC} 升级 Lucky 到最新版"
+        echo -e " ${GREEN}7.${NC} 卸载 Lucky"
+        echo -e " ${GREEN}8.${NC} 访问管理界面"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC} 返回上一级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 (0-8): " lucky_choice
+
+        case "$lucky_choice" in
+            1) install_lucky ;;
+            2) docker start lucky && echo -e "${GREEN}启动指令已发送${NC}" || echo -e "${RED}启动失败${NC}"; sleep 1 ;;
+            3) docker stop lucky && echo -e "${YELLOW}停止指令已发送${NC}" || echo -e "${RED}停止失败${NC}"; sleep 1 ;;
+            4) docker restart lucky && echo -e "${GREEN}重启指令已发送${NC}" || echo -e "${RED}重启失败${NC}"; sleep 1 ;;
+            5) clear; echo -e "${BLUE}最近 50 行日志 (Ctrl+C 退出):${NC}"; docker logs --tail 50 -f lucky ;;
+            6) upgrade_lucky ;;
+            7) uninstall_lucky ;;
+            8) access_lucky_web ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+function install_lucky() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}           安装 Lucky (Docker)${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if ! command -v docker &> /dev/null; then
+        echo -e "${RED}错误: 未检测到 Docker 环境，请先安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    if docker ps -a --format '{{.Names}}' | grep -q "^lucky$"; then
+        echo -e "${YELLOW}检测到 Lucky 已在运行中。${NC}"
+        read -p "是否重新安装？(y/N): " reinstall
+        [[ ! "$reinstall" =~ ^[yY]$ ]] && return
+        docker stop lucky &>/dev/null
+        docker rm lucky &>/dev/null
+    fi
+
+    # 1. 配置管理端口
+    read -p "请输入 Lucky 管理端口 (默认 16601): " host_port
+    host_port=${host_port:-16601}
+
+    # 2. 验证端口占用
+    if command -v ss &> /dev/null; then
+        if ss -tuln | grep -q ":${host_port} "; then
+            echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
+            read -p "按回车键继续..."
+            return
+        fi
+    fi
+
+    echo -e "${BLUE}正在拉取镜像并启动容器...${NC}"
+    
+    # Lucky 官方推荐使用 host 模式以支持 WOL 等功能，
+    # 但由于 VPS 环境通常使用桥接模式更安全，此处默认采用桥接映射。
+    # 映射路径 /etc/lucky 是为了保存配置文件。
+    
+    mkdir -p /opt/lucky/conf
+
+    docker run -d \
+        --name lucky \
+        --restart always \
+        -p ${host_port}:16601 \
+        -v /opt/lucky/conf:/config \
+        gdy666/lucky:latest
+
+    if [ $? -eq 0 ]; then
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        echo ""
+        echo -e "${GREEN}✅ Lucky 安装成功！${NC}"
+        echo -e "管理地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+        echo -e "默认账号: ${GREEN}666${NC}"
+        echo -e "默认密码: ${GREEN}666${NC}"
+        echo -e "${RED}注意：请务必在首次登录后立即修改账号密码。${NC}"
+    else
+        echo -e "${RED}❌ 安装失败，请检查 Docker 日志。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function upgrade_lucky() {
+    echo -e "${BLUE}正在升级 Lucky 到最新版本...${NC}"
+    docker pull gdy666/lucky:latest
+    
+    # 获取当前容器的端口映射
+    local current_port=$(docker inspect lucky --format='{{(index (index .NetworkSettings.Ports "16601/tcp") 0).HostPort}}' 2>/dev/null)
+    current_port=${current_port:-16601}
+
+    docker stop lucky
+    docker rm lucky
+    
+    docker run -d \
+        --name lucky \
+        --restart always \
+        -p ${current_port}:16601 \
+        -v /opt/lucky/conf:/config \
+        gdy666/lucky:latest
+
+    echo -e "${GREEN}升级完成，当前版本已是最新。${NC}"
+    read -p "按回车键继续..."
+}
+
+function access_lucky_web() {
+    clear
+    if ! docker ps -a --format '{{.Names}}' | grep -q "^lucky$"; then
+        echo -e "${RED}Lucky 未安装。${NC}"
+    else
+        local host_port=$(docker inspect lucky --format='{{(index (index .NetworkSettings.Ports "16601/tcp") 0).HostPort}}' 2>/dev/null)
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        echo -e "${CYAN}Lucky 管理地址：${NC}"
+        echo -e "IPv4 地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+        [ -n "$ipv6" ] && echo -e "IPv6 地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+        echo -e "默认凭据: ${GREEN}666 / 666${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function uninstall_lucky() {
+    read -p "确定要彻底删除 Lucky 吗？配置数据目录 /opt/lucky 将被保留 (y/N): " confirm
+    if [[ "$confirm" =~ ^[yY]$ ]]; then
+        docker stop lucky &>/dev/null
+        docker rm lucky &>/dev/null
+        echo -e "${GREEN}Lucky 容器已成功移除。${NC}"
+        read -p "是否同步删除配置目录 /opt/lucky？(y/N): " del_data
+        if [[ "$del_data" =~ ^[yY]$ ]]; then
+            rm -rf /opt/lucky
+            echo -e "${GREEN}数据目录已清理。${NC}"
+        fi
     fi
     read -p "按回车键继续..."
 }
