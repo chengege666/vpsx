@@ -481,7 +481,12 @@ EOF
     if [ -n "$ports" ]; then
         echo "    ports:" >> "$base_dir/docker-compose.yml"
         for p in $ports; do
-            echo "      - \"$p\"" >> "$base_dir/docker-compose.yml"
+            # 如果用户只输入了 8080，自动补全为 8080:80
+            if [[ ! "$p" =~ ":" ]]; then
+                echo "      - \"$p:$p\"" >> "$base_dir/docker-compose.yml"
+            else
+                echo "      - \"$p\"" >> "$base_dir/docker-compose.yml"
+            fi
         done
     fi
 
