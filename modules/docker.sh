@@ -85,6 +85,12 @@ function install_update_docker_env() {
         case "$docker_install_choice" in
             1)
                 echo -e "${BLUE}开始更新 Docker...${NC}"
+                
+                # 更新软件源并安装基础依赖
+                echo -e "${BLUE}正在更新软件源并安装基础依赖...${NC}"
+                apt update -y
+                apt install -y curl ca-certificates
+
                 curl -fsSL https://get.docker.com -o get-docker.sh
                 if sh get-docker.sh; then
                     rm get-docker.sh
@@ -124,6 +130,12 @@ function install_update_docker_env() {
         case "$docker_install_choice" in
             1)
                 echo -e "${BLUE}开始安装 Docker...${NC}"
+                
+                # 更新软件源并安装基础依赖
+                echo -e "${BLUE}正在更新软件源并安装基础依赖...${NC}"
+                apt update -y
+                apt install -y curl ca-certificates
+
                 curl -fsSL https://get.docker.com -o get-docker.sh
                 if sh get-docker.sh; then
                     rm get-docker.sh
