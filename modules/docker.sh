@@ -437,40 +437,83 @@ function docker_container_management() {
     done
 }
 
-# 创建新容器
+# 创建新容器 (改为 Docker Compose 方式)
 function create_new_container() {
     clear
     echo -e "${CYAN}================================================${NC}"
-    echo -e "               ${GREEN}创建新容器${NC}"
+    echo -e "          ${GREEN}通过 Docker Compose 创建容器${NC}"
     echo -e "${CYAN}================================================${NC}"
     
-    read -p "请输入容器名称: " name
+    # 1. 收集信息
+    read -p "请输入容器/项目名称 (用于目录名): " name
+    if [ -z "$name" ]; then
+        echo -e "${RED}名称不能为空！${NC}"
+        sleep 2; return
+    fi
+
     read -p "请输入镜像名称 (如 nginx:latest): " image
-    read -p "请输入端口映射 (如 8080:80, 留空跳过): " ports
-    read -p "请输入挂载卷 (如 /host/path:/container/path, 留空跳过): " volumes
-    read -p "请输入环境变量 (如 KEY=VALUE, 多个用空格, 留空跳过): " envs
-    read -p "是否后台运行? (Y/n): " detach
-    
-    local cmd="docker run"
-    [[ ! "$detach" =~ ^[Nn]$ ]] && cmd+=" -d"
-    [[ -n "$name" ]] && cmd+=" --name $name"
-    [[ -n "$ports" ]] && cmd+=" -p $ports"
-    [[ -n "$volumes" ]] && cmd+=" -v $volumes"
-    if [[ -n "$envs" ]]; then
-        for e in $envs; do
-            cmd+=" -e $e"
+    if [ -z "$image" ]; then
+        echo -e "${RED}镜像名称不能为空！${NC}"
+        sleep 2; return
+    fi
+
+    read -p "请输入端口映射 (如 8080:80, 多个用空格): " ports
+    read -p "请输入挂载卷 (如 ./data:/usr/share/nginx/html, 多个用空格): " volumes
+    read -p "请输入环境变量 (如 KEY=VALUE, 多个用空格): " envs
+
+    # 2. 准备工作目录
+    # 建议将所有 compose 项目存放在统一位置，例如 /opt/docker-compose/
+    local base_dir="/opt/docker-compose/$name"
+    echo -e "${BLUE}正在准备工作目录: $base_dir ...${NC}"
+    mkdir -p "$base_dir"
+
+    # 3. 构建 docker-compose.yml 内容
+    # 使用 Here Document 生成 YAML 文件
+    cat <<EOF > "$base_dir/docker-compose.yml"
+services:
+  $name:
+    image: $image
+    container_name: $name
+    restart: always
+EOF
+
+    # 动态添加端口
+    if [ -n "$ports" ]; then
+        echo "    ports:" >> "$base_dir/docker-compose.yml"
+        for p in $ports; do
+            echo "      - \"$p\"" >> "$base_dir/docker-compose.yml"
         done
     fi
-    cmd+=" $image"
-    
-    echo -e "${BLUE}执行命令: $cmd${NC}"
-    eval $cmd
-    
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}容器创建成功！${NC}"
-    else
-        echo -e "${RED}容器创建失败！${NC}"
+
+    # 动态添加挂载卷
+    if [ -n "$volumes" ]; then
+        echo "    volumes:" >> "$base_dir/docker-compose.yml"
+        for v in $volumes; do
+            echo "      - \"$v\"" >> "$base_dir/docker-compose.yml"
+        done
     fi
+
+    # 动态添加环境变量
+    if [ -n "$envs" ]; then
+        echo "    environment:" >> "$base_dir/docker-compose.yml"
+        for e in $envs; do
+            echo "      - \"$e\"" >> "$base_dir/docker-compose.yml"
+        done
+    fi
+
+    echo -e "${GREEN}docker-compose.yml 已生成于 $base_dir${NC}"
+
+    # 4. 启动容器
+    echo -e "${BLUE}正在通过 Docker Compose 启动容器...${NC}"
+    cd "$base_dir" || return
+    if docker compose up -d; then
+        echo -e "${GREEN}容器创建并运行成功！${NC}"
+        echo -e "${CYAN}配置文件位置: $base_dir/docker-compose.yml${NC}"
+    else
+        echo -e "${RED}容器创建失败，请检查配置。${NC}"
+    fi
+    
+    cd - > /dev/null
     read -p "按任意键继续..."
 }
 
