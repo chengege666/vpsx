@@ -23,7 +23,7 @@ function system_cleanup() {
         echo -e "${YELLOW}开始深度清理系统...${NC}"
         echo ""
         
-        # 1. 清理包管理器缓存
+        # 1. 清理包管理器缓存收到
         echo -e "${BLUE}[步骤1/8] 清理APT缓存和旧包...${NC}"
         # 修复 'Malformed entry' 错误，删除可能损坏的 docker.list 文件
         if [ -f /etc/apt/sources.list.d/docker.list ]; then
