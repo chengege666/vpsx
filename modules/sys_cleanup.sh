@@ -1,191 +1,131 @@
+#!/bin/bash
+
+# 定义颜色
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
 function system_cleanup() {
+    # 检查 root 权限
+    if [[ $EUID -ne 0 ]]; then
+       echo -e "${RED}错误: 必须使用 root 权限运行此脚本。${NC}"
+       exit 1
+    fi
+
     clear
-    echo -e "${CYAN}"
-    echo "=========================================="
-    echo "              系统清理功能        "
-    echo "=========================================="
-    echo -e "${NC}"
+    echo -e "${CYAN}==========================================${NC}"
+    echo -e "${CYAN}          系统深度清理工具 (增强版)        ${NC}"
+    echo -e "${CYAN}==========================================${NC}"
     
-    echo -e "${YELLOW}⚠️ 警告：系统清理操作将删除不必要的文件，请谨慎操作！${NC}"
-    echo ""
+    echo -e "${YELLOW}⚠️  警告：此操作将清理系统缓存、旧内核和残留配置。${NC}"
     read -p "是否继续执行系统清理？(y/n): " confirm
     if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then 
-        echo -e "${YELLOW}已取消系统清理操作${NC}"
+        echo -e "${YELLOW}已取消操作${NC}"
         return
     fi
 
-    # 创建备份时间戳
-    BACKUP_DIR="/tmp/system_clean_backup_$(date +%Y%m%d_%H%M%S)"
-    mkdir -p "$BACKUP_DIR"
-    
+    # 记录初始磁盘空间
+    OLD_DISK_SPACE=$(df / | tail -1 | awk '{print $4}')
+
     if [ -f /etc/debian_version ]; then
-        echo -e "${BLUE}检测到 Debian/Ubuntu 系统${NC}"
-        echo -e "${YELLOW}开始深度清理系统...${NC}"
-        echo ""
+        echo -e "${BLUE}[1/2] 检测到 Debian/Ubuntu 系统，开始深度清理...${NC}"
         
-        # 1. 清理包管理器缓存收到
-        echo -e "${BLUE}[步骤1/8] 清理APT缓存和旧包...${NC}"
-        # 修复 'Malformed entry' 错误，删除可能损坏的 docker.list 文件
+        # 1. 修复可能损坏的列表
         if [ -f /etc/apt/sources.list.d/docker.list ]; then
-            mv /etc/apt/sources.list.d/docker.list /etc/apt/sources.list.d/docker.list.bak
-            echo -e "${YELLOW}已备份并移除可能损坏的 docker.list${NC}"
+            mv /etc/apt/sources.list.d/docker.list /etc/apt/sources.list.d/docker.list.bak 2>/dev/null
         fi
-        apt clean
-        apt autoclean
-        # 仅自动移除不再需要的包，不强制 purge，降低误删系统组件风险
-        apt autoremove -y
+
+        # 2. 包管理器深度清理
+        echo -e "${YELLOW}-> 正在清理软件包和残留配置...${NC}"
+        apt update -qq
+        apt autoremove --purge -y  # 自动移除并删除配置文件
+        apt clean -y
+        apt autoclean -y
         
-        # 安装并使用 deborphan 清理孤立软件包
+        # 清除已卸载但保留了配置文件的包 (状态为 rc 的包)
+        RC_PACKAGES=$(dpkg -l | awk '/^rc/ {print $2}')
+        if [ -n "$RC_PACKAGES" ]; then
+            echo -e "${YELLOW}-> 清除残留配置文件: $RC_PACKAGES${NC}"
+            apt purge -y $RC_PACKAGES
+        fi
+
+        # 使用 deborphan 清理孤立包
         if ! command -v deborphan >/dev/null 2>&1; then
-            echo -e "${YELLOW}安装 deborphan 以清理孤立软件包...${NC}"
-            apt update && apt install -y deborphan
+            apt install -y deborphan -qq
         fi
-        if command -v deborphan >/dev/null 2>&1; then
-            echo -e "${YELLOW}清理孤立软件包...${NC}"
-            deborphan | xargs apt -y purge 2>/dev/null
+        deborphan | xargs -r apt -y purge
+
+        # 3. 旧内核清理 (保留当前内核)
+        echo -e "${YELLOW}-> 正在清理旧内核...${NC}"
+        CURRENT_KERNEL=$(uname -r | sed 's/-.*//')
+        KERNEL_PKGS=$(dpkg -l | awk '/^ii  linux-(image|headers)-[^ ]+/ {print $2}' | grep -v "$CURRENT_KERNEL")
+        if [ -n "$KERNEL_PKGS" ]; then
+            apt purge -y $KERNEL_PKGS
         fi
-        
-        # 2. 清理旧内核 (增强安全性：确保不删除当前内核及其配套文件)
-        echo -e "${BLUE}[步骤2/8] 清理旧内核...${NC}"
-        local current_kernel=$(uname -r)
-        # 查找所有已安装的内核包，但不包括当前运行的内核版本
-        local kernel_pkgs=$(dpkg-query -W -f='${Package}\n' 'linux-image-[0-9]*' 'linux-headers-[0-9]*' | grep -v "$current_kernel")
-        
-        if [ -n "$kernel_pkgs" ]; then
-            echo -e "${YELLOW}发现旧内核包，准备清理...${NC}"
-            echo "$kernel_pkgs" | xargs apt-get -y purge
-        else
-            echo -e "${GREEN}未发现需要清理的旧内核。${NC}"
-        fi
-        
-        # 3. 清理日志文件 (更彻底)
-        echo -e "${BLUE}[步骤3/8] 清理日志文件...${NC}"
-        journalctl --vacuum-time=7d 2>/dev/null  # 保留7天日志
-        find /var/log -name "*.log" -type f -mtime +30 -delete 2>/dev/null
-        find /var/log -name "*.gz" -type f -mtime +7 -delete 2>/dev/null
-        find /var/log -name "*.old" -type f -mtime +7 -delete 2>/dev/null
-        find /var/log -name "*.[0-9]" -type f -mtime +7 -delete 2>/dev/null
-        truncate -s 0 /var/log/*.log 2>/dev/null
-        
-        # 4. 清理临时文件 (扩大范围)
-        echo -e "${BLUE}[步骤4/8] 清理临时文件...${NC}"
-        rm -rf /tmp/*
-        rm -rf /var/tmp/*
-        rm -rf /var/cache/apt/archives/*
-        rm -rf /var/cache/debconf/*
-        
-        # 5. 清理缩略图缓存
-        echo -e "${BLUE}[步骤5/8] 清理缩略图缓存...${NC}"
-        find /home -type f -name ".thumbnails" -exec rm -rf {} + 2>/dev/null
-        find /root -type f -name ".thumbnails" -exec rm -rf {} + 2>/dev/null
-        
-        # 6. 清理浏览器缓存 (如果存在)
-        echo -e "${BLUE}[步骤6/8] 清理浏览器缓存...${NC}"
-        # 清理常见浏览器缓存路径
-        find /home -type d -name "mozilla" -prune -exec rm -rf {}/.cache/mozilla/* 2>/dev/null \;
-        find /home -type d -name "google-chrome" -prune -exec rm -rf {}/.cache/google-chrome/* 2>/dev/null \;
-        find /root -type d -name "mozilla" -prune -exec rm -rf {}/.cache/mozilla/* 2>/dev/null \;
-        find /root -type d -name "google-chrome" -prune -exec rm -rf {}/.cache/google-chrome/* 2>/dev/null \;
-        
-        # 7. 清理崩溃报告
-        echo -e "${BLUE}[步骤7/8] 清理崩溃报告...${NC}"
-        rm -rf /var/crash/*
-        find /var/lib/apport/crash -type f -delete 2>/dev/null
-        
-        # 8. 清理软件包列表缓存
-        echo -e "${BLUE}[步骤8/8] 清理软件包列表缓存...${NC}"
-        rm -rf /var/lib/apt/lists/*
-        apt update  # 重新生成干净的列表
-        
+
+        # 4. 日志清理 (极致压缩)
+        echo -e "${YELLOW}-> 正在滚动并清理系统日志...${NC}"
+        journalctl --rotate
+        journalctl --vacuum-time=1d
+        journalctl --vacuum-size=50M
+
     elif [ -f /etc/redhat-release ]; then
-        echo -e "${BLUE}检测到 CentOS/RHEL 系统${NC}"
-        echo -e "${YELLOW}开始深度清理系统...${NC}"
-        echo ""
+        echo -e "${BLUE}[1/2] 检测到 CentOS/RHEL 系统，开始深度清理...${NC}"
         
-        # 1. 清理YUM/DNF缓存
-        echo -e "${BLUE}[步骤1/8] 清理YUM/DNF缓存...${NC}"
         if command -v dnf >/dev/null 2>&1; then
             dnf clean all
             dnf autoremove -y
         else
             yum clean all
-            package-cleanup --oldkernels --count=1 -y 2>/dev/null
-            package-cleanup --leaves -y 2>/dev/null
+            package-cleanup --oldkernels --count=1 -y
+            package-cleanup --leaves -y
         fi
         
-        # 2. 清理旧内核
-        echo -e "${BLUE}[步骤2/8] 清理旧内核...${NC}"
-        if command -v dnf >/dev/null 2>&1; then
-            dnf remove -y $(dnf repoquery --installonly --latest-limit=-1 -q) 2>/dev/null
-        else
-            package-cleanup --oldkernels --count=1 -y 2>/dev/null
-        fi
-        
-        # 3. 清理日志文件
-        echo -e "${BLUE}[步骤3/8] 清理日志文件...${NC}"
-        journalctl --vacuum-time=7d 2>/dev/null
-        find /var/log -name "*.log" -type f -mtime +30 -delete 2>/dev/null
-        find /var/log -name "*.gz" -type f -mtime +7 -delete 2>/dev/null
-        find /var/log -name "*.[0-9]" -type f -mtime +7 -delete 2>/dev/null
-        truncate -s 0 /var/log/*.log 2>/dev/null
-        
-        # 4. 清理临时文件
-        echo -e "${BLUE}[步骤4/8] 清理临时文件...${NC}"
-        rm -rf /tmp/*
-        rm -rf /var/tmp/*
-        rm -rf /var/cache/yum/*
-        rm -rf /var/cache/dnf/*
-        
-        # 5. 清理缩略图缓存
-        echo -e "${BLUE}[步骤5/8] 清理缩略图缓存...${NC}"
-        find /home -type f -name ".thumbnails" -exec rm -rf {} + 2>/dev/null
-        find /root -type f -name ".thumbnails" -exec rm -rf {} + 2>/dev/null
-        
-        # 6. 清理浏览器缓存
-        echo -e "${BLUE}[步骤6/8] 清理浏览器缓存...${NC}"
-        find /home -type d -name "google-chrome" -prune -exec rm -rf {}/.cache/google-chrome/* 2>/dev/null \;
-        find /home -type d -name "mozilla" -prune -exec rm -rf {}/.cache/mozilla/* 2>/dev/null \;
-        find /root -type d -name "google-chrome" -prune -exec rm -rf {}/.cache/google-chrome/* 2>/dev/null \;
-        find /root -type d -name "mozilla" -prune -exec rm -rf {}/.cache/mozilla/* 2>/dev/null \;
-        
-        # 7. 清理崩溃报告
-        echo -e "${BLUE}[步骤7/8] 清理崩溃报告...${NC}"
-        rm -rf /var/crash/*
-        find /var/spool/abrt -type f -delete 2>/dev/null
-        
-        # 8. 清理系统缓存
-        echo -e "${BLUE}[步骤8/8] 清理系统缓存...${NC}"
-        sync
-        echo 3 > /proc/sys/vm/drop_caches 2>/dev/null
-        
-    else
-        echo -e "${RED}不支持的系统类型！${NC}"
-        echo -e "${YELLOW}仅支持 Debian/Ubuntu 和 CentOS/RHEL 系统。${NC}"
-        return
+        journalctl --rotate
+        journalctl --vacuum-time=1d
+        journalctl --vacuum-size=50M
     fi
-    
+
     # 通用清理步骤 (所有系统)
-    echo -e "${BLUE}[通用步骤] 执行通用清理...${NC}"
-    
-    # 清理垃圾文件
-    find /tmp -name "*.tmp" -type f -delete 2>/dev/null
-    find /tmp -name "*.swp" -type f -delete 2>/dev/null
-    find /home -name "*.bak" -type f -mtime +30 -delete 2>/dev/null
-    
-    # 清理空目录
-    find /tmp -type d -empty -delete 2>/dev/null
-    find /var/tmp -type d -empty -delete 2>/dev/null
-    
-    # 显示清理结果
+    echo -e "${BLUE}[2/2] 执行通用垃圾清理...${NC}"
+
+    # 1. 临时文件清理 (安全清理：只删1天前的，不删 socket)
+    echo -e "${YELLOW}-> 清理临时目录 (/tmp)...${NC}"
+    find /tmp -type f -atime +1 -delete 2>/dev/null
+    find /var/tmp -type f -atime +1 -delete 2>/dev/null
+
+    # 2. 缓存清理
+    echo -e "${YELLOW}-> 清理缩略图和浏览器缓存...${NC}"
+    find /home /root -type d -name ".thumbnails" -exec rm -rf {}/* + 2>/dev/null
+    find /home /root -type d -path "*/.cache/mozilla/*" -delete 2>/dev/null
+    find /home /root -type d -path "*/.cache/google-chrome/*" -delete 2>/dev/null
+
+    # 3. 崩溃报告清理
+    rm -rf /var/crash/*
+    rm -rf /var/lib/apport/crash/* 2>/dev/null
+
+    # 4. 释放系统内存缓存 (Buffer/Cache)
+    echo -e "${YELLOW}-> 释放系统内存缓存...${NC}"
+    sync && echo 3 > /proc/sys/vm/drop_caches
+
+    # 结果统计
+    NEW_DISK_SPACE=$(df / | tail -1 | awk '{print $4}')
+    FREED_SPACE=$(( (NEW_DISK_SPACE - OLD_DISK_SPACE) / 1024 ))
+
     echo ""
-    echo -e "${GREEN}✅ 系统深度清理完成！${NC}"
-    echo -e "${YELLOW}释放的磁盘空间：${NC}"
-    df -h / | tail -1 | awk '{print "根分区可用空间: " $4}'
-    
-    # 清理备份目录
-    rm -rf "$BACKUP_DIR"
-    
-    echo -e "${CYAN}"
-    echo "=========================================="
-    echo -e "${NC}"
+    echo -e "${GREEN}==========================================${NC}"
+    echo -e "${GREEN}✅ 系统清理完成！${NC}"
+    if [ "$FREED_SPACE" -gt 0 ]; then
+        echo -e "${GREEN}本次大约释放了: ${FREED_SPACE} MB 磁盘空间${NC}"
+    else
+        echo -e "${GREEN}磁盘已处于较好状态。${NC}"
+    fi
+    df -h / | tail -1 | awk '{print "当前根分区可用空间: " $4}'
+    echo -e "${GREEN}==========================================${NC}"
 }
+
+# 执行函数
+system_cleanup
