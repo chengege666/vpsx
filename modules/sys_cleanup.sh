@@ -33,14 +33,14 @@ function system_cleanup() {
     if [ -f /etc/debian_version ]; then
         echo -e "${BLUE}[1/2] 检测到 Debian/Ubuntu 系统，开始深度清理...${NC}"
         
-        # 1. 修复可能损坏的列表
+        # 1. 修复可能损坏的列表 (保留原逻辑)
         if [ -f /etc/apt/sources.list.d/docker.list ]; then
             mv /etc/apt/sources.list.d/docker.list /etc/apt/sources.list.d/docker.list.bak 2>/dev/null
         fi
 
         # 2. 包管理器深度清理
         echo -e "${YELLOW}-> 正在清理软件包和残留配置...${NC}"
-        apt update -qq
+        # 【修改】删除了 apt update，避免下载索引文件
         apt autoremove --purge -y  # 自动移除并删除配置文件
         apt clean -y
         apt autoclean -y
@@ -52,13 +52,13 @@ function system_cleanup() {
             apt purge -y $RC_PACKAGES
         fi
 
-        # 使用 deborphan 清理孤立包
-        if ! command -v deborphan >/dev/null 2>&1; then
-            apt install -y deborphan -qq
+        # 【修改】仅在系统已安装 deborphan 的情况下运行，不再自动下载安装
+        if command -v deborphan >/dev/null 2>&1; then
+            echo -e "${YELLOW}-> 正在清理孤立包...${NC}"
+            deborphan | xargs -r apt -y purge
         fi
-        deborphan | xargs -r apt -y purge
 
-        # 3. 旧内核清理 (保留当前内核)
+        # 3. 旧内核清理 (保留原逻辑)
         echo -e "${YELLOW}-> 正在清理旧内核...${NC}"
         CURRENT_KERNEL=$(uname -r | sed 's/-.*//')
         KERNEL_PKGS=$(dpkg -l | awk '/^ii  linux-(image|headers)-[^ ]+/ {print $2}' | grep -v "$CURRENT_KERNEL")
