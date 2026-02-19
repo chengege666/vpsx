@@ -40,7 +40,7 @@ function _docker_fix_deps() {
     if [ ${#missing[@]} -gt 0 ]; then
         echo -e "${BLUE}正在补齐基础依赖: ${missing[*]}...${NC}"
         if command -v apt-get >/dev/null 2>&1; then
-            apt-get update -y && apt-get install -y "${missing[@]}" >/dev/null 2>&1
+            apt-get update -y >/dev/null 2>&1 && apt-get install -y "${missing[@]}" >/dev/null 2>&1
         elif command -v yum >/dev/null 2>&1; then
             yum install -y "${missing[@]}" >/dev/null 2>&1
         fi
@@ -91,9 +91,9 @@ function check_docker_status() {
 
 # 安装/更新 Docker 环境
 function install_update_docker_env() {
-    clear
     _docker_env_detect
     _docker_fix_deps
+    clear
     echo -e "${CYAN}=========================================${NC}"
     echo -e "${GREEN}        安装/更新 Docker 环境${NC}"
     echo -e "${CYAN}=========================================${NC}"
@@ -208,10 +208,10 @@ function stop_docker_service() {
 
 # 查看 Docker 全局状态
 function view_docker_global_status() {
-    clear
     _docker_fix_deps # 确保 jq 存在
+    clear
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}        查看 Docker 全局状态${NC}"
+    echo -e "${GREEN}        Docker 全局状态查看${NC}"
     echo -e "${CYAN}=========================================${NC}"
 
     if ! systemctl is-active --quiet docker; then
