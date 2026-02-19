@@ -15,13 +15,25 @@ function system_cleanup() {
         echo -e "${CYAN}              系统清理工具箱              ${NC}"
         echo -e "${CYAN}==========================================${NC}"
         echo -e " 1) ${GREEN}执行系统深度清理 (立即开始)${NC}"
-        echo -e " 2) ${RED}返回上一级菜单${NC}"
+        echo -e " 0) ${RED}返回上一级菜单${NC}"
         echo -e "${CYAN}==========================================${NC}"
         echo ""
-        read -p "请输入您的选择 [1-2]: " sub_choice
+        read -p "请输入您的选择 [1/0]: " sub_choice
 
         case $sub_choice in
             1)
+                read -p "清理完毕，按回车键返回..."
+                ;;
+            0)
+                return 0
+                ;;
+            *)
+                echo -e "${RED}无效选项，请重新输入！${NC}"
+                sleep 1
+                ;;
+        esac
+    done
+}
                 # --- 开始执行完整清理逻辑 (已移除确认提示) ---
                 clear
                 echo -e "${CYAN}==========================================${NC}"
