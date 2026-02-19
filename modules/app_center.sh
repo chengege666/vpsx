@@ -645,19 +645,51 @@ function analyze_disk_space() {
             2)
                 echo -e "${BLUE}正在查找系统最大的 10 个文件，这可能需要一点时间...${NC}"
                 # 查找系统最大的10个文件，排除虚拟文件系统
-                # 使用临时文件存储结果
-                temp_file=$(mktemp)
+                # 使用当前目录下的临时文件，避免 /tmp 不存在的问题
+                temp_file="./disk_analysis_temp_$(date +%s).txt"
                 find / -type f -not -path "/proc/*" -not -path "/sys/*" -not -path "/dev/*" -not -path "/run/*" -not -path "/boot/*" -exec du -h {} + 2>/dev/null | sort -hr | head -n 10 > "$temp_file"
                 
                 if [ ! -s "$temp_file" ]; then
                     echo -e "${YELLOW}未找到文件。${NC}"
                 else
                     echo -e "${CYAN}-----------------------------------------${NC}"
-                    echo -e "序号\t大小\t文件路径"
+                    echo -e "序号\t大小\t状态\t\t文件路径"
                     i=1
                     declare -A file_map
                     while read -r size path; do
-                        echo -e " [${GREEN}$i${NC}]\t$size\t$path"
+                        # 检查文件是否被进程占用
+                        if command -v lsof &> /dev/null; then
+                            usage_check=$(lsof "$path" 2>/dev/null | tail -n +2)
+                        else
+                            # 如果没有 lsof，尝试用 fuser
+                            if command -v fuser &> /dev/null; then
+                                usage_check=$(fuser "$path" 2>/dev/null)
+                            else
+                                usage_check=""
+                            fi
+                        fi
+
+                        if [ -n "$usage_check" ]; then
+                            status="${RED}[占用中]${NC}"
+                            desc="(建议不要删除)"
+                        elif [[ "$path" == *".log"* ]]; then
+                            status="${GREEN}[日志]${NC}  "
+                            desc="(通常可删)"
+                        elif [[ "$path" == *".tmp"* || "$path" == *"/tmp/"* ]]; then
+                            status="${GREEN}[临时]${NC}  "
+                            desc="(通常可删)"
+                        elif [[ "$path" == *".gz"* || "$path" == *".zip"* || "$path" == *".tar"* || "$path" == *".iso"* ]]; then
+                            status="${YELLOW}[压缩包]${NC}"
+                            desc="(确认内容后可删)"
+                        elif [[ "$path" == *"/swap"* || "$path" == *"swapfile"* ]]; then
+                            status="${RED}[交换区]${NC}"
+                            desc="(系统文件，勿删)"
+                        else
+                            status="${BLUE}[文件]${NC}  "
+                            desc=""
+                        fi
+
+                        echo -e " [${GREEN}$i${NC}]\t$size\t$status\t$path $desc"
                         file_map[$i]="$path"
                         ((i++))
                     done < "$temp_file"
@@ -673,8 +705,24 @@ function analyze_disk_space() {
 
                     for choice in "${del_choices[@]}"; do
                         if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -gt 0 ] && [ "$choice" -lt "$i" ]; then
-                             files_to_delete+=("${file_map[$choice]}")
-                             valid_files+=("$choice")
+                             file_path="${file_map[$choice]}"
+                             
+                             # 再次检查占用情况，防止误删关键文件
+                             is_locked=false
+                             if command -v lsof &> /dev/null; then
+                                 if lsof "$file_path" &>/dev/null; then is_locked=true; fi
+                             elif command -v fuser &> /dev/null; then
+                                 if fuser "$file_path" &>/dev/null; then is_locked=true; fi
+                             fi
+
+                             if [ "$is_locked" = true ]; then
+                                 echo -e "${RED}警告：文件被占用，跳过: $file_path${NC}"
+                             elif [[ "$file_path" == *"/swap"* || "$file_path" == *"swapfile"* ]]; then
+                                 echo -e "${RED}警告：可能是系统 Swap 文件，跳过: $file_path${NC}"
+                             else
+                                 files_to_delete+=("$file_path")
+                                 valid_files+=("$choice")
+                             fi
                         elif [ "$choice" != "0" ]; then
                              echo -e "${YELLOW}忽略无效序号: $choice${NC}"
                         fi
