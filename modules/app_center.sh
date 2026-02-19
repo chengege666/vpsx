@@ -627,7 +627,7 @@ function analyze_disk_space() {
         df -h
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${GREEN}1.${NC}  查看根目录各文件夹大小"
-        echo -e " ${GREEN}2.${NC}  查找系统最大的 10 个文件 (支持删除)"
+        echo -e " ${GREEN}2.${NC}  查找系统最大的 20 个文件 (支持删除)"
         echo -e " ${GREEN}3.${NC}  使用 ncdu 进行交互式分析 (推荐)"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回应用中心菜单"
@@ -643,11 +643,11 @@ function analyze_disk_space() {
                 read -p "按回车键继续..."
                 ;;
             2)
-                echo -e "${BLUE}正在查找系统最大的 10 个文件，这可能需要一点时间...${NC}"
-                # 查找系统最大的10个文件，排除虚拟文件系统
+                echo -e "${BLUE}正在查找系统最大的 20 个文件，这可能需要一点时间...${NC}"
+                # 查找系统最大的20个文件，排除虚拟文件系统
                 # 使用当前目录下的临时文件，避免 /tmp 不存在的问题
                 temp_file="./disk_analysis_temp_$(date +%s).txt"
-                find / -type f -not -path "/proc/*" -not -path "/sys/*" -not -path "/dev/*" -not -path "/run/*" -not -path "/boot/*" -exec du -h {} + 2>/dev/null | sort -hr | head -n 10 > "$temp_file"
+                find / -type f -not -path "/proc/*" -not -path "/sys/*" -not -path "/dev/*" -not -path "/run/*" -not -path "/boot/*" -exec du -h {} + 2>/dev/null | sort -hr | head -n 20 > "$temp_file"
                 
                 if [ ! -s "$temp_file" ]; then
                     echo -e "${YELLOW}未找到文件。${NC}"
