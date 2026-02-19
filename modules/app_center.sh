@@ -28,10 +28,11 @@ function app_center_menu() {
         echo -e " ${GREEN}17.${NC} AkileCloud专用脚本"
         echo -e " ${GREEN}18.${NC} VScode 网页版 (code-server)"
         echo -e " ${GREEN}19.${NC} Lucky (大神级 DDNS/反代/SSL工具)"
+        echo -e " ${GREEN}20.${NC} Docker 镜像加速站一站式管理"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-19) : " app_choice
+        read -p "请输入你的选择 (0-20) : " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
@@ -53,6 +54,7 @@ function app_center_menu() {
             17) akilecloud_management ;;
             18) vscode_management ;;
             19) lucky_management ;;
+            20) docker_proxy_management ;;
             0) break ;; 
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -6288,5 +6290,196 @@ function uninstall_lucky() {
             echo -e "${GREEN}数据目录已清理。${NC}"
         fi
     fi
+    read -p "按回车键继续..."
+}
+
+# =================================================================
+# Docker 镜像加速站一站式管理模块 (服务端部署 + 客户端配置)
+# =================================================================
+
+function docker_proxy_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}          Docker 镜像加速一站式管理${NC}"
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e " 核心逻辑：利用境外 VPS 转发 Docker Hub 请求"
+        echo ""
+        echo -e " ${YELLOW}--- 服务端 (部署加速站) ---${NC}"
+        echo -e " ${GREEN}1.${NC} 部署加速站服务端 (Nginx 反代方案)"
+        echo -e " ${GREEN}2.${NC} 查看加速站运行状态/日志"
+        echo -e " ${GREEN}3.${NC} 卸载加速站服务端"
+        echo ""
+        echo -e " ${YELLOW}--- 客户端 (配置本地加速) ---${NC}"
+        echo -e " ${GREEN}4.${NC} 设置本地 Docker 使用加速站"
+        echo -e " ${GREEN}5.${NC} 恢复本地 Docker 默认设置"
+        echo -e " ${GREEN}6.${NC} 查看本地加速生效状态"
+        echo ""
+        echo -e " ${RED}0.${NC} 返回上一级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入选择 (0-6): " dp_choice
+
+        case "$dp_choice" in
+            1) deploy_docker_proxy_server ;;
+            2) view_docker_proxy_status ;;
+            3) uninstall_docker_proxy_server ;;
+            4) set_docker_client_mirror ;;
+            5) restore_docker_client_default ;;
+            6) check_docker_client_status ;;
+            0) break ;;
+            *) echo -e "${RED}无效选择！${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+# --- 服务端逻辑 (建议在境外 VPS 执行) ---
+function deploy_docker_proxy_server() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          部署加速站服务端${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if ! command -v docker &> /dev/null; then
+        echo -e "${RED}错误: 未检测到 Docker，请先安装 Docker。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    read -p "请输入加速站访问域名 (例如 docker.abc.com): " dp_domain
+    if [ -z "$dp_domain" ]; then
+        echo -e "${RED}域名不能为空！${NC}"; return
+    fi
+
+    read -p "请输入 Nginx 监听端口 (默认 8080): " dp_port
+    dp_port=${dp_port:-8080}
+
+    local dp_dir="/opt/docker_proxy"
+    mkdir -p "$dp_dir/nginx"
+
+    cat > "$dp_dir/nginx/docker_proxy.conf" <<EOF
+server {
+    listen 80;
+    server_name $dp_domain;
+
+    location / {
+        proxy_pass https://registry-1.docker.io;
+        proxy_set_header Host registry-1.docker.io;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Authorization \$http_authorization;
+        proxy_pass_header Authorization;
+        proxy_intercept_errors on;
+        recursive_error_pages on;
+        error_page 401 = @proxy_auth;
+    }
+
+    location @proxy_auth {
+        proxy_pass https://auth.docker.io;
+        proxy_set_header Host auth.docker.io;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOF
+
+    cat > "$dp_dir/docker-compose.yml" <<EOF
+services:
+  docker-proxy:
+    image: nginx:alpine
+    container_name: docker-proxy
+    restart: always
+    ports:
+      - "$dp_port:80"
+    volumes:
+      - ./nginx/docker_proxy.conf:/etc/nginx/conf.d/default.conf:ro
+EOF
+
+    echo -e "${BLUE}正在启动服务端容器...${NC}"
+    cd "$dp_dir" && docker compose up -d
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ 服务端部署成功！${NC}"
+        echo -e "内网地址: ${YELLOW}http://127.0.0.1:${dp_port}${NC}"
+        echo -e "${YELLOW}后续步骤：${NC}"
+        echo -e "1. 在 NPM 中将 ${dp_domain} 反代至 127.0.0.1:${dp_port}"
+        echo -e "2. 请确保在 NPM 中开启了 SSL (HTTPS)。"
+    else
+        echo -e "${RED}❌ 部署失败，请检查端口是否占用。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function uninstall_docker_proxy_server() {
+    read -p "确定要卸载加速站服务端吗？(y/N): " confirm
+    if [[ "$confirm" =~ ^[yY]$ ]]; then
+        cd /opt/docker_proxy && docker compose down
+        rm -rf /opt/docker_proxy
+        echo -e "${GREEN}卸载完成。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function view_docker_proxy_status() {
+    if [ -d /opt/docker_proxy ]; then
+        cd /opt/docker_proxy && docker compose ps
+        echo -e "\n${BLUE}最近 10 行日志:${NC}"
+        docker compose logs --tail 10
+    else
+        echo -e "${RED}未检测到服务端部署。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+# --- 客户端逻辑 (在需要加速的机器执行) ---
+function set_docker_client_mirror() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          配置本地加速 (客户端)${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    read -p "请输入加速站域名 (需带 https://, 如 https://docker.abc.com): " my_mirror
+    if [ -z "$my_mirror" ]; then return; fi
+
+    if [[ ! "$my_mirror" =~ ^https:// ]]; then
+        my_mirror="https://$my_mirror"
+    fi
+
+    echo -e "${BLUE}正在配置 /etc/docker/daemon.json ...${NC}"
+    [ -f /etc/docker/daemon.json ] && cp /etc/docker/daemon.json /etc/docker/daemon.json.bak
+
+    cat > /etc/docker/daemon.json <<EOF
+{
+  "registry-mirrors": ["$my_mirror"]
+}
+EOF
+
+    echo -e "${BLUE}正在重启 Docker 服务...${NC}"
+    systemctl daemon-reload
+    systemctl restart docker
+
+    echo -e "${GREEN}✅ 本地加速配置完成！${NC}"
+    check_docker_client_status
+}
+
+function restore_docker_client_default() {
+    echo -e "${YELLOW}正在清理加速镜像配置...${NC}"
+    if [ -f /etc/docker/daemon.json ]; then
+        rm -f /etc/docker/daemon.json
+        systemctl daemon-reload
+        systemctl restart docker
+        echo -e "${GREEN}已恢复默认设置并重启 Docker。${NC}"
+    else
+        echo -e "当前已是默认配置。"
+    fi
+    read -p "按回车键继续..."
+}
+
+function check_docker_client_status() {
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${BLUE}当前 Docker 生效的加速镜像:${NC}"
+    docker info 2>/dev/null | grep -A 1 "Registry Mirrors"
+    echo -e "${CYAN}-----------------------------------------${NC}"
     read -p "按回车键继续..."
 }
