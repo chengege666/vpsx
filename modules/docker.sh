@@ -343,25 +343,51 @@ function edit_daemon_json() {
 }
 
 # IPv6 访问控制 (使用 jq 安全操作)
-function enable_docker_ipv6() {
+function docker_ipv6_config() {
     _docker_fix_deps
     local daemon_file="/etc/docker/daemon.json"
     mkdir -p /etc/docker
     [[ ! -f "$daemon_file" ]] && echo "{}" > "$daemon_file"
-    
-    jq '. + {"ipv6": true, "fixed-cidr-v6": "2001:db8:1::/64"}' "$daemon_file" > "${daemon_file}.tmp" && mv "${daemon_file}.tmp" "$daemon_file"
-    systemctl restart docker
-    echo -e "${GREEN}IPv6 访问已开启。${NC}"; read -p "按任意键继续..."
-}
 
-function disable_docker_ipv6() {
-    _docker_fix_deps
-    local daemon_file="/etc/docker/daemon.json"
-    [[ ! -f "$daemon_file" ]] && return
-    
-    jq 'del(.ipv6) | del(."fixed-cidr-v6")' "$daemon_file" > "${daemon_file}.tmp" && mv "${daemon_file}.tmp" "$daemon_file"
-    systemctl restart docker
-    echo -e "${YELLOW}IPv6 访问已关闭。${NC}"; read -p "按任意键继续..."
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${NC}"
+        echo -e "           ${GREEN}Docker IPv6 访问控制${NC}"
+        echo -e "${CYAN}================================================${NC}"
+        
+        # 状态检测
+        local status_msg="${YELLOW}未启用${NC}"
+        if jq -e '.ipv6 == true' "$daemon_file" >/dev/null 2>&1; then
+            status_msg="${GREEN}已启用${NC}"
+        fi
+        echo -e "当前状态: $status_msg"
+        echo -e "${CYAN}------------------------------------------------${NC}"
+        
+        echo -e "  ${GREEN}1.${NC} 开启 IPv6 访问"
+        echo -e "  ${GREEN}2.${NC} 关闭 IPv6 访问"
+        echo -e "  ${RED}0.${NC} 返回"
+        echo -e "${CYAN}================================================${NC}"
+        read -p "请选择操作: " ipv6_choice
+
+        case $ipv6_choice in
+            1)
+                echo -e "${BLUE}正在配置 IPv6...${NC}"
+                jq '. + {"ipv6": true, "fixed-cidr-v6": "2001:db8:1::/64"}' "$daemon_file" > "${daemon_file}.tmp" && mv "${daemon_file}.tmp" "$daemon_file"
+                systemctl restart docker
+                echo -e "${GREEN}IPv6 访问已开启。${NC}"
+                read -p "按任意键继续..."
+                ;;
+            2)
+                echo -e "${BLUE}正在关闭 IPv6...${NC}"
+                jq 'del(.ipv6) | del(."fixed-cidr-v6")' "$daemon_file" > "${daemon_file}.tmp" && mv "${daemon_file}.tmp" "$daemon_file"
+                systemctl restart docker
+                echo -e "${YELLOW}IPv6 访问已关闭。${NC}"
+                read -p "按任意键继续..."
+                ;;
+            0) break ;;
+            *) echo -e "${RED}无效输入${NC}"; sleep 1 ;;
+        esac
+    done
 }
 
 # 备份/还原模块
@@ -407,6 +433,196 @@ function uninstall_docker() {
     read -p "按任意键继续..."
 }
 
+# --- 镜像/网络/卷管理模块 ---
+
+# 镜像管理模块
+function docker_image_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${NC}"
+        echo -e "               ${GREEN}Docker 镜像管理${NC}"
+        echo -e "${CYAN}================================================${NC}"
+        
+        local images=()
+        local i=1
+        printf "${YELLOW}%-5s %-30s %-15s %-10s${NC}\n" "序号" "镜像名:标签" "镜像ID" "大小"
+        echo -e "${CYAN}------------------------------------------------${NC}"
+        
+        if command -v docker >/dev/null 2>&1; then
+            while read -r line; do
+                if [ -n "$line" ]; then
+                    images+=("$line")
+                    local repo_tag=$(echo "$line" | awk '{print $1":"$2}')
+                    local id=$(echo "$line" | awk '{print $3}')
+                    local size=$(echo "$line" | awk '{print $4}')
+                    printf "[%2d]  %-30s %-15s %-10s\n" "$i" "${repo_tag:0:30}" "$id" "$size"
+                    ((i++))
+                fi
+            done < <(docker images --format "{{.Repository}} {{.Tag}} {{.ID}} {{.Size}}" | head -n 20)
+        else
+            echo -e "${RED}Docker 未运行或未安装${NC}"
+        fi
+
+        [[ ${#images[@]} -eq 0 ]] && echo -e "${YELLOW}当前没有镜像${NC}"
+
+        echo -e "${CYAN}------------------------------------------------${NC}"
+        echo -e " ${GREEN}1.拉取 2.删除 3.清理虚悬镜像 0.返回${NC}"
+        read -p "请选择操作 [0-3]: " op_choice
+        [[ "$op_choice" == "0" ]] && break
+
+        case $op_choice in
+            1) 
+                read -p "请输入镜像名称 (如 nginx:latest): " img_name
+                if [[ -n "$img_name" ]]; then
+                    echo -e "${BLUE}正在拉取 $img_name ...${NC}"
+                    docker pull "$img_name"
+                fi
+                read -p "按任意键继续..." ;;
+            2) 
+                read -p "请输入要删除的镜像序号: " idx
+                if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -ge 1 ] && [ "$idx" -le "${#images[@]}" ]; then
+                    local target_id=$(echo "${images[$((idx-1))]}" | awk '{print $3}')
+                    if [[ -n "$target_id" ]]; then
+                        docker rmi "$target_id"
+                    fi
+                else
+                    echo -e "${RED}序号无效${NC}"
+                fi
+                read -p "按任意键继续..." ;;
+            3) 
+                echo -e "${BLUE}正在清理虚悬镜像...${NC}"
+                docker image prune -f
+                read -p "按任意键继续..." ;;
+            *) echo -e "${RED}无效操作${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+# 网络管理模块
+function docker_network_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${NC}"
+        echo -e "               ${GREEN}Docker 网络管理${NC}"
+        echo -e "${CYAN}================================================${NC}"
+        
+        local networks=()
+        local i=1
+        printf "${YELLOW}%-5s %-15s %-20s %-10s${NC}\n" "序号" "网络ID" "名称" "驱动"
+        echo -e "${CYAN}------------------------------------------------${NC}"
+        
+        if command -v docker >/dev/null 2>&1; then
+             while read -r line; do
+                if [ -n "$line" ]; then
+                    networks+=("$line")
+                    local id=$(echo "$line" | awk '{print $1}')
+                    local name=$(echo "$line" | awk '{print $2}')
+                    local driver=$(echo "$line" | awk '{print $3}')
+                    printf "[%2d]  %-15s %-20s %-10s\n" "$i" "$id" "${name:0:20}" "$driver"
+                    ((i++))
+                fi
+            done < <(docker network ls --format "{{.ID}} {{.Name}} {{.Driver}}")
+        else
+             echo -e "${RED}Docker 未运行或未安装${NC}"
+        fi
+
+        [[ ${#networks[@]} -eq 0 ]] && echo -e "${YELLOW}当前没有网络${NC}"
+
+        echo -e "${CYAN}------------------------------------------------${NC}"
+        echo -e " ${GREEN}1.创建 2.删除 3.清理未使用网络 0.返回${NC}"
+        read -p "请选择操作 [0-3]: " op_choice
+        [[ "$op_choice" == "0" ]] && break
+        
+        case $op_choice in
+            1) 
+                read -p "请输入网络名称: " net_name
+                if [[ -n "$net_name" ]]; then
+                    docker network create "$net_name"
+                    echo -e "${GREEN}网络 $net_name 创建成功${NC}"
+                fi
+                read -p "按任意键继续..." ;;
+            2) 
+                read -p "请输入要删除的网络序号: " idx
+                if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -ge 1 ] && [ "$idx" -le "${#networks[@]}" ]; then
+                    local target_id=$(echo "${networks[$((idx-1))]}" | awk '{print $1}')
+                    if [[ -n "$target_id" ]]; then
+                        docker network rm "$target_id"
+                    fi
+                else
+                    echo -e "${RED}序号无效${NC}"
+                fi
+                read -p "按任意键继续..." ;;
+            3) 
+                echo -e "${BLUE}正在清理未使用网络...${NC}"
+                docker network prune -f
+                read -p "按任意键继续..." ;;
+            *) echo -e "${RED}无效操作${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+# 卷管理模块
+function docker_volume_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${NC}"
+        echo -e "               ${GREEN}Docker 卷管理${NC}"
+        echo -e "${CYAN}================================================${NC}"
+        
+        local volumes=()
+        local i=1
+        printf "${YELLOW}%-5s %-30s %-10s${NC}\n" "序号" "卷名称" "驱动"
+        echo -e "${CYAN}------------------------------------------------${NC}"
+        
+        if command -v docker >/dev/null 2>&1; then
+            while read -r line; do
+                if [ -n "$line" ]; then
+                    volumes+=("$line")
+                    local name=$(echo "$line" | awk '{print $1}')
+                    local driver=$(echo "$line" | awk '{print $2}')
+                    printf "[%2d]  %-30s %-10s\n" "$i" "${name:0:30}" "$driver"
+                    ((i++))
+                fi
+            done < <(docker volume ls --format "{{.Name}} {{.Driver}}")
+        else
+             echo -e "${RED}Docker 未运行或未安装${NC}"
+        fi
+
+        [[ ${#volumes[@]} -eq 0 ]] && echo -e "${YELLOW}当前没有卷${NC}"
+
+        echo -e "${CYAN}------------------------------------------------${NC}"
+        echo -e " ${GREEN}1.创建 2.删除 3.清理未使用卷 0.返回${NC}"
+        read -p "请选择操作 [0-3]: " op_choice
+        [[ "$op_choice" == "0" ]] && break
+        
+        case $op_choice in
+            1) 
+                read -p "请输入卷名称: " vol_name
+                if [[ -n "$vol_name" ]]; then
+                    docker volume create "$vol_name"
+                    echo -e "${GREEN}卷 $vol_name 创建成功${NC}"
+                fi
+                read -p "按任意键继续..." ;;
+            2) 
+                read -p "请输入要删除的卷序号: " idx
+                if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -ge 1 ] && [ "$idx" -le "${#volumes[@]}" ]; then
+                    local target_name=$(echo "${volumes[$((idx-1))]}" | awk '{print $1}')
+                    if [[ -n "$target_name" ]]; then
+                        docker volume rm "$target_name"
+                    fi
+                else
+                    echo -e "${RED}序号无效${NC}"
+                fi
+                read -p "按任意键继续..." ;;
+            3) 
+                echo -e "${BLUE}正在清理未使用卷...${NC}"
+                docker volume prune -f
+                read -p "按任意键继续..." ;;
+            *) echo -e "${RED}无效操作${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
 # --- 菜单主入口 ---
 
 function docker_menu() {
@@ -419,7 +635,8 @@ function docker_menu() {
         echo -e "  ${GREEN}5.${NC} 重启 Docker 服务            ${GREEN}6.${NC} 停止 Docker 服务"
         echo ""
         echo -e "  ${CYAN}[ 资源管理 ]${NC}"
-        echo -e "  ${GREEN}7.${NC} 容器管理                    ${GREEN}8.${NC} 镜像/网络/卷管理"
+        echo -e "  ${GREEN}7.${NC} 容器管理                    ${GREEN}8.${NC} 镜像管理"
+        echo -e "  ${GREEN}9.${NC} 网络管理                    ${GREEN}10.${NC}卷管理"
         echo ""
         echo -e "  ${CYAN}[ 高级配置 ]${NC}"
         echo -e "  ${GREEN}11.${NC} 编辑 daemon.json           ${GREEN}12.${NC} IPv6 访问控制"
@@ -438,8 +655,11 @@ function docker_menu() {
             5) restart_docker_service ;;
             6) stop_docker_service ;;
             7) docker_container_management ;;
+            8) docker_image_management ;;
+            9) docker_network_management ;;
+            10) docker_volume_management ;;
             11) edit_daemon_json ;;
-            12) enable_docker_ipv6 ;;
+            12) docker_ipv6_config ;;
             13) backup_migrate_restore_docker ;;
             14) clean_docker_resources ;;
             15) uninstall_docker ;;
