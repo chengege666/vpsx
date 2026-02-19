@@ -618,16 +618,126 @@ function restore_tcp_defaults() {
 
 # 磁盘空间分析
 function analyze_disk_space() {
-    clear
-    echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}            磁盘空间分析${NC}"
-    echo -e "${CYAN}=========================================${NC}"
-    echo -e "${BLUE}正在分析磁盘空间使用情况...${NC}"
-    echo ""
-    df -h
-    echo ""
-    echo -e "${CYAN}=========================================${NC}"
-    read -p "按回车键返回应用中心菜单..."
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}            磁盘空间分析${NC}"
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${BLUE}系统磁盘概况：${NC}"
+        df -h
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${GREEN}1.${NC}  查看根目录各文件夹大小"
+        echo -e " ${GREEN}2.${NC}  查找系统最大的 10 个文件 (支持删除)"
+        echo -e " ${GREEN}3.${NC}  使用 ncdu 进行交互式分析 (推荐)"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC}  返回应用中心菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 (0-3): " disk_choice
+
+        case "$disk_choice" in
+            1)
+                echo -e "${BLUE}正在分析根目录各文件夹大小，请稍候...${NC}"
+                # 排除一些虚拟文件系统目录以加快速度并避免错误
+                du -h --max-depth=1 --exclude=/proc --exclude=/sys --exclude=/dev --exclude=/run / 2>/dev/null | sort -hr
+                echo -e "${CYAN}-----------------------------------------${NC}"
+                read -p "按回车键继续..."
+                ;;
+            2)
+                echo -e "${BLUE}正在查找系统最大的 10 个文件，这可能需要一点时间...${NC}"
+                # 查找系统最大的10个文件，排除虚拟文件系统
+                # 使用临时文件存储结果
+                temp_file=$(mktemp)
+                find / -type f -not -path "/proc/*" -not -path "/sys/*" -not -path "/dev/*" -not -path "/run/*" -not -path "/boot/*" -exec du -h {} + 2>/dev/null | sort -hr | head -n 10 > "$temp_file"
+                
+                if [ ! -s "$temp_file" ]; then
+                    echo -e "${YELLOW}未找到文件。${NC}"
+                else
+                    echo -e "${CYAN}-----------------------------------------${NC}"
+                    echo -e "序号\t大小\t文件路径"
+                    i=1
+                    declare -A file_map
+                    while read -r size path; do
+                        echo -e " [${GREEN}$i${NC}]\t$size\t$path"
+                        file_map[$i]="$path"
+                        ((i++))
+                    done < "$temp_file"
+                    
+                    echo -e "${CYAN}-----------------------------------------${NC}"
+                    read -p "请输入要删除的文件序号 (支持多选，空格分隔，输入 0 或回车不删除): " del_input
+                    
+                    # 将输入转换为数组
+                    read -ra del_choices <<< "$del_input"
+                    
+                    files_to_delete=()
+                    valid_files=()
+
+                    for choice in "${del_choices[@]}"; do
+                        if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -gt 0 ] && [ "$choice" -lt "$i" ]; then
+                             files_to_delete+=("${file_map[$choice]}")
+                             valid_files+=("$choice")
+                        elif [ "$choice" != "0" ]; then
+                             echo -e "${YELLOW}忽略无效序号: $choice${NC}"
+                        fi
+                    done
+
+                    if [ ${#files_to_delete[@]} -gt 0 ]; then
+                        echo -e "${RED}即将删除以下 ${#files_to_delete[@]} 个文件:${NC}"
+                        for file in "${files_to_delete[@]}"; do
+                            echo -e "  - $file"
+                        done
+                        
+                        read -p "确认全部删除吗？(y/n): " confirm
+                        if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+                            for file in "${files_to_delete[@]}"; do
+                                rm -f "$file"
+                                if [ $? -eq 0 ]; then
+                                    echo -e "${GREEN}删除成功: $file${NC}"
+                                else
+                                    echo -e "${RED}删除失败: $file${NC}"
+                                fi
+                            done
+                        else
+                            echo -e "${YELLOW}已取消删除。${NC}"
+                        fi
+                    elif [[ "$del_input" != "0" && -n "$del_input" ]]; then
+                        echo -e "${YELLOW}未选择有效文件。${NC}"
+                    fi
+                fi
+                rm -f "$temp_file"
+                echo -e "${CYAN}-----------------------------------------${NC}"
+                read -p "按回车键继续..."
+                ;;
+            3)
+                if ! command -v ncdu &> /dev/null; then
+                    echo -e "${YELLOW}未检测到 ncdu，正在安装...${NC}"
+                    if [ -f /etc/debian_version ]; then
+                        apt-get update && apt-get install -y ncdu
+                    elif [ -f /etc/redhat-release ]; then
+                        if ! rpm -qa | grep -q epel-release; then
+                            yum install -y epel-release
+                        fi
+                        yum install -y ncdu
+                    else
+                        echo -e "${RED}不支持的系统，请手动安装 ncdu。${NC}"
+                    fi
+                fi
+                
+                if command -v ncdu &> /dev/null; then
+                    ncdu /
+                else
+                    echo -e "${RED}ncdu 安装失败或不可用。${NC}"
+                    read -p "按回车键继续..."
+                fi
+                ;;
+            0)
+                break
+                ;;
+            *)
+                echo -e "${RED}无效的选择，请重新输入！${NC}"
+                sleep 2
+                ;;
+        esac
+    done
 }
 
 # BTOP 监控管理
