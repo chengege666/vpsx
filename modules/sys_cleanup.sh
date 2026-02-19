@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 定义颜色变量（确保脚本中已存在，若无则取消注释）
+# 定义颜色变量（确保脚本中已存在）
 # RED='\033[0;31m'
 # GREEN='\033[0;32m'
 # YELLOW='\033[0;33m'
@@ -14,7 +14,7 @@ function system_cleanup() {
         echo -e "${CYAN}==========================================${NC}"
         echo -e "${CYAN}              系统清理工具箱              ${NC}"
         echo -e "${CYAN}==========================================${NC}"
-        echo -e " 1) ${GREEN}执行系统深度清理 (完整模式)${NC}"
+        echo -e " 1) ${GREEN}执行系统深度清理 (立即开始)${NC}"
         echo -e " 2) ${RED}返回上一级菜单${NC}"
         echo -e "${CYAN}==========================================${NC}"
         echo ""
@@ -22,30 +22,18 @@ function system_cleanup() {
 
         case $sub_choice in
             1)
-                # --- 开始执行原有的完整逻辑 ---
+                # --- 开始执行完整清理逻辑 (已移除确认提示) ---
                 clear
-                echo -e "${CYAN}"
-                echo "=========================================="
-                echo "              系统清理功能        "
-                echo "=========================================="
-                echo -e "${NC}"
-                
-                echo -e "${YELLOW}⚠️ 警告：系统清理操作将删除不必要的文件，请谨慎操作！${NC}"
-                echo ""
-                read -p "是否继续执行系统清理？(y/n): " confirm
-                if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then 
-                    echo -e "${YELLOW}已取消系统清理操作${NC}"
-                    sleep 1
-                    continue
-                fi
+                echo -e "${CYAN}==========================================${NC}"
+                echo -e "${CYAN}           正在执行系统深度清理...        ${NC}"
+                echo -e "${CYAN}==========================================${NC}"
 
-                # 创建备份时间戳
+                # 创建备份时间戳目录
                 BACKUP_DIR="/tmp/system_clean_backup_$(date +%Y%m%d_%H%M%S)"
                 mkdir -p "$BACKUP_DIR"
                 
                 if [ -f /etc/debian_version ]; then
                     echo -e "${BLUE}检测到 Debian/Ubuntu 系统${NC}"
-                    echo -e "${YELLOW}开始深度清理系统...${NC}"
                     echo ""
                     
                     # 1. 清理包管理器缓存
@@ -71,7 +59,6 @@ function system_cleanup() {
                     echo -e "${BLUE}[步骤2/8] 清理旧内核...${NC}"
                     local current_kernel=$(uname -r)
                     local kernel_pkgs=$(dpkg-query -W -f='${Package}\n' 'linux-image-[0-9]*' 'linux-headers-[0-9]*' | grep -v "$current_kernel")
-                    
                     if [ -n "$kernel_pkgs" ]; then
                         echo -e "${YELLOW}发现旧内核包，准备清理...${NC}"
                         echo "$kernel_pkgs" | xargs apt-get -y purge
@@ -119,7 +106,6 @@ function system_cleanup() {
                     
                 elif [ -f /etc/redhat-release ]; then
                     echo -e "${BLUE}检测到 CentOS/RHEL 系统${NC}"
-                    echo -e "${YELLOW}开始深度清理系统...${NC}"
                     echo ""
                     
                     # 1. 清理YUM/DNF缓存
@@ -177,11 +163,6 @@ function system_cleanup() {
                     echo -e "${BLUE}[步骤8/8] 清理系统缓存...${NC}"
                     sync
                     echo 3 > /proc/sys/vm/drop_caches 2>/dev/null
-                    
-                else
-                    echo -e "${RED}不支持的系统类型！${NC}"
-                    sleep 2
-                    continue
                 fi
                 
                 # 通用清理步骤
@@ -198,16 +179,13 @@ function system_cleanup() {
                 echo -e "${YELLOW}释放后的磁盘空间：${NC}"
                 df -h / | tail -1 | awk '{print "根分区可用空间: " $4}'
                 
-                # 清理备份记录
                 rm -rf "$BACKUP_DIR"
-                
                 echo ""
-                read -p "按回车键返回清理菜单..."
-                # --- 原逻辑结束 ---
+                read -p "清理完毕，按回车键返回..."
+                # --- 逻辑执行结束 ---
                 ;;
             2)
-                # 返回主菜单（即退出当前函数循环）
-                return
+                return 0
                 ;;
             *)
                 echo -e "${RED}无效选项，请重新输入！${NC}"
