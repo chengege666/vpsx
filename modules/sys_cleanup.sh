@@ -126,5 +126,3 @@ function system_cleanup() {
     df -h / | tail -1 | awk '{print "当前根分区可用空间: " $4}'
     echo -e "${GREEN}==========================================${NC}"
 }
-
-system_cleanup
