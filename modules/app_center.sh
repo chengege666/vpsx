@@ -28,10 +28,11 @@ function app_center_menu() {
         echo -e " ${GREEN}17.${NC} AkileCloud专用脚本"
         echo -e " ${GREEN}18.${NC} VScode 网页版 (code-server)"
         echo -e " ${GREEN}19.${NC} Lucky (大神级 DDNS/反代/SSL工具)"
+        echo -e " ${GREEN}20.${NC} Docker 镜像加速站一站式管理"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-19) : " app_choice
+        read -p "请输入你的选择 (0-20) : " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
@@ -53,6 +54,7 @@ function app_center_menu() {
             17) akilecloud_management ;;
             18) vscode_management ;;
             19) lucky_management ;;
+            20) docker_proxy_management ;;
             0) break ;; 
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -6288,5 +6290,183 @@ function uninstall_lucky() {
             echo -e "${GREEN}数据目录已清理。${NC}"
         fi
     fi
+    read -p "按回车键继续..."
+}
+
+# =================================================================
+# Docker 镜像加速站一站式管理模块 (服务端部署 + 客户端配置)
+# =================================================================
+
+function docker_proxy_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}          Docker 镜像加速一站式管理${NC}"
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e " 核心逻辑：利用境外 VPS 转发 Docker Hub 请求"
+        echo ""
+        echo -e " ${YELLOW}--- 服务端 (部署加速站) ---${NC}"
+        echo -e " ${GREEN}1.${NC} 部署加速站服务端 (Registry 方案)"
+        echo -e " ${GREEN}2.${NC} 查看加速站运行状态/日志"
+        echo -e " ${GREEN}3.${NC} 卸载加速站服务端"
+        echo ""
+        echo -e " ${YELLOW}--- 客户端 (配置本地加速) ---${NC}"
+        echo -e " ${GREEN}4.${NC} 设置本地 Docker 使用加速站"
+        echo -e " ${GREEN}5.${NC} 恢复本地 Docker 默认设置"
+        echo -e " ${GREEN}6.${NC} 查看本地加速生效状态"
+        echo ""
+        echo -e " ${RED}0.${NC} 返回上一级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入选择 (0-6): " dp_choice
+
+        case "$dp_choice" in
+            1) deploy_docker_proxy_server ;;
+            2) view_docker_proxy_status ;;
+            3) uninstall_docker_proxy_server ;;
+            4) set_docker_client_mirror ;;
+            5) restore_docker_client_default ;;
+            6) check_docker_client_status ;;
+            0) break ;;
+            *) echo -e "${RED}无效选择！${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+# --- 服务端逻辑 (建议在境外 VPS 执行) ---
+function deploy_docker_proxy_server() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          部署加速站服务端 (Registry)${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if ! command -v docker &> /dev/null; then
+        echo -e "${RED}错误: 未检测到 Docker，请先安装 Docker。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    if docker ps -a --format '{{.Names}}' | grep -q "^registry$"; then
+        echo -e "${YELLOW}检测到 registry 容器已存在。${NC}"
+        read -p "是否删除并重新部署？(y/N): " reinstall
+        if [[ "$reinstall" =~ ^[yY]$ ]]; then
+            docker stop registry &>/dev/null
+            docker rm registry &>/dev/null
+        else
+            return
+        fi
+    fi
+
+    read -p "请输入服务端口 (默认 5000): " dp_port
+    dp_port=${dp_port:-5000}
+
+    # 验证端口占用
+    if command -v ss &> /dev/null; then
+        if ss -tuln | grep -q ":${dp_port} "; then
+            echo -e "${RED}❌ 端口 ${dp_port} 已被占用，请选择其他端口。${NC}"
+            read -p "按回车键继续..."
+            return
+        fi
+    fi
+
+    local data_dir="/home/docker/registry"
+    mkdir -p "$data_dir"
+
+    echo -e "${BLUE}正在启动 Registry 容器...${NC}"
+    
+    docker run -d \
+     -p ${dp_port}:5000 \
+     --name registry \
+     -v ${data_dir}:/var/lib/registry \
+     -e REGISTRY_PROXY_REMOTEURL=https://registry-1.docker.io \
+     --restart always \
+     registry:2
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ 服务端部署成功！${NC}"
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        echo -e "访问地址: ${YELLOW}http://${ipv4}:${dp_port}${NC}"
+        echo -e "内网地址: ${YELLOW}http://127.0.0.1:${dp_port}${NC}"
+    else
+        echo -e "${RED}❌ 部署失败，请检查 Docker 日志。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function uninstall_docker_proxy_server() {
+    read -p "确定要卸载加速站服务端吗？(y/N): " confirm
+    if [[ "$confirm" =~ ^[yY]$ ]]; then
+        docker stop registry &>/dev/null
+        docker rm registry &>/dev/null
+        echo -e "${GREEN}Registry 容器已卸载。${NC}"
+        
+        read -p "是否删除数据目录 /home/docker/registry？(y/N): " del_data
+        if [[ "$del_data" =~ ^[yY]$ ]]; then
+            rm -rf /home/docker/registry
+            echo -e "${GREEN}数据目录已清理。${NC}"
+        fi
+    fi
+    read -p "按回车键继续..."
+}
+
+function view_docker_proxy_status() {
+    if docker ps -a --format '{{.Names}}' | grep -q "^registry$"; then
+        docker ps -f name=registry
+        echo -e "\n${BLUE}最近 10 行日志:${NC}"
+        docker logs --tail 10 registry
+    else
+        echo -e "${RED}未检测到 Registry 容器。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+# --- 客户端逻辑 (在需要加速的机器执行) ---
+function set_docker_client_mirror() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          配置本地加速 (客户端)${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    read -p "请输入加速站域名 (需带 https://, 如 https://docker.abc.com): " my_mirror
+    if [ -z "$my_mirror" ]; then return; fi
+
+    if [[ ! "$my_mirror" =~ ^https:// ]]; then
+        my_mirror="https://$my_mirror"
+    fi
+
+    echo -e "${BLUE}正在配置 /etc/docker/daemon.json ...${NC}"
+    [ -f /etc/docker/daemon.json ] && cp /etc/docker/daemon.json /etc/docker/daemon.json.bak
+
+    cat > /etc/docker/daemon.json <<EOF
+{
+  "registry-mirrors": ["$my_mirror"]
+}
+EOF
+
+    echo -e "${BLUE}正在重启 Docker 服务...${NC}"
+    systemctl daemon-reload
+    systemctl restart docker
+
+    echo -e "${GREEN}✅ 本地加速配置完成！${NC}"
+    check_docker_client_status
+}
+
+function restore_docker_client_default() {
+    echo -e "${YELLOW}正在清理加速镜像配置...${NC}"
+    if [ -f /etc/docker/daemon.json ]; then
+        rm -f /etc/docker/daemon.json
+        systemctl daemon-reload
+        systemctl restart docker
+        echo -e "${GREEN}已恢复默认设置并重启 Docker。${NC}"
+    else
+        echo -e "当前已是默认配置。"
+    fi
+    read -p "按回车键继续..."
+}
+
+function check_docker_client_status() {
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${BLUE}当前 Docker 生效的加速镜像:${NC}"
+    docker info 2>/dev/null | grep -A 1 "Registry Mirrors"
+    echo -e "${CYAN}-----------------------------------------${NC}"
     read -p "按回车键继续..."
 }
