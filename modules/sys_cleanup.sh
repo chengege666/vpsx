@@ -41,9 +41,11 @@ function system_cleanup() {
         # 2. 包管理器深度清理
         echo -e "${YELLOW}-> 正在清理软件包和残留配置...${NC}"
         # 【修改】删除了 apt update，避免下载索引文件
-        apt autoremove --purge -y  # 自动移除并删除配置文件
-        apt clean -y
-        apt autoclean -y
+        apt-get autoremove --purge -y  # 自动移除并删除配置文件
+        apt-get clean -y
+        apt-get autoclean -y
+        # 清理 apt 缓存列表 (通常占用较大)
+        rm -rf /var/lib/apt/lists/*
         
         # 清除已卸载但保留了配置文件的包 (状态为 rc 的包)
         RC_PACKAGES=$(dpkg -l | awk '/^rc/ {print $2}')
@@ -97,17 +99,35 @@ function system_cleanup() {
     find /tmp -type f -atime +1 -delete 2>/dev/null
     find /var/tmp -type f -atime +1 -delete 2>/dev/null
 
+    # 清理 /var/log/ 下的旧日志 (保留最近的)
+    echo -e "${YELLOW}-> 正在清理 /var/log 旧日志...${NC}"
+    find /var/log -type f -name "*.gz" -delete 2>/dev/null
+    find /var/log -type f -name "*.1" -delete 2>/dev/null
+    find /var/log -type f -name "*.old" -delete 2>/dev/null
+    # 清空当前正在使用的大日志文件，而不是删除
+    find /var/log -type f -name "*.log" -size +50M -exec truncate -s 0 {} \; 2>/dev/null
+
     # 2. 缓存清理
-    echo -e "${YELLOW}-> 清理缩略图和浏览器缓存...${NC}"
+    echo -e "${YELLOW}-> 清理缩略图、浏览器及常用应用缓存...${NC}"
     find /home /root -type d -name ".thumbnails" -exec rm -rf {}/* + 2>/dev/null
     find /home /root -type d -path "*/.cache/mozilla/*" -delete 2>/dev/null
     find /home /root -type d -path "*/.cache/google-chrome/*" -delete 2>/dev/null
+    find /home /root -type d -path "*/.cache/pip/*" -delete 2>/dev/null
+    find /home /root -type d -path "*/.npm/*" -delete 2>/dev/null
+    find /home /root -type d -path "*/.yarn/cache/*" -delete 2>/dev/null
 
     # 3. 崩溃报告清理
     rm -rf /var/crash/*
     rm -rf /var/lib/apport/crash/* 2>/dev/null
+    
+    # 4. Docker 清理 (如果安装了 Docker)
+    if command -v docker &> /dev/null; then
+        echo -e "${YELLOW}-> 正在清理 Docker 冗余数据 (未使用的镜像/容器/网络)...${NC}"
+        # Prune everything: stopped containers, unused networks, dangling images, build cache
+        docker system prune -a -f --volumes
+    fi
 
-    # 4. 释放系统内存缓存 (Buffer/Cache)
+    # 5. 释放系统内存缓存 (Buffer/Cache)
     echo -e "${YELLOW}-> 释放系统内存缓存...${NC}"
     sync && echo 3 > /proc/sys/vm/drop_caches
 
