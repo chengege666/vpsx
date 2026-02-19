@@ -31,8 +31,6 @@ function system_cleanup() {
 
     # 原有清理逻辑保持不变...
     # （从“if [ -f /etc/debian_version ]; then”开始的所有代码）
-    # 注意：原代码中的 BACKUP_DIR 相关行已移除，请确保后续没有引用 BACKUP_DIR
-    # 如果希望保留备份机制，可自行调整
     if [ -f /etc/debian_version ]; then
         echo -e "${BLUE}检测到 Debian/Ubuntu 系统${NC}"
         echo -e "${YELLOW}开始深度清理系统...${NC}"
@@ -201,58 +199,162 @@ function system_cleanup() {
     echo -e "${NC}"
 }
 
-# 新增内部函数：扫描大文件并交互式删除
+# ================== 增强版大文件扫描与交互删除 ==================
 _scan_large_files() {
-    echo -e "${BLUE}扫描大于100MB的文件（仅限 /home, /var, /tmp, /var/tmp）...${NC}"
     local search_paths=("/home" "/var" "/tmp" "/var/tmp")
     local threshold="100M"
-    local file_list=()
-    
-    # 收集大文件
+    local files=()
+    local suggestions=()   # 建议文本
+    local advice_colors=() # 建议对应的颜色
+
+    echo -e "${BLUE}正在扫描大于100MB的文件（可能稍慢）...${NC}"
+
+    # 收集文件并存入数组
     for path in "${search_paths[@]}"; do
         if [ -d "$path" ]; then
             while IFS= read -r -d '' file; do
-                file_list+=("$file")
+                files+=("$file")
             done < <(find "$path" -type f -size +"$threshold" -print0 2>/dev/null)
         fi
     done
 
-    if [ ${#file_list[@]} -eq 0 ]; then
+    if [ ${#files[@]} -eq 0 ]; then
         echo -e "${GREEN}未找到大于100MB的文件。${NC}"
         return
     fi
 
-    echo -e "${YELLOW}找到 ${#file_list[@]} 个大文件：${NC}"
-    local count=0
-    for file in "${file_list[@]}"; do
-        ((count++))
-        echo "----------------------------------------"
-        echo "文件 #$count: $file"
-        
-        # 文件大小
-        local size=$(du -h "$file" 2>/dev/null | cut -f1)
-        echo "大小: $size"
-        
-        # 修改时间
-        local mtime=$(date -r "$file" "+%Y-%m-%d %H:%M:%S" 2>/dev/null)
-        echo "修改时间: $mtime"
-        
-        # 文件类型
-        local ftype=$(file -b "$file" 2>/dev/null)
-        echo "类型: $ftype"
-        
-        # 尝试查询所属软件包（仅支持 Debian/Ubuntu 和 RHEL/CentOS）
-        if [ -f /etc/debian_version ]; then
-            local pkg=$(dpkg -S "$file" 2>/dev/null | head -1)
-            [ -n "$pkg" ] && echo "属于软件包: $pkg"
-        elif [ -f /etc/redhat-release ]; then
-            local pkg=$(rpm -qf "$file" 2>/dev/null)
-            [ -n "$pkg" ] && echo "属于软件包: $pkg"
+    # 预生成每个文件的建议
+    for file in "${files[@]}"; do
+        local advice_text=""
+        local advice_color="${YELLOW}" # 默认谨慎
+
+        # 启发式规则（可自行扩展）
+        if [[ "$file" =~ /cache/|/tmp/|/var/tmp/|/thumbnails/|\.log$|\.tmp$|\.swp$ ]]; then
+            advice_text="建议删除（缓存/临时/日志文件）"
+            advice_color="${GREEN}"
+        elif [[ "$file" == /var/log/* ]] && [[ ! "$file" =~ /var/log/(wtmp|btmp|lastlog|secure|messages|dmesg) ]]; then
+            # 普通日志可删，但保留一些关键日志
+            advice_text="建议删除（旧日志文件）"
+            advice_color="${GREEN}"
+        elif command -v dpkg >/dev/null 2>&1 && dpkg -S "$file" >/dev/null 2>&1; then
+            advice_text="谨慎删除（属于已安装软件包）"
+            advice_color="${YELLOW}"
+        elif command -v rpm >/dev/null 2>&1 && rpm -qf "$file" >/dev/null 2>&1; then
+            advice_text="谨慎删除（属于已安装软件包）"
+            advice_color="${YELLOW}"
+        elif [[ "$file" == /home/* ]] && [[ "$file" =~ \.(doc|docx|xls|xlsx|ppt|pptx|pdf|jpg|png|mp4|avi|mkv)$ ]]; then
+            advice_text="建议保留（可能是用户文档或媒体）"
+            advice_color="${RED}"
+        else
+            advice_text="未知用途，请自行判断"
+            advice_color="${YELLOW}"
         fi
-        
-        read -p "是否删除此文件？(y/n): " ans
-        if [[ "$ans" == "y" || "$ans" == "Y" ]]; then
-            rm -f "$file" && echo -e "${GREEN}已删除${NC}" || echo -e "${RED}删除失败${NC}"
+        suggestions+=("$advice_text")
+        advice_colors+=("$advice_color")
+    done
+
+    # 显示列表
+    echo -e "${YELLOW}找到 ${#files[@]} 个大文件：${NC}"
+    for i in "${!files[@]}"; do
+        local idx=$((i+1))
+        local file="${files[$i]}"
+        local size=$(du -h "$file" 2>/dev/null | cut -f1)
+        local mtime=$(date -r "$file" "+%Y-%m-%d %H:%M:%S" 2>/dev/null)
+        local ftype=$(file -b "$file" 2>/dev/null | cut -d, -f1 | head -c50)
+        local pkg=""
+        if [ -f /etc/debian_version ]; then
+            pkg=$(dpkg -S "$file" 2>/dev/null | head -1 | cut -d: -f1)
+        elif [ -f /etc/redhat-release ]; then
+            pkg=$(rpm -qf "$file" 2>/dev/null)
+        fi
+        [ -n "$pkg" ] && pkg=" (包: $pkg)"
+
+        echo -e "${advice_colors[$i]}[$idx]${NC} $file"
+        echo "    大小: $size | 修改: $mtime | 类型: $ftype$pkg"
+        echo -e "    建议: ${advice_colors[$i]}${suggestions[$i]}${NC}"
+        echo ""
+    done
+
+    # 交互菜单
+    while true; do
+        echo -e "${CYAN}请选择要删除的文件（可输入: 序号,如 1,3,5；范围 2-4；all 全选；q 退出）${NC}"
+        read -p "输入选择: " choice
+        case "$choice" in
+            q|Q)
+                echo -e "${YELLOW}已取消大文件删除操作。${NC}"
+                return
+                ;;
+            all|ALL)
+                selected_indices=(${!files[@]})
+                break
+                ;;
+            *)
+                # 解析逗号分隔和范围
+                selected_indices=()
+                invalid=0
+                IFS=',' read -ra parts <<< "$choice"
+                for part in "${parts[@]}"; do
+                    if [[ "$part" =~ ^[0-9]+$ ]]; then
+                        idx=$((part-1))
+                        if [ $idx -ge 0 ] && [ $idx -lt ${#files[@]} ]; then
+                            selected_indices+=($idx)
+                        else
+                            echo -e "${RED}无效序号: $part${NC}"
+                            invalid=1
+                        fi
+                    elif [[ "$part" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+                        start=${BASH_REMATCH[1]}
+                        end=${BASH_REMATCH[2]}
+                        for ((i=start; i<=end; i++)); do
+                            idx=$((i-1))
+                            if [ $idx -ge 0 ] && [ $idx -lt ${#files[@]} ]; then
+                                selected_indices+=($idx)
+                            else
+                                echo -e "${RED}范围中包含无效序号: $i${NC}"
+                                invalid=1
+                            fi
+                        done
+                    else
+                        echo -e "${RED}无法识别的输入: $part${NC}"
+                        invalid=1
+                    fi
+                done
+                [ $invalid -eq 0 ] && break 2
+                ;;
+        esac
+    done
+
+    # 去重排序
+    mapfile -t selected_indices < <(printf "%s\n" "${selected_indices[@]}" | sort -nu)
+
+    if [ ${#selected_indices[@]} -eq 0 ]; then
+        echo -e "${YELLOW}未选择任何文件。${NC}"
+        return
+    fi
+
+    echo -e "${YELLOW}您选择了以下 ${#selected_indices[@]} 个文件：${NC}"
+    for idx in "${selected_indices[@]}"; do
+        echo "  [$((idx+1))] ${files[$idx]}"
+    done
+
+    read -p "确认删除这些文件？(y/n): " confirm
+    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+        echo -e "${YELLOW}已取消删除。${NC}"
+        return
+    fi
+
+    # 执行删除
+    deleted=0
+    failed=0
+    for idx in "${selected_indices[@]}"; do
+        if rm -f "${files[$idx]}" 2>/dev/null; then
+            echo -e "${GREEN}已删除: ${files[$idx]}${NC}"
+            ((deleted++))
+        else
+            echo -e "${RED}删除失败: ${files[$idx]}${NC}"
+            ((failed++))
         fi
     done
+
+    echo -e "${GREEN}操作完成：成功删除 $deleted 个文件，失败 $failed 个。${NC}"
 }
