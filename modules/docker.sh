@@ -32,7 +32,7 @@ function _docker_env_detect() {
 
 # 自动补齐基础依赖
 function _docker_fix_deps() {
-    local deps=("curl" "jq" "tar" "lsof" "ca-certificates")
+    local deps=("curl" "jq" "tar" "lsof" "ca-certificates" "iptables" "procps")
     local missing=()
     for dep in "${deps[@]}"; do
         command -v "$dep" >/dev/null 2>&1 || missing+=("$dep")
@@ -43,6 +43,51 @@ function _docker_fix_deps() {
             apt-get update -y >/dev/null 2>&1 && apt-get install -y "${missing[@]}" >/dev/null 2>&1
         elif command -v yum >/dev/null 2>&1; then
             yum install -y "${missing[@]}" >/dev/null 2>&1
+        fi
+    fi
+}
+
+# 系统环境自动调优与修复
+function _docker_system_check_and_fix() {
+    echo -e "${BLUE}正在进行系统环境预检与调优...${NC}"
+
+    # 1. 关键内核模块检测与加载
+    local modules=("overlay" "br_netfilter")
+    for mod in "${modules[@]}"; do
+        if ! lsmod | grep -q "$mod"; then
+            # echo -e "  - 自动加载内核模块: ${mod}"
+            modprobe "$mod" >/dev/null 2>&1
+            # 持久化加载
+            if [ -d /etc/modules-load.d ]; then
+                echo "$mod" > "/etc/modules-load.d/docker-${mod}.conf"
+            fi
+        fi
+    done
+
+    # 2. 开启 IPv4 转发 (Docker 网络必需)
+    if [ "$(sysctl -n net.ipv4.ip_forward 2>/dev/null)" != "1" ]; then
+        # echo -e "  - 自动开启 IPv4 转发"
+        echo "net.ipv4.ip_forward=1" > /etc/sysctl.d/99-docker.conf
+        sysctl --system >/dev/null 2>&1
+    fi
+
+    # 3. 低内存自动 Swap 补救 (防止 OOM)
+    # 获取物理内存大小 (MB)
+    local mem_mb=$(free -m | awk '/Mem:/ {print $2}')
+    local swap_mb=$(free -m | awk '/Swap:/ {print $2}')
+    
+    # 如果内存小于 1024MB 且无 Swap
+    if [ "$mem_mb" -lt 1024 ] && [ "$swap_mb" -eq 0 ]; then
+        echo -e "${YELLOW}  ! 检测到内存不足 1GB，正在创建 1GB 虚拟内存(Swap)以保障运行...${NC}"
+        if ! [ -f /swapfile ]; then
+            dd if=/dev/zero of=/swapfile bs=1M count=1024 status=none
+            chmod 600 /swapfile
+            mkswap /swapfile >/dev/null 2>&1
+            swapon /swapfile >/dev/null 2>&1
+            if ! grep -q "/swapfile" /etc/fstab; then
+                echo '/swapfile none swap sw 0 0' >> /etc/fstab
+            fi
+            echo -e "${GREEN}  ✔ Swap 创建完成${NC}"
         fi
     fi
 }
@@ -120,33 +165,92 @@ function install_update_docker_env() {
     [[ "$docker_install_choice" == "0" ]] && return
 
     if [[ "$docker_install_choice" == "1" ]]; then
+        # 自动执行环境预检与修复
+        _docker_system_check_and_fix
+        
         echo -e "${BLUE}开始安装/更新 Docker 环境...${NC}"
         
         # 判定镜像源
         local mirror_param=""
-        $IS_CN && mirror_param="--mirror Aliyun"
+        local install_script_url="https://get.docker.com"
+        local install_urls=("$install_script_url")
+        
+        if $IS_CN; then
+            mirror_param="--mirror Aliyun"
+            # 国内加速节点列表 (官方源优先)
+            install_urls=(
+                "https://get.docker.com"
+                "https://github.1231818.xyz/https://raw.githubusercontent.com/docker/docker-install/master/install.sh"
+            )
+        fi
 
-        curl -fsSL https://get.docker.com -o get-docker.sh
+        # 尝试下载安装脚本
+        local script_downloaded=false
+        for url in "${install_urls[@]}"; do
+            echo -e "${YELLOW}正在获取安装脚本: $url ...${NC}"
+            if curl -fsSL --connect-timeout 10 --retry 2 "$url" -o get-docker.sh; then
+                script_downloaded=true
+                break
+            fi
+        done
+
+        if ! $script_downloaded; then
+            echo -e "${RED}无法获取 Docker 安装脚本，请检查网络连接！${NC}"
+            read -p "按任意键继续..."
+            return
+        fi
+
+        # 执行安装
         if sh get-docker.sh $mirror_param; then
-            rm get-docker.sh
+            rm -f get-docker.sh
             systemctl enable --now docker
             echo -e "${GREEN}Docker 引擎部署成功。${NC}"
         else
-            rm get-docker.sh
-            echo -e "${RED}Docker 安装失败，请检查网络。${NC}"
+            rm -f get-docker.sh
+            echo -e "${RED}Docker 安装执行失败，请检查网络或系统环境。${NC}"
             read -p "按任意键继续..."
             return
         fi
 
         # 动态安装 Docker Compose V2 (支持架构自适应)
         echo -e "${BLUE}正在配置 Docker Compose ($ARCH)...${NC}"
-        local compose_url="https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$ARCH"
-        $IS_CN && compose_url="https://ghproxy.com/$compose_url" # 国内使用加速
+        local compose_base_url="https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$ARCH"
+        local compose_urls=("$compose_base_url")
+
+        if $IS_CN; then
+            # 国内多节点加速策略 (官方源优先)
+            compose_urls=(
+                "$compose_base_url"
+                "https://github.1231818.xyz/$compose_base_url"
+            )
+        fi
         
         mkdir -p /usr/local/lib/docker/cli-plugins
-        if curl -SL "$compose_url" -o /usr/local/lib/docker/cli-plugins/docker-compose; then
+        local download_success=false
+
+        for url in "${compose_urls[@]}"; do
+            echo -e "${YELLOW}尝试下载节点: $url ...${NC}"
+            # 设置连接超时5秒，最大传输时间60秒，显示进度条
+            if curl -SL --connect-timeout 5 --max-time 300 --retry 2 "$url" -o /usr/local/lib/docker/cli-plugins/docker-compose; then
+                # 简单验证文件大小是否正常 (大于 1MB)
+                local file_size=$(stat -c%s "/usr/local/lib/docker/cli-plugins/docker-compose" 2>/dev/null || echo 0)
+                if [ "$file_size" -gt 1048576 ]; then
+                    download_success=true
+                    echo -e "${GREEN}下载成功！${NC}"
+                    break
+                else
+                    echo -e "${RED}下载文件异常，尝试下一个节点...${NC}"
+                fi
+            else
+                echo -e "${RED}下载超时或失败，尝试下一个节点...${NC}"
+            fi
+        done
+
+        if $download_success; then
             chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
             echo -e "${GREEN}Docker Compose 部署成功。${NC}"
+        else
+            echo -e "${RED}Docker Compose 所有节点下载均失败，请检查网络或稍后重试。${NC}"
         fi
     fi
     read -p "操作完成，按任意键继续..."
