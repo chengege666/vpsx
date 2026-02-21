@@ -2595,20 +2595,31 @@ function view_watchtower_status() {
     echo -e "${CYAN}        Watchtower 容器状态${NC}"
     echo -e "${CYAN}==========================================${NC}"
     
+    # 检查容器是否存在
     if docker ps -a --format '{{.Names}}' | grep -q "^watchtower$"; then
         echo -e "${GREEN}✅ 容器详细信息：${NC}"
-        docker inspect watchtower --format='\
-容器名称: {{.Name}}\n\
-容器状态: {{.State.Status}}\n\
-运行状态: {{.State.Running}}\n\
-镜像: {{.Config.Image}}\n\
-创建时间: {{.Created}}\n\
-重启策略: {{.HostConfig.RestartPolicy.Name}}\n\
-环境变量: {{range .Config.Env}}{{println "  - " .}}{{end}}' | sed 's/^/\t/'
+        
+        # 修正后的格式化输出：直接使用换行，去掉多余的转义符
+        docker inspect watchtower --format='
+容器名称: {{.Name}}
+容器状态: {{.State.Status}}
+运行状态: {{.State.Running}}
+镜像: {{.Config.Image}}
+创建时间: {{.Created}}
+重启策略: {{.HostConfig.RestartPolicy.Name}}
+环境变量:
+{{range .Config.Env}}  - {{.}}
+{{end}}' | sed 's/^/\t/'
         
         echo ""
-        echo -e "${YELLOW}最近日志（最后20行）：${NC}"
-        docker logs --tail 20 watchtower 2>/dev/null || echo "暂无日志"
+        echo -e "${YELLOW}最近日志（最后10行）：${NC}"
+        echo -e "${CYAN}------------------------------------------${NC}"
+        docker logs --tail 10 watchtower 2>/dev/null || echo "暂无日志"
+        echo -e "${CYAN}------------------------------------------${NC}"
+        
+        # 增加一提示，解释为什么它看起来“没在动”
+        echo -e "${BLUE}提示: Watchtower 正在后台按计划运行。${NC}"
+        echo -e "${BLUE}当前检查间隔: 86400秒 (24小时)${NC}"
     else
         echo -e "${RED}❌ Watchtower 容器不存在。${NC}"
     fi
