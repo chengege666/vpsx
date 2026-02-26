@@ -70,4 +70,3 @@ bash <(curl -sL vpsx.1231818.xyz)
 ---
 **感谢您的使用！如果觉得好用，请给个 Star ⭐**
 
-<img width="408" height="529" alt="image" src="https://github.com/user-attachments/assets/d9478ac6-1101-4c93-aa4b-b9e3254fbf3c" />
