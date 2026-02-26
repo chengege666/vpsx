@@ -29,10 +29,11 @@ function app_center_menu() {
         echo -e " ${GREEN}18.${NC} VScode 网页版 (code-server)"
         echo -e " ${GREEN}19.${NC} Lucky (大神级 DDNS/反代/SSL工具)"
         echo -e " ${GREEN}20.${NC} Docker 镜像加速站一站式管理"
+        echo -e " ${GREEN}21.${NC} 小雅alist 管理"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-20) : " app_choice
+        read -p "请输入你的选择 (0-21) : " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
@@ -55,6 +56,7 @@ function app_center_menu() {
             18) vscode_management ;;
             19) lucky_management ;;
             20) docker_proxy_management ;;
+            21) xiaoya_alist_management ;;
             0) break ;; 
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -6858,3 +6860,558 @@ function check_docker_client_status() {
     echo -e "${CYAN}-----------------------------------------${NC}"
     read -p "按回车键继续..."
 }
+
+# 小雅alist 管理菜单
+function xiaoya_alist_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}          小雅alist 应用管理${NC}"
+        
+        # 检查 Docker 是否运行
+        if ! docker info > /dev/null 2>&1; then
+            echo -e "${RED}⚠️  Docker 服务未运行或未安装！${NC}"
+        else
+            if docker ps -a --format '{{.Names}}' | grep -q "^xiaoya-alist$"; then
+                echo -e "          状态: ${GREEN}已部署${NC}"
+            else
+                echo -e "          状态: ${RED}未部署${NC}"
+            fi
+        fi
+
+        echo -e "${CYAN}=========================================${NC}"
+        echo "小雅alist 基于 Docker 容器部署，提供强大的文件索引与 Web 管理界面"
+        echo "可用于快速搭建资源索引与在线播放入口"
+        echo ""
+        echo -e " ${GREEN}1.${NC}  安装 小雅alist (自定义配置)"
+        echo -e " ${GREEN}2.${NC}  启动 小雅alist"
+        echo -e " ${GREEN}3.${NC}  停止 小雅alist"
+        echo -e " ${GREEN}4.${NC}  重启 小雅alist"
+        echo -e " ${GREEN}5.${NC}  查看 小雅alist 状态和日志"
+        echo -e " ${GREEN}6.${NC}  修改 小雅alist 配置"
+        echo -e " ${GREEN}7.${NC}  卸载 小雅alist"
+        echo -e " ${GREEN}8.${NC}  访问 小雅alist Web 界面"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC}  返回应用中心菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 (0-8): " xiaoya_choice
+
+        case "$xiaoya_choice" in
+            1) install_xiaoya_alist ;;
+            2) start_xiaoya_alist ;;
+            3) stop_xiaoya_alist ;;
+            4) restart_xiaoya_alist ;;
+            5) view_xiaoya_alist_status_logs ;;
+            6) modify_xiaoya_alist_config ;;
+            7) uninstall_xiaoya_alist ;;
+            8) access_xiaoya_alist_web ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
+        esac
+    done
+}
+
+# 安装 小雅alist
+function install_xiaoya_alist() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}           安装 小雅alist 应用${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if ! command -v docker &> /dev/null; then
+        echo -e "${RED}未检测到 Docker，请先安装 Docker 环境。${NC}"
+        echo "您可以通过应用中心的 Komari 管理菜单安装 Docker。"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    if docker ps -a --format '{{.Names}}' | grep -q "^xiaoya-alist$"; then
+        echo -e "${YELLOW}检测到 小雅alist 容器已存在。${NC}"
+        read -p "是否重新部署？(这将删除现有配置) (y/N): " redeploy_choice
+        if [[ ! "$redeploy_choice" =~ ^[yY]$ ]]; then
+            return
+        fi
+        echo -e "${BLUE}正在停止并移除旧容器...${NC}"
+        docker stop xiaoya-alist &> /dev/null
+        docker rm xiaoya-alist &> /dev/null
+    fi
+
+    echo -e "${YELLOW}正在配置 小雅alist 安装参数...${NC}"
+    echo ""
+
+    read -p "请输入宿主机映射端口 (默认 5244): " host_port
+    host_port=${host_port:-5244}
+
+    if command -v ss &> /dev/null; then
+        if ss -tuln | grep -q ":${host_port} "; then
+            echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
+            read -p "按回车键继续..."
+            return
+        fi
+    fi
+
+    while true; do
+        read -sp "请输入管理员密码 (默认 admin): " admin_password
+        echo ""
+        admin_password=${admin_password:-admin}
+        read -sp "请再次输入密码确认: " admin_password_confirm
+        echo ""
+        if [ "$admin_password" != "$admin_password_confirm" ]; then
+            echo -e "${RED}两次输入的密码不一致，请重新输入。${NC}"
+        else
+            break
+        fi
+    done
+
+    read -p "请输入时区 (默认 Asia/Shanghai): " tz
+    tz=${tz:-Asia/Shanghai}
+
+    read -p "请输入镜像版本 (默认 xhofe/alist:latest): " alist_image
+    alist_image=${alist_image:-xhofe/alist:latest}
+
+
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${YELLOW}安装配置确认：${NC}"
+    echo -e "端口: ${GREEN}${host_port}${NC}"
+    echo -e "密码: ${GREEN}********${NC}"
+    echo -e "时区: ${GREEN}${tz}${NC}"
+    echo -e "镜像: ${GREEN}${alist_image}${NC}"
+    echo -e "${CYAN}-----------------------------------------${NC}"
+
+    read -p "确认以上配置并开始安装？(y/N): " confirm_install
+    if [[ ! "$confirm_install" =~ ^[yY]$ ]]; then
+        echo "安装已取消。"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在准备安装目录...${NC}"
+    mkdir -p /opt/xiaoya-alist
+
+    echo -e "${BLUE}正在创建配置文件...${NC}"
+    cat > /opt/xiaoya-alist/.env << EOF
+HOST_PORT=${host_port}
+ADMIN_PASSWORD=${admin_password}
+TZ=${tz}
+ALIST_IMAGE=${alist_image}
+EOF
+
+    cat > /opt/xiaoya-alist/docker-compose.yml << EOF
+services:
+  xiaoya-alist:
+    image: \${ALIST_IMAGE}
+    container_name: xiaoya-alist
+    restart: unless-stopped
+    ports:
+      - "\${HOST_PORT}:5244"
+    environment:
+      - TZ=\${TZ}
+      - ADMIN_PASSWORD=\${ADMIN_PASSWORD}
+      - ALIST_ADMIN_PASSWORD=\${ADMIN_PASSWORD}
+    volumes:
+      - ./data:/data
+
+EOF
+
+    echo -e "${BLUE}正在启动 小雅alist 服务...${NC}"
+    cd /opt/xiaoya-alist
+
+    if docker compose version &> /dev/null; then
+        docker_compose_cmd="docker compose"
+    else
+        docker_compose_cmd="docker-compose"
+    fi
+
+    $docker_compose_cmd up -d
+
+    if [ $? -eq 0 ]; then
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+
+        echo -e "${GREEN}✅ 小雅alist 安装成功！${NC}"
+        echo ""
+        echo -e "${CYAN}访问信息：${NC}"
+        [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+        [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+        echo ""
+        echo -e "${CYAN}登录凭据：${NC}"
+        echo -e "用户名: ${GREEN}admin${NC}"
+        echo -e "密码: ${GREEN}${admin_password}${NC}"
+        echo ""
+        echo -e "${YELLOW}重要提示：${NC}"
+        echo "1. 首次启动可能需要等待容器初始化"
+        echo "2. 配置文件位置: /opt/xiaoya-alist"
+    else
+        echo -e "${RED}❌ 小雅alist 安装失败，请检查 Docker 服务与端口占用。${NC}"
+        $docker_compose_cmd logs --tail 20
+    fi
+
+    read -p "按回车键继续..."
+}
+
+# 启动 小雅alist
+function start_xiaoya_alist() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}            启动 小雅alist${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/opt/xiaoya-alist/docker-compose.yml" ]; then
+        echo -e "${RED}未检测到 小雅alist 安装，请先安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在启动 小雅alist 服务...${NC}"
+    cd /opt/xiaoya-alist
+
+    if docker compose version &> /dev/null; then
+        docker_compose_cmd="docker compose"
+    else
+        docker_compose_cmd="docker-compose"
+    fi
+
+    $docker_compose_cmd start
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ 小雅alist 启动成功！${NC}"
+    else
+        echo -e "${RED}❌ 启动失败，请检查日志。${NC}"
+    fi
+
+    read -p "按回车键继续..."
+}
+
+# 停止 小雅alist
+function stop_xiaoya_alist() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}            停止 小雅alist${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/opt/xiaoya-alist/docker-compose.yml" ]; then
+        echo -e "${RED}未检测到 小雅alist 安装，请先安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在停止 小雅alist 服务...${NC}"
+    cd /opt/xiaoya-alist
+
+    if docker compose version &> /dev/null; then
+        docker_compose_cmd="docker compose"
+    else
+        docker_compose_cmd="docker-compose"
+    fi
+
+    $docker_compose_cmd stop
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ 小雅alist 已停止。${NC}"
+    else
+        echo -e "${RED}❌ 停止失败，请检查日志。${NC}"
+    fi
+
+    read -p "按回车键继续..."
+}
+
+# 重启 小雅alist
+function restart_xiaoya_alist() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}            重启 小雅alist${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/opt/xiaoya-alist/docker-compose.yml" ]; then
+        echo -e "${RED}未检测到 小雅alist 安装，请先安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在重启 小雅alist 服务...${NC}"
+    cd /opt/xiaoya-alist
+
+    if docker compose version &> /dev/null; then
+        docker_compose_cmd="docker compose"
+    else
+        docker_compose_cmd="docker-compose"
+    fi
+
+    $docker_compose_cmd restart
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ 小雅alist 重启成功！${NC}"
+    else
+        echo -e "${RED}❌ 重启失败，请检查日志。${NC}"
+    fi
+
+    read -p "按回车键继续..."
+}
+
+# 查看 小雅alist 状态和日志
+function view_xiaoya_alist_status_logs() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}        小雅alist 状态与日志${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/opt/xiaoya-alist/docker-compose.yml" ]; then
+        echo -e "${RED}未检测到 小雅alist 安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    cd /opt/xiaoya-alist
+
+    if docker compose version &> /dev/null; then
+        docker_compose_cmd="docker compose"
+    else
+        docker_compose_cmd="docker-compose"
+    fi
+
+    echo -e "${BLUE}容器状态:${NC}"
+    $docker_compose_cmd ps
+
+    echo -e "\n${BLUE}最近 30 行日志:${NC}"
+    $docker_compose_cmd logs --tail 30
+
+    echo -e "${CYAN}=========================================${NC}"
+    read -p "按回车键继续..."
+}
+
+# 修改 小雅alist 配置
+function modify_xiaoya_alist_config() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}           修改 小雅alist 配置${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/opt/xiaoya-alist/.env" ]; then
+        echo -e "${RED}未检测到 小雅alist 安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    local current_port=$(grep -oP "^HOST_PORT=\K[0-9]+" /opt/xiaoya-alist/.env | head -1)
+    local current_tz=$(grep -oP "^TZ=\K.*" /opt/xiaoya-alist/.env | head -1)
+    local current_image=$(grep -oP "^ALIST_IMAGE=\K.*" /opt/xiaoya-alist/.env | head -1)
+
+    echo -e "${YELLOW}当前配置信息：${NC}"
+    echo -e "端口: ${GREEN}${current_port}${NC}"
+    echo -e "时区: ${GREEN}${current_tz}${NC}"
+    echo -e "镜像: ${GREEN}${current_image}${NC}"
+    echo ""
+    echo -e "${YELLOW}修改选项：${NC}"
+    echo "1. 修改端口"
+    echo "2. 重置管理员密码"
+    echo "3. 修改镜像"
+    echo "4. 修改时区"
+    echo "5. 查看完整配置文件"
+    echo "0. 返回"
+    echo ""
+    read -p "请选择操作: " config_choice
+
+    case "$config_choice" in
+        1)
+            read -p "请输入新的宿主机端口: " new_port
+            if [[ ! "$new_port" =~ ^[0-9]+$ ]] || [ "$new_port" -lt 1 ] || [ "$new_port" -gt 65535 ]; then
+                echo -e "${RED}端口号无效。请输入 1-65535 之间的数字。${NC}"
+                read -p "按回车键继续..."
+                return
+            fi
+
+            if command -v ss &> /dev/null; then
+                if ss -tuln | grep -q ":${new_port} "; then
+                    echo -e "${RED}端口 ${new_port} 已被占用，请选择其他端口。${NC}"
+                    read -p "按回车键继续..."
+                    return
+                fi
+            fi
+
+            cd /opt/xiaoya-alist
+            if docker compose version &> /dev/null; then
+                docker_compose_cmd="docker compose"
+            else
+                docker_compose_cmd="docker-compose"
+            fi
+            $docker_compose_cmd stop
+
+            sed -i "s/^HOST_PORT=.*/HOST_PORT=${new_port}/" .env
+            $docker_compose_cmd up -d
+
+            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+            echo -e "${GREEN}✅ 端口已修改为 ${new_port}${NC}"
+            [ -n "$ipv4" ] && echo -e "新访问地址: ${YELLOW}http://${ipv4}:${new_port}${NC}"
+            read -p "按回车键继续..."
+            ;;
+        2)
+            while true; do
+                read -sp "请输入新的管理员密码: " new_password
+                echo ""
+                if [ -z "$new_password" ]; then
+                    echo -e "${RED}密码不能为空，请重新输入。${NC}"
+                    continue
+                fi
+
+                read -sp "请再次输入密码确认: " new_password_confirm
+                echo ""
+
+                if [ "$new_password" != "$new_password_confirm" ]; then
+                    echo -e "${RED}两次输入的密码不一致，请重新输入。${NC}"
+                else
+                    break
+                fi
+            done
+
+            cd /opt/xiaoya-alist
+            if docker compose version &> /dev/null; then
+                docker_compose_cmd="docker compose"
+            else
+                docker_compose_cmd="docker-compose"
+            fi
+            $docker_compose_cmd stop
+
+            sed -i "s/^ADMIN_PASSWORD=.*/ADMIN_PASSWORD=${new_password}/" .env
+            $docker_compose_cmd up -d
+
+            echo -e "${GREEN}✅ 密码已更新${NC}"
+            echo -e "新密码: ${GREEN}${new_password}${NC}"
+            read -p "按回车键继续..."
+            ;;
+        3)
+            read -p "请输入新的镜像 (如 xiaoyaliu/alist:latest): " new_image
+            if [ -z "$new_image" ]; then
+                echo -e "${RED}镜像不能为空。${NC}"
+                read -p "按回车键继续..."
+                return
+            fi
+
+            cd /opt/xiaoya-alist
+            if docker compose version &> /dev/null; then
+                docker_compose_cmd="docker compose"
+            else
+                docker_compose_cmd="docker-compose"
+            fi
+            $docker_compose_cmd stop
+
+            sed -i "s/^ALIST_IMAGE=.*/ALIST_IMAGE=${new_image}/" .env
+            $docker_compose_cmd up -d
+
+            echo -e "${GREEN}✅ 镜像已更新为 ${new_image}${NC}"
+            read -p "按回车键继续..."
+            ;;
+        4)
+            read -p "请输入新的时区 (如 Asia/Shanghai): " new_tz
+            if [ -z "$new_tz" ]; then
+                echo -e "${RED}时区不能为空。${NC}"
+                read -p "按回车键继续..."
+                return
+            fi
+
+            cd /opt/xiaoya-alist
+            if docker compose version &> /dev/null; then
+                docker_compose_cmd="docker compose"
+            else
+                docker_compose_cmd="docker-compose"
+            fi
+            $docker_compose_cmd stop
+
+            sed -i "s/^TZ=.*/TZ=${new_tz}/" .env
+            $docker_compose_cmd up -d
+
+            echo -e "${GREEN}✅ 时区已更新为 ${new_tz}${NC}"
+            read -p "按回车键继续..."
+            ;;
+        5)
+            echo -e "${BLUE}完整配置文件内容:${NC}"
+            echo ""
+            cat /opt/xiaoya-alist/.env
+            echo ""
+            read -p "按回车键继续..."
+            return
+            ;;
+        0) return ;;
+        *) echo -e "${RED}无效选择。${NC}"; read -p "按回车键继续..." ;;
+    esac
+}
+
+# 卸载 小雅alist
+function uninstall_xiaoya_alist() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}             卸载 小雅alist${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/opt/xiaoya-alist/docker-compose.yml" ]; then
+        echo -e "${YELLOW}未检测到 小雅alist 安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${RED}⚠️  警告：此操作将删除 小雅alist 容器及配置！${NC}"
+    echo ""
+    echo -e "将删除以下内容："
+    echo "1. 小雅alist 容器 (xiaoya-alist)"
+    echo "2. 配置文件目录 (/opt/xiaoya-alist)"
+    echo ""
+
+    read -p "确定要卸载 小雅alist 吗？(y/N): " confirm_uninstall
+    if [[ ! "$confirm_uninstall" =~ ^[yY]$ ]]; then
+        echo "卸载已取消。"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在停止并移除容器...${NC}"
+    cd /opt/xiaoya-alist
+
+    if docker compose version &> /dev/null; then
+        docker_compose_cmd="docker compose"
+    else
+        docker_compose_cmd="docker-compose"
+    fi
+
+    $docker_compose_cmd down
+
+    echo -e "${BLUE}正在清理安装目录...${NC}"
+    cd / && rm -rf /opt/xiaoya-alist
+
+    echo -e "${GREEN}✅ 小雅alist 卸载完成！${NC}"
+    read -p "按回车键继续..."
+}
+
+# 访问 小雅alist Web 界面
+function access_xiaoya_alist_web() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}        访问 小雅alist Web 界面${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ ! -f "/opt/xiaoya-alist/.env" ]; then
+        echo -e "${RED}❌ 小雅alist 未安装，请先安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    local host_port=$(grep -oP "^HOST_PORT=\K[0-9]+" /opt/xiaoya-alist/.env | head -1)
+    host_port=${host_port:-5244}
+
+    local container_status=$(docker inspect -f '{{.State.Status}}' xiaoya-alist 2>/dev/null || echo "未运行")
+    local container_running=""
+    if [ "$container_status" = "running" ]; then
+        container_running="${GREEN}运行中${NC}"
+    else
+        container_running="${RED}未运行${NC}"
+    fi
+
+    IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+
+    echo -e "当前容器状态: ${container_running}"
+    echo ""
+    echo -e "${CYAN}访问地址：${NC}"
+    [ -n "$ipv4" ] && echo -e "IPv4 地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+    [ -n "$ipv6" ] && echo -e "IPv6 地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+    echo ""
+    echo -e "${YELLOW}提示：默认用户名为 admin。若忘记密码，请在“修改配置”中重置。${NC}"
+    read -p "按回车键返回..."
+}
+
