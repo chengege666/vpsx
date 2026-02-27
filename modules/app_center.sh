@@ -20,10 +20,11 @@ function app_center_menu() {
         echo -e " ${GREEN}17.${NC} AkileCloud专用脚本              ${GREEN}18.${NC} VScode 网页版 (code-server)"
         echo -e " ${GREEN}19.${NC} Lucky (大神级 DDNS/反代/SSL)    ${GREEN}20.${NC} Docker 镜像加速站一站式管理"
         echo -e " ${GREEN}21.${NC} 小雅alist 管理                  ${GREEN}22.${NC} Open WebUI 管理"
+        echo -e " ${GREEN}23.${NC} LibreSpeed 测速工具"
         echo -e "${CYAN}----------------------------------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}================================================================${NC}"
-        read -p "请输入你的选择 (0-22) : " app_choice
+        read -p "请输入你的选择 (0-23) : " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
@@ -48,6 +49,7 @@ function app_center_menu() {
             20) docker_proxy_management ;;
             21) xiaoya_alist_management ;;
             22) open_webui_management ;;
+            23) librespeed_management ;;
             0) break ;; 
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -7660,6 +7662,137 @@ function uninstall_open_webui() {
         echo -e "${GREEN}Open WebUI 卸载完成。${NC}"
     else
         echo "操作已取消。"
+    fi
+    read -p "按回车键继续..."
+}
+
+# LibreSpeed 测速工具管理
+function librespeed_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}          LibreSpeed 测速工具${NC}"
+        
+        local status_text="${RED}未安装${NC}"
+        local host_port=""
+        
+        if docker ps -a --format '{{.Names}}' | grep -q "^librespeed$"; then
+            if docker inspect --format='{{.State.Status}}' librespeed 2>/dev/null | grep -q "running"; then
+                status_text="${GREEN}运行中${NC}"
+                host_port=$(docker inspect librespeed --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}' 2>/dev/null)
+            else
+                status_text="${YELLOW}已停止${NC}"
+            fi
+        fi
+
+        echo -e "          状态: ${status_text}"
+        if [ -n "$host_port" ]; then
+            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+            echo -e "${CYAN}-----------------------------------------${NC}"
+            [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+            [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+        fi
+        
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e " ${GREEN}1.${NC}  安装/更新 LibreSpeed"
+        echo -e " ${GREEN}2.${NC}  启动 LibreSpeed"
+        echo -e " ${GREEN}3.${NC}  停止 LibreSpeed"
+        echo -e " ${GREEN}4.${NC}  重启 LibreSpeed"
+        echo -e " ${GREEN}5.${NC}  查看容器日志"
+        echo -e " ${GREEN}6.${NC}  卸载 LibreSpeed"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC}  返回上一级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 (0-6): " ls_choice
+
+        case "$ls_choice" in
+            1) install_librespeed ;;
+            2) start_librespeed ;;
+            3) stop_librespeed ;;
+            4) restart_librespeed ;;
+            5) docker logs --tail 50 librespeed; read -p "按回车键继续..." ;;
+            6) uninstall_librespeed ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+function install_librespeed() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          安装/更新 LibreSpeed${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if ! docker info &>/dev/null; then
+        echo -e "${RED}❌ Docker 服务未运行或不可用，请先启动Docker服务。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    if docker ps -a --format '{{.Names}}' | grep -q "^librespeed$"; then
+        echo -e "${YELLOW}检测到 LibreSpeed 已安装。${NC}"
+        read -p "是否重新安装？(y/N): " reinstall
+        [[ ! "$reinstall" =~ ^[yY]$ ]] && return
+        docker stop librespeed &>/dev/null
+        docker rm librespeed &>/dev/null
+    fi
+
+    read -p "请输入宿主机映射端口 (默认 8888): " host_port
+    host_port=${host_port:-8888}
+
+    if command -v ss &> /dev/null; then
+        if ss -tuln | grep -q ":${host_port} "; then
+            echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
+            read -p "按回车键继续..."
+            return
+        fi
+    fi
+
+    echo -e "${BLUE}正在拉取 LibreSpeed 镜像...${NC}"
+    docker pull ghcr.io/librespeed/speedtest:latest
+
+    echo -e "${BLUE}正在启动容器...${NC}"
+    docker run -d \
+        --name librespeed \
+        --restart always \
+        -p ${host_port}:80 \
+        -e TITLE="LibreSpeed Test" \
+        -e MODE="standalone" \
+        ghcr.io/librespeed/speedtest:latest
+
+    if [ $? -eq 0 ]; then
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        echo -e "${GREEN}LibreSpeed 安装成功！${NC}"
+        [ -n "$ipv4" ] && echo -e "访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+        [ -n "$ipv6" ] && echo -e "访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+    else
+        echo -e "${RED}容器启动失败，请检查 Docker 日志。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function start_librespeed() {
+    docker start librespeed && echo -e "${GREEN}已启动${NC}" || echo -e "${RED}启动失败${NC}"
+    read -p "按回车键继续..."
+}
+
+function stop_librespeed() {
+    docker stop librespeed && echo -e "${GREEN}已停止${NC}" || echo -e "${RED}停止失败${NC}"
+    read -p "按回车键继续..."
+}
+
+function restart_librespeed() {
+    docker restart librespeed && echo -e "${GREEN}已重启${NC}" || echo -e "${RED}重启失败${NC}"
+    read -p "按回车键继续..."
+}
+
+function uninstall_librespeed() {
+    read -p "确定要卸载 LibreSpeed 吗？(y/N): " confirm
+    if [[ "$confirm" =~ ^[yY]$ ]]; then
+        docker stop librespeed &>/dev/null
+        docker rm librespeed &>/dev/null
+        echo -e "${GREEN}LibreSpeed 已卸载。${NC}"
     fi
     read -p "按回车键继续..."
 }
