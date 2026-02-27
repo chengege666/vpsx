@@ -22,6 +22,7 @@ function sys_tools_menu() {
         echo -e " ${GREEN}11.${NC} SSL证书管理（Let's Encrypt）"
         echo -e " ${GREEN}12.${NC} 进程管理工具（查看/终止）"
         echo -e " ${GREEN}13.${NC} 系统环境修复 (权限/磁盘/APT)"
+        echo -e " ${GREEN}14.${NC} 配置中文语言支持 (Debian/Ubuntu)"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
@@ -66,6 +67,9 @@ function sys_tools_menu() {
                 ;;
             13)
                 system_environment_repair
+                ;;
+           14)
+                configure_chinese_locale
                 ;;
             0)
                 break
@@ -1300,7 +1304,6 @@ function switch_ip_priority() {
     done
 }
 
-# 修改主机名
 function change_hostname() {
     clear
     echo -e "${CYAN}=========================================${NC}"
@@ -1323,5 +1326,66 @@ function change_hostname() {
     else
         echo -e "${RED}主机名修改失败。${NC}"
     fi
+    read -p "按任意键继续..."
+}
+
+function configure_chinese_locale() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          配置中文语言支持${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    # 检查是否为 Debian/Ubuntu
+    if [ ! -f /etc/debian_version ]; then
+        echo -e "${RED}此功能仅支持 Debian/Ubuntu 系统。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+
+    echo -e "${GREEN}[1/6] 更新软件源...${NC}"
+    apt update -y
+
+    echo -e "${GREEN}[2/6] 安装中文字体和语言包...${NC}"
+    apt install -y fonts-noto-cjk fonts-wqy-microhei fonts-wqy-zenhei manpages-zh locales language-pack-zh-hans
+
+    echo -e "${GREEN}[3/6] 修复翻译文件缺失...${NC}"
+    # 强制重装核心包以恢复 .mo 翻译文件
+    apt install --reinstall -y bash coreutils grep sed 2>/dev/null
+
+    echo -e "${GREEN}[4/6] 生成中文 Locale...${NC}"
+    [ -f /etc/locale.gen ] || touch /etc/locale.gen
+    sed -i 's/^# *zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/g' /etc/locale.gen
+    sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/g' /etc/locale.gen
+    locale-gen zh_CN.UTF-8
+    locale-gen en_US.UTF-8
+
+    echo -e "${GREEN}[5/6] 设置环境变量...${NC}"
+    # 通过 update-locale 设置系统默认
+    if command -v update-locale &>/dev/null; then
+        update-locale LANG=zh_CN.UTF-8 LC_ALL=zh_CN.UTF-8 LANGUAGE=zh_CN:zh
+    fi
+
+    # 写入当前用户的 .bashrc（防止云主机不读取系统配置）
+    if ! grep -q "export LANG=zh_CN.UTF-8" ~/.bashrc; then
+        echo "export LANG=zh_CN.UTF-8" >> ~/.bashrc
+        echo "export LANGUAGE=zh_CN:zh" >> ~/.bashrc
+        echo "export LC_ALL=zh_CN.UTF-8" >> ~/.bashrc
+    fi
+
+    # 添加中文 man 别名
+    if ! grep -q "alias cman=" ~/.bashrc; then
+        echo "alias cman='man -L zh_CN'" >> ~/.bashrc
+    fi
+
+    echo -e "${GREEN}[6/6] 调整 SSH 配置...${NC}"
+    # 禁止客户端覆盖语言设置
+    if [ -f /etc/ssh/sshd_config ]; then
+        sed -i 's/^AcceptEnv LANG LC_*/#AcceptEnv LANG LC_*/g' /etc/ssh/sshd_config
+        systemctl restart sshd 2>/dev/null || service ssh restart 2>/dev/null
+    fi
+
+    echo -e "${GREEN}=== 中文环境配置完成！ ===${NC}"
+    echo -e "请执行 ${YELLOW}source ~/.bashrc${NC} 使配置立即生效。"
+    echo -e "或断开 SSH 重新连接。测试命令：${YELLOW}date${NC} 应显示中文日期。"
     read -p "按任意键继续..."
 }
