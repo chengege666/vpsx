@@ -63,11 +63,42 @@ function one_panel_management() {
         clear
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}          1Panel新一代管理面板${NC}"
+        
+        local status_text="${RED}未安装${NC}"
+        local actual_port=""
+        
         if command -v 1pctl &> /dev/null; then
-            echo -e "          状态: ${GREEN}已安装${NC}"
-        else
-            echo -e "          状态: ${RED}未安装${NC}"
+            status_text="${GREEN}已安装${NC}"
+            
+            # 尝试获取实际端口信息
+            actual_port="17001"
+            
+            # 方法1: 从 1Panel 配置文件中读取端口
+            if [ -f "/opt/1panel/conf/app.conf" ]; then
+                local config_port=$(grep "^server.port" /opt/1panel/conf/app.conf 2>/dev/null | cut -d'=' -f2)
+                if [ -n "$config_port" ] && [ "$config_port" -gt 0 ] 2>/dev/null; then
+                    actual_port="$config_port"
+                fi
+            fi
+            
+            # 方法2: 从 1pctl 输出中提取端口信息
+            local user_info=$(1pctl user-info 2>/dev/null)
+            if echo "$user_info" | grep -q "面板地址:"; then
+                local panel_url=$(echo "$user_info" | grep "面板地址:" | sed 's/面板地址://' | tr -d ' ')
+                if [[ "$panel_url" =~ :([0-9]+)/ ]]; then
+                    actual_port="${BASH_REMATCH[1]}"
+                fi
+            fi
         fi
+        
+        echo -e "          状态: ${status_text}"
+        if [ -n "$actual_port" ] && [ "$actual_port" != "17001" ]; then
+            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+            echo -e "${CYAN}-----------------------------------------${NC}"
+            [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${actual_port}${NC}"
+            [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${actual_port}${NC}"
+        fi
+        
         echo -e "${CYAN}=========================================${NC}"
         echo -e " ${GREEN}1.${NC}  安装/更新 1Panel"
         echo -e " ${GREEN}2.${NC}  启动 1Panel"
@@ -188,13 +219,6 @@ function view_one_panel_info() {
         1pctl status
         echo -e "\n${BLUE}1Panel 用户信息:${NC}"
         1pctl user-info
-        
-        # 显示访问地址信息
-        echo -e "\n${BLUE}访问地址信息:${NC}"
-        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
-        [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}https://${ipv4}:17001${NC}"
-        [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}https://[${ipv6}]:17001${NC}"
-        echo -e "默认端口: 17001 (HTTPS)"
     else
         echo -e "${RED}未检测到 1Panel 安装。${NC}"
     fi
@@ -5823,8 +5847,8 @@ function safeline_waf_management() {
                 IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
                 
                 echo -e "${CYAN}-----------------------------------------${NC}"
-                [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}https://${ipv4}:${host_port}${NC}"
-                [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}https://[${ipv6}]:${host_port}${NC}"
+                [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+                [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
             else
                 status_text="${YELLOW}已安装但未运行${NC}"
             fi
@@ -5981,8 +6005,8 @@ EOF
         IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
         
         echo -e "${CYAN}访问信息：${NC}"
-        [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}https://${ipv4}:${mgt_port}${NC}"
-        [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}https://[${ipv6}]:${mgt_port}${NC}"
+        [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${mgt_port}${NC}"
+        [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${mgt_port}${NC}"
         echo -e "${CYAN}(雷池默认使用 HTTPS 协议)${NC}"
         echo ""
         echo -e "${YELLOW}⚠️  首次登录请使用浏览器访问，如遇证书警告请点击\"继续访问/高级\"${NC}"
