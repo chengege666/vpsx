@@ -6399,12 +6399,15 @@ function install_lucky_docker() {
     
     mkdir -p /opt/lucky/conf
 
+    # 强制拉取最新镜像，确保是最新版
+    docker pull gdy666/lucky:v2
+
     docker run -d \
         --name lucky \
         --restart always \
         -p ${host_port}:16601 \
         -v /opt/lucky/conf:/config \
-        gdy666/lucky:latest
+        gdy666/lucky:v2
 
     if [ $? -eq 0 ]; then
         IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
