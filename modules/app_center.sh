@@ -7872,35 +7872,39 @@ function uninstall_librespeed() {
     read -p "按回车键继续..."
 }
 
-# MAME 街机模拟器管理
+# MAME 街机模拟器管理 (适配 RomM 检测)
 function mame_management() {
     while true; do
         clear
         echo -e "${CYAN}=========================================${NC}"
-        echo -e "${GREEN}          MAME 街机模拟器管理${NC}"
+        echo -e "${GREEN}          MAME 街机模拟器管理 (RomM)${NC}"
         
         # 检查 Docker 是否运行
         if ! docker info > /dev/null 2>&1; then
             echo -e "${RED}⚠️  Docker 服务未运行或未安装！${NC}"
         else
-            # 显示当前状态
-            if docker ps -a --format '{{.Names}}' | grep -q "^mame$"; then
-                echo -e "          状态: ${GREEN}已部署${NC}"
+            # 修改后的状态检测逻辑：检测 romm 容器是否存在
+            if docker ps -a --format '{{.Names}}' | grep -q "^romm$"; then
+                if docker ps --format '{{.Names}}' | grep -q "^romm$"; then
+                    echo -e "          状态: ${GREEN}运行中${NC}"
+                else
+                    echo -e "          状态: ${YELLOW}已停止${NC}"
+                fi
             else
                 echo -e "          状态: ${RED}未部署${NC}"
             fi
         fi
         
         echo -e "${CYAN}=========================================${NC}"
-        echo "MAME 是一个流行的街机模拟器，支持多种经典游戏"
-        echo "基于 Docker 容器部署，支持通过网络访问"
+        echo "当前系统：RomM (内置 MAME 等多种模拟器)"
+        echo "支持精美海报墙、网页内直接游玩、多平台管理"
         echo ""
-        echo -e " ${GREEN}1.${NC}  安装/更新 MAME"
-        echo -e " ${GREEN}2.${NC}  启动 MAME"
-        echo -e " ${GREEN}3.${NC}  停止 MAME"
-        echo -e " ${GREEN}4.${NC}  重启 MAME"
-        echo -e " ${GREEN}5.${NC}  查看 MAME 状态和日志"
-        echo -e " ${GREEN}6.${NC}  卸载 MAME"
+        echo -e " ${GREEN}1.${NC}  安装/更新 模拟器"
+        echo -e " ${GREEN}2.${NC}  启动 模拟器"
+        echo -e " ${GREEN}3.${NC}  停止 模拟器"
+        echo -e " ${GREEN}4.${NC}  重启 模拟器"
+        echo -e " ${GREEN}5.${NC}  查看 运行状态和日志"
+        echo -e " ${GREEN}6.${NC}  卸载 模拟器"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回应用中心菜单"
         echo -e "${CYAN}=========================================${NC}"
@@ -7911,7 +7915,7 @@ function mame_management() {
             2) start_mame ;;
             3) stop_mame ;;
             4) restart_mame ;;
-            5) docker logs --tail 50 mame; read -p "按回车键继续..." ;;
+            5) docker logs --tail 50 romm; read -p "按回车键继续..." ;;
             6) uninstall_mame ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
