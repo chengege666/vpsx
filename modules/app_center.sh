@@ -21,7 +21,8 @@ function app_center_menu() {
         echo -e " ${GREEN}19.${NC} Lucky (大神级 DDNS/反代/SSL)    ${GREEN}20.${NC} Docker 镜像加速站一站式管理"
         echo -e " ${GREEN}21.${NC} 小雅alist 管理                  ${GREEN}22.${NC} Open WebUI 管理"
         echo -e " ${GREEN}23.${NC} LibreSpeed 测速工具             ${GREEN}24.${NC} MAME 街机模拟器"
-        echo -e " ${GREEN}25.${NC} MyIP 工具箱 (IP/网络工具)"
+        echo -e " ${GREEN}25.${NC} MyIP 工具箱 (IP/网络工具)       ${GREEN}26.${NC} IT-Tools (万能工具箱)"
+        echo -e " ${GREEN}27.${NC} Uptime Kuma (站点监控)" 
         echo -e "${CYAN}----------------------------------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}================================================================${NC}"
@@ -53,6 +54,8 @@ function app_center_menu() {
             23) librespeed_management ;;
             24) mame_management ;;
             25) myip_management ;;
+            26) it_tools_management ;;
+            27) uptime_kuma_management ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -8239,10 +8242,6 @@ function uninstall_mame() {
     read -p "按回车键继续..."
 }
 
-# =================================================================
-# MyIP 工具箱管理模块 (基于 jason5ng32/myip)
-# =================================================================
-
 function myip_management() {
     while true; do
         clear
@@ -8398,6 +8397,366 @@ function uninstall_myip() {
             docker rm myip &>/dev/null
             echo -e "${GREEN}容器已移除。${NC}"
         fi
+    fi
+    read -p "按回车键继续..."
+}
+
+# =================================================================
+# IT-Tools 万能工具箱管理模块
+# =================================================================
+
+function it_tools_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}             IT-Tools 管理${NC}"
+        
+        local status_text="${RED}未安装${NC}"
+        local host_port=""
+        
+        # 状态检测
+        if docker ps -a --format '{{.Names}}' | grep -q "^it-tools$"; then
+            if docker inspect --format='{{.State.Status}}' it-tools 2>/dev/null | grep -q "running"; then
+                status_text="${GREEN}运行中${NC}"
+                # 获取映射端口
+                host_port=$(docker inspect it-tools --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}' 2>/dev/null)
+            else
+                status_text="${YELLOW}已停止${NC}"
+            fi
+        fi
+
+        echo -e "          状态: ${status_text}"
+        if [ -n "$host_port" ]; then
+            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+            echo -e "${CYAN}-----------------------------------------${NC}"
+            [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+            [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+        fi
+        
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "IT-Tools 提供各种在线工具：加密、转换、"
+        echo -e "生成器等，一个页面涵盖所有开发常用工具。"
+        echo ""
+        echo -e " ${GREEN}1.${NC} 安装/更新 IT-Tools"
+        echo -e " ${GREEN}2.${NC} 启动 IT-Tools"
+        echo -e " ${GREEN}3.${NC} 停止 IT-Tools"
+        echo -e " ${GREEN}4.${NC} 重启 IT-Tools"
+        echo -e " ${GREEN}5.${NC} 查看容器日志"
+        echo -e " ${GREEN}6.${NC} 卸载 IT-Tools"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC} 返回上一级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 (0-6): " it_choice
+
+        case "$it_choice" in
+            1) install_it_tools ;;
+            2) manage_it_tools_container "start" ;;
+            3) manage_it_tools_container "stop" ;;
+            4) manage_it_tools_container "restart" ;;
+            5) docker logs --tail 50 it-tools; read -p "按回车键继续..." ;;
+            6) uninstall_it_tools ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+function install_it_tools() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          安装/更新 IT-Tools${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    # 1. Docker 环境检查
+    if ! docker info &>/dev/null; then
+        echo -e "${RED}❌ Docker 服务未运行或未安装，请先安装 Docker。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    # 2. 准备目录
+    local deploy_dir="/opt/it-tools"
+    if ! mkdir -p "$deploy_dir" 2>/dev/null; then
+        echo -e "${RED}❌ 无法创建目录 $deploy_dir，请检查 root 权限。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    # 3. 端口识别
+    local default_port=8080
+    if [ -f "$deploy_dir/docker-compose.yml" ]; then
+        # 如果已安装，提取旧端口
+        local exist_port=$(grep -oP '^\s+-\s+"\K[0-9]+(?=:80")' "$deploy_dir/docker-compose.yml" | head -1)
+        default_port=${exist_port:-8080}
+    fi
+
+    read -p "请输入宿主机映射端口 (默认 $default_port): " host_port
+    host_port=${host_port:-$default_port}
+
+    # 端口占用检查（仅限新安装）
+    if ! docker ps -a --format '{{.Names}}' | grep -q "^it-tools$"; then
+        if command -v ss &> /dev/null; then
+            if ss -tuln | grep -q ":${host_port} "; then
+                echo -e "${RED}❌ 端口 ${host_port} 已被占用，请更换端口。${NC}"
+                read -p "按回车键继续..."
+                return
+            fi
+        fi
+    fi
+
+    # 4. 生成配置文件 (修正镜像名为全小写 corentinth)
+    cat > "$deploy_dir/docker-compose.yml" << EOF
+services:
+  it-tools:
+    image: corentinth/it-tools:latest
+    container_name: it-tools
+    restart: always
+    ports:
+      - "${host_port}:80"
+EOF
+
+    echo -e "${BLUE}正在拉取镜像并启动容器...${NC}"
+    cd "$deploy_dir"
+    
+    # 清理可能存在的旧容器
+    if docker ps -a --format '{{.Names}}' | grep -q "^it-tools$"; then
+        docker stop it-tools &>/dev/null
+        docker rm it-tools &>/dev/null
+    fi
+
+    # 执行部署
+    if docker compose version &> /dev/null; then
+        docker compose pull && docker compose up -d --remove-orphans
+    else
+        docker-compose pull && docker-compose up -d --remove-orphans
+    fi
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ IT-Tools 安装/更新成功！${NC}"
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        [ -n "$ipv4" ] && echo -e "访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+    else
+        echo -e "${RED}❌ 部署失败，请检查网络或配置 Docker 加速站。${NC}"
+    fi
+    cd - > /dev/null
+    read -p "按回车键继续..."
+}
+
+function manage_it_tools_container() {
+    local action=$1
+    local deploy_dir="/opt/it-tools"
+    if [ -d "$deploy_dir" ] && [ -f "$deploy_dir/docker-compose.yml" ]; then
+        cd "$deploy_dir"
+        echo -e "${BLUE}正在对 IT-Tools 执行 ${action} 操作...${NC}"
+        if docker compose version &> /dev/null; then 
+            docker compose "$action"
+        else 
+            docker-compose "$action"
+        fi
+        echo -e "${GREEN}操作完成。${NC}"
+        cd - > /dev/null
+    else
+        echo -e "${RED}❌ 未检测到安装目录，请先安装。${NC}"
+    fi
+    sleep 1
+}
+
+function uninstall_it_tools() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${RED}           卸载 IT-Tools${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    read -p "确定要彻底删除 IT-Tools 吗？(y/N): " confirm
+    if [[ "$confirm" =~ ^[yY]$ ]]; then
+        local deploy_dir="/opt/it-tools"
+        if [ -d "$deploy_dir" ]; then
+            cd "$deploy_dir"
+            if docker compose version &> /dev/null; then docker compose down; else docker-compose down; fi
+            cd - > /dev/null
+            rm -rf "$deploy_dir"
+            echo -e "${GREEN}✅ IT-Tools 已彻底卸载并清理文件。${NC}"
+        else
+            docker stop it-tools &>/dev/null
+            docker rm it-tools &>/dev/null
+            echo -e "${GREEN}容器已移除。${NC}"
+        fi
+    else
+        echo -e "${YELLOW}已取消卸载。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function uptime_kuma_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}           Uptime Kuma 管理${NC}"
+        
+        local status_text="${RED}未安装${NC}"
+        local host_port=""
+        
+        # 状态检测
+        if docker ps -a --format '{{.Names}}' | grep -q "^uptime-kuma$"; then
+            if docker inspect --format='{{.State.Status}}' uptime-kuma 2>/dev/null | grep -q "running"; then
+                status_text="${GREEN}运行中${NC}"
+                host_port=$(docker inspect uptime-kuma --format='{{(index (index .NetworkSettings.Ports "3001/tcp") 0).HostPort}}' 2>/dev/null)
+            else
+                status_text="${YELLOW}已停止${NC}"
+            fi
+        fi
+
+        echo -e "          状态: ${status_text}"
+        if [ -n "$host_port" ]; then
+            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+            echo -e "${CYAN}-----------------------------------------${NC}"
+            [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+            [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+        fi
+        
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "Uptime Kuma 是一个美观的自托管监控工具。"
+        echo ""
+        echo -e " ${GREEN}1.${NC} 安装/更新 Uptime Kuma"
+        echo -e " ${GREEN}2.${NC} 启动 Uptime Kuma"
+        echo -e " ${GREEN}3.${NC} 停止 Uptime Kuma"
+        echo -e " ${GREEN}4.${NC} 重启 Uptime Kuma"
+        echo -e " ${GREEN}5.${NC} 查看容器日志"
+        echo -e " ${GREEN}6.${NC} 卸载 Uptime Kuma"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC} 返回上一级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 (0-6): " kuma_choice
+
+        case "$kuma_choice" in
+            1) install_uptime_kuma ;;
+            2) manage_kuma_container "start" ;;
+            3) manage_kuma_container "stop" ;;
+            4) manage_kuma_container "restart" ;;
+            5) docker logs --tail 50 uptime-kuma; read -p "按回车键继续..." ;;
+            6) uninstall_uptime_kuma ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+# 安装/更新函数
+function install_uptime_kuma() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}      安装/更新 Uptime Kuma ${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if ! docker info &>/dev/null; then
+        echo -e "${RED}❌ Docker 服务未运行。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    local deploy_dir="/opt/uptime-kuma"
+    mkdir -p "$deploy_dir/data"
+
+    local default_port=3001
+    if [ -f "$deploy_dir/docker-compose.yml" ]; then
+        local exist_port=$(grep -oP '^\s+-\s+"\K[0-9]+(?=:3001")' "$deploy_dir/docker-compose.yml" | head -1)
+        default_port=${exist_port:-3001}
+    fi
+
+    read -p "请输入宿主机映射端口 (默认 $default_port): " host_port
+    host_port=${host_port:-$default_port}
+
+    # 写入配置，指定镜像为 :2 以确保获取 2.1.3+
+    cat > "$deploy_dir/docker-compose.yml" << EOF
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:2
+    container_name: uptime-kuma
+    restart: always
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "${host_port}:3001"
+EOF
+
+    echo -e "${BLUE}正在拉取最新的 Uptime Kuma 2.x 镜像...${NC}"
+    cd "$deploy_dir"
+    
+    if docker compose version &> /dev/null; then
+        docker compose pull
+        docker compose up -d --remove-orphans
+    else
+        docker-compose pull
+        docker-compose up -d --remove-orphans
+    fi
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ Uptime Kuma 已成功安装/更新！${NC}"
+    else
+        echo -e "${RED}❌ 部署失败。${NC}"
+    fi
+    cd - > /dev/null
+    read -p "按回车键继续..."
+}
+
+# 通用生命周期管理
+function manage_kuma_container() {
+    local action=$1
+    local deploy_dir="/opt/uptime-kuma"
+    if [ -d "$deploy_dir" ] && [ -f "$deploy_dir/docker-compose.yml" ]; then
+        cd "$deploy_dir"
+        if docker compose version &> /dev/null; then
+            docker compose "$action"
+        else
+            docker-compose "$action"
+        fi
+        echo -e "${GREEN}操作 ${action} 已执行。${NC}"
+        cd - > /dev/null
+    else
+        echo -e "${RED}未检测到安装目录。${NC}"
+    fi
+    sleep 1
+}
+
+# 卸载函数 (核心补全)
+function uninstall_uptime_kuma() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${RED}           卸载 Uptime Kuma${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    read -p "确定要彻底删除 Uptime Kuma 吗？(y/N): " confirm
+    if [[ "$confirm" =~ ^[yY]$ ]]; then
+        local deploy_dir="/opt/uptime-kuma"
+        
+        if [ -d "$deploy_dir" ]; then
+            echo -e "${BLUE}正在停止并移除容器...${NC}"
+            cd "$deploy_dir"
+            if docker compose version &> /dev/null; then
+                docker compose down
+            else
+                docker-compose down
+            fi
+            cd - > /dev/null
+            
+            echo ""
+            read -p "是否同步删除所有监控数据 (data 目录)？(y/N): " del_data
+            if [[ "$del_data" =~ ^[yY]$ ]]; then
+                rm -rf "$deploy_dir"
+                echo -e "${GREEN}✅ 所有数据和配置文件已清理。${NC}"
+            else
+                rm -f "$deploy_dir/docker-compose.yml"
+                echo -e "${YELLOW}已保留数据目录 (/opt/uptime-kuma/data)，仅移除容器。${NC}"
+            fi
+        else
+            # 如果目录不在但容器在，强行尝试删除容器
+            docker stop uptime-kuma &>/dev/null
+            docker rm uptime-kuma &>/dev/null
+            echo -e "${GREEN}容器已移除。${NC}"
+        fi
+        echo -e "${GREEN}卸载流程完成。${NC}"
+    else
+        echo -e "${YELLOW}已取消卸载操作。${NC}"
     fi
     read -p "按回车键继续..."
 }
