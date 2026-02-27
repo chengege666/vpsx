@@ -20,11 +20,11 @@ function app_center_menu() {
         echo -e " ${GREEN}17.${NC} AkileCloud专用脚本              ${GREEN}18.${NC} VScode 网页版 (code-server)"
         echo -e " ${GREEN}19.${NC} Lucky (大神级 DDNS/反代/SSL)    ${GREEN}20.${NC} Docker 镜像加速站一站式管理"
         echo -e " ${GREEN}21.${NC} 小雅alist 管理                  ${GREEN}22.${NC} Open WebUI 管理"
-        echo -e " ${GREEN}23.${NC} LibreSpeed 测速工具"
+        echo -e " ${GREEN}23.${NC} LibreSpeed 测速工具             ${GREEN}24.${NC} MAME 街机模拟器"
         echo -e "${CYAN}----------------------------------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}================================================================${NC}"
-        read -p "请输入你的选择 (0-23) : " app_choice
+        read -p "请输入你的选择 (0-24) : " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
@@ -50,7 +50,8 @@ function app_center_menu() {
             21) xiaoya_alist_management ;;
             22) open_webui_management ;;
             23) librespeed_management ;;
-            0) break ;; 
+            24) mame_management ;;
+            0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
     done
@@ -7867,6 +7868,245 @@ function uninstall_librespeed() {
             docker rm librespeed &>/dev/null
         fi
         echo -e "${GREEN}LibreSpeed 已卸载。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+# MAME 街机模拟器管理
+function mame_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}          MAME 街机模拟器管理${NC}"
+        
+        # 检查 Docker 是否运行
+        if ! docker info > /dev/null 2>&1; then
+            echo -e "${RED}⚠️  Docker 服务未运行或未安装！${NC}"
+        else
+            # 显示当前状态
+            if docker ps -a --format '{{.Names}}' | grep -q "^mame$"; then
+                echo -e "          状态: ${GREEN}已部署${NC}"
+            else
+                echo -e "          状态: ${RED}未部署${NC}"
+            fi
+        fi
+        
+        echo -e "${CYAN}=========================================${NC}"
+        echo "MAME 是一个流行的街机模拟器，支持多种经典游戏"
+        echo "基于 Docker 容器部署，支持通过网络访问"
+        echo ""
+        echo -e " ${GREEN}1.${NC}  安装/更新 MAME"
+        echo -e " ${GREEN}2.${NC}  启动 MAME"
+        echo -e " ${GREEN}3.${NC}  停止 MAME"
+        echo -e " ${GREEN}4.${NC}  重启 MAME"
+        echo -e " ${GREEN}5.${NC}  查看 MAME 状态和日志"
+        echo -e " ${GREEN}6.${NC}  卸载 MAME"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC}  返回应用中心菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 (0-6): " mame_choice
+
+        case "$mame_choice" in
+            1) install_mame ;;
+            2) start_mame ;;
+            3) stop_mame ;;
+            4) restart_mame ;;
+            5) docker logs --tail 50 mame; read -p "按回车键继续..." ;;
+            6) uninstall_mame ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
+        esac
+    done
+}
+
+# 安装 网页街机模拟器 (RomM 完整版架构：带独立数据库)
+function install_mame() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}  安装/更新 网页街机模拟器 (RomM 完整全栈版)${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if ! docker info &>/dev/null; then
+        echo -e "${RED}❌ Docker 服务未运行或不可用，请先启动Docker服务。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    # 1. 彻底清理之前残留的错误容器和配置文件 (解决你刚才遇到的无限重启问题)
+    echo -e "${YELLOW}正在强制清理旧版本或错误的残留容器...${NC}"
+    docker stop mame romm romm-redis romm-db &>/dev/null
+    docker rm mame romm romm-redis romm-db &>/dev/null
+    rm -f /opt/mame/docker-compose.yml
+
+    # 2. 创建部署目录 (包含独立的数据库文件夹)
+    deploy_dir="/opt/mame"
+    mkdir -p "$deploy_dir/library/mame"
+    mkdir -p "$deploy_dir/assets"
+    mkdir -p "$deploy_dir/config"
+    mkdir -p "$deploy_dir/redis"
+    mkdir -p "$deploy_dir/db"
+
+    echo ""
+    read -p "请输入网页访问端口 (默认 8080): " host_port
+    host_port=${host_port:-8080}
+
+    if command -v ss &> /dev/null; then
+        if ss -tuln | grep -q ":${host_port} "; then
+            echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
+            read -p "按回车键继续..."
+            return
+        fi
+    fi
+
+    # 3. 自动生成随机的数据库密码和安全密钥 (避免被黑客扫描)
+    local secret_key=$(LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 32)
+    local db_password=$(LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 16)
+
+    # 4. 生成包含 MariaDB 数据库的完整全栈 docker-compose.yml 
+    cat > "$deploy_dir/docker-compose.yml" << EOF
+services:
+  romm:
+    image: rommapp/romm:latest
+    container_name: romm
+    restart: unless-stopped
+    environment:
+      - ROMM_AUTH_SECRET_KEY=${secret_key}
+      - DB_HOST=romm-db
+      - DB_NAME=romm
+      - DB_USER=romm
+      - DB_PASSWD=${db_password}
+      - IGDB_CLIENT_ID=
+      - IGDB_CLIENT_SECRET=
+    volumes:
+      - ./library:/romm/library
+      - ./assets:/romm/assets
+      - ./config:/romm/config
+    ports:
+      - "${host_port}:8080"
+    depends_on:
+      - romm-db
+      - romm-redis
+
+  romm-db:
+    image: mariadb:11.4
+    container_name: romm-db
+    restart: unless-stopped
+    environment:
+      - MARIADB_ROOT_PASSWORD=${db_password}_root
+      - MARIADB_DATABASE=romm
+      - MARIADB_USER=romm
+      - MARIADB_PASSWORD=${db_password}
+    volumes:
+      - ./db:/var/lib/mysql
+
+  romm-redis:
+    image: redis:7-alpine
+    container_name: romm-redis
+    restart: unless-stopped
+    volumes:
+      - ./redis:/data
+EOF
+
+    echo -e "${BLUE}正在拉取 RomM 及其数据库镜像，这可能需要几分钟...${NC}"
+    cd "$deploy_dir"
+    
+    if command -v docker compose &> /dev/null; then
+        docker compose pull && docker compose up -d
+    else
+        docker-compose pull && docker-compose up -d
+    fi
+
+    if [ $? -eq 0 ]; then
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        echo ""
+        echo -e "${GREEN}✅ 模拟器及全栈数据库安装成功！${NC}"
+        echo -e "部署目录: ${YELLOW}$deploy_dir${NC}"
+        echo -e "游戏 ROM 请放入: ${YELLOW}$deploy_dir/library/mame${NC}"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        
+        # 自动抓取公网IP，防止你误用内网IP访问
+        local public_ip=$(curl -s ifconfig.me || echo "你的公网IP")
+        echo -e "🌐 局域网访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+        echo -e "🌐 公网访问地址:   ${YELLOW}http://${public_ip}:${host_port}${NC}"
+        
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e "${RED}⚠️ 重要提示：${NC}"
+        echo -e "1. ${YELLOW}千万别立刻打开！数据库需要时间初始化，请耐心等待 1 分钟后再打开网页！${NC}"
+        echo -e "2. 首次打开网页时，需要你自行注册一个管理员账号密码。"
+        echo -e "3. 请一定确保云服务器的【安全组】或系统【防火墙】中放行了 ${host_port} 端口！"
+    else
+        echo -e "${RED}部署失败，请检查 Docker Compose 配置和网络。${NC}"
+    fi
+    cd - > /dev/null
+    read -p "按回车键继续..."
+}
+
+function start_mame() {
+    deploy_dir="/opt/mame"
+    if [ -d "$deploy_dir" ] && [ -f "$deploy_dir/docker-compose.yml" ]; then
+        cd "$deploy_dir"
+        if command -v docker compose &> /dev/null; then
+            docker compose start && echo -e "${GREEN}已启动${NC}" || echo -e "${RED}启动失败${NC}"
+        else
+            docker-compose start && echo -e "${GREEN}已启动${NC}" || echo -e "${RED}启动失败${NC}"
+        fi
+        cd - > /dev/null
+    else
+        docker start mame && echo -e "${GREEN}已启动${NC}" || echo -e "${RED}启动失败${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function stop_mame() {
+    deploy_dir="/opt/mame"
+    if [ -d "$deploy_dir" ] && [ -f "$deploy_dir/docker-compose.yml" ]; then
+        cd "$deploy_dir"
+        if command -v docker compose &> /dev/null; then
+            docker compose stop && echo -e "${GREEN}已停止${NC}" || echo -e "${RED}停止失败${NC}"
+        else
+            docker-compose stop && echo -e "${GREEN}已停止${NC}" || echo -e "${RED}停止失败${NC}"
+        fi
+        cd - > /dev/null
+    else
+        docker stop mame && echo -e "${GREEN}已停止${NC}" || echo -e "${RED}停止失败${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function restart_mame() {
+    deploy_dir="/opt/mame"
+    if [ -d "$deploy_dir" ] && [ -f "$deploy_dir/docker-compose.yml" ]; then
+        cd "$deploy_dir"
+        if command -v docker compose &> /dev/null; then
+            docker compose restart && echo -e "${GREEN}已重启${NC}" || echo -e "${RED}重启失败${NC}"
+        else
+            docker-compose restart && echo -e "${GREEN}已重启${NC}" || echo -e "${RED}重启失败${NC}"
+        fi
+        cd - > /dev/null
+    else
+        docker restart mame && echo -e "${GREEN}已重启${NC}" || echo -e "${RED}重启失败${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function uninstall_mame() {
+    read -p "确定要卸载 MAME 吗？(y/N): " confirm
+    if [[ "$confirm" =~ ^[yY]$ ]]; then
+        deploy_dir="/opt/mame"
+        if [ -d "$deploy_dir" ] && [ -f "$deploy_dir/docker-compose.yml" ]; then
+            cd "$deploy_dir"
+            if command -v docker compose &> /dev/null; then
+                docker compose down
+            else
+                docker-compose down
+            fi
+            cd - > /dev/null
+            rm -rf "$deploy_dir"
+        else
+            docker stop mame &>/dev/null
+            docker rm mame &>/dev/null
+        fi
+        echo -e "${GREEN}MAME 已卸载。${NC}"
     fi
     read -p "按回车键继续..."
 }
