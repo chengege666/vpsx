@@ -188,6 +188,13 @@ function view_one_panel_info() {
         1pctl status
         echo -e "\n${BLUE}1Panel 用户信息:${NC}"
         1pctl user-info
+        
+        # 显示访问地址信息
+        echo -e "\n${BLUE}访问地址信息:${NC}"
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}https://${ipv4}:17001${NC}"
+        [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}https://[${ipv6}]:17001${NC}"
+        echo -e "默认端口: 17001 (HTTPS)"
     else
         echo -e "${RED}未检测到 1Panel 安装。${NC}"
     fi
@@ -229,7 +236,12 @@ function nezha_probe_management() {
             2) sudo systemctl start nezha-agent && echo -e "${GREEN}启动指令已发送${NC}" || echo -e "${RED}启动失败${NC}"; sleep 1 ;;
             3) sudo systemctl stop nezha-agent && echo -e "${YELLOW}停止指令已发送${NC}" || echo -e "${RED}停止失败${NC}"; sleep 1 ;;
             4) sudo systemctl restart nezha-agent && echo -e "${GREEN}重启指令已发送${NC}" || echo -e "${RED}重启失败${NC}"; sleep 1 ;;
-            5) clear; systemctl status nezha-agent; read -p "按回车键继续..." ;;
+            5) clear; systemctl status nezha-agent; 
+                echo -e "\n${CYAN}-----------------------------------------${NC}";
+                echo -e "${BLUE}连接信息:${NC}";
+                echo -e "哪吒探针是监控代理，需要连接到哪吒面板服务器";
+                echo -e "请登录您的哪吒面板查看监控数据";
+                read -p "按回车键继续..." ;;
             6) clear; echo -e "${BLUE}正在查看实时日志 (按 Ctrl+C 退出):${NC}"; journalctl -u nezha-agent -n 50 -f ;;
             7) uninstall_nezha_official ;;
             0) break ;;
@@ -3141,11 +3153,25 @@ function libretv_management() {
             echo -e "${RED}⚠️  Docker 服务未运行或未安装！${NC}"
         else
             # 显示当前状态
-            if docker ps -a --format '{{.Names}}' | grep -q "^libretv$"; then
-                echo -e "          状态: ${GREEN}已部署${NC}"
+        if docker ps -a --format '{{.Names}}' | grep -q "^libretv$"; then
+            if docker ps --format '{{.Names}}' | grep -q "^libretv$"; then
+                echo -e "          状态: ${GREEN}运行中${NC}"
+                
+                # 获取映射端口和显示IP信息
+                local host_port=$(docker inspect libretv --format='{{(index (index .NetworkSettings.Ports "8899/tcp") 0).HostPort}}' 2>/dev/null)
+                host_port=${host_port:-8899}
+                
+                IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+                
+                echo -e "${CYAN}-----------------------------------------${NC}"
+                [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+                [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
             else
-                echo -e "          状态: ${RED}未部署${NC}"
+                echo -e "          状态: ${YELLOW}已停止${NC}"
             fi
+        else
+            echo -e "          状态: ${RED}未部署${NC}"
+        fi
         fi
         
         echo -e "${CYAN}=========================================${NC}"
@@ -3781,6 +3807,15 @@ function frps_management() {
         # 显示当前状态
         if systemctl is-active --quiet frps 2>/dev/null; then
             echo -e "          状态: ${GREEN}运行中${NC}"
+            
+            # 显示服务器IP信息
+            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+            
+            echo -e "${CYAN}-----------------------------------------${NC}"
+            echo -e "${BLUE}服务器IP信息:${NC}"
+            [ -n "$ipv4" ] && echo -e "IPv4 地址: ${YELLOW}${ipv4}${NC}"
+            [ -n "$ipv6" ] && echo -e "IPv6 地址: ${YELLOW}${ipv6}${NC}"
+            echo -e "FRPS 默认端口: ${YELLOW}7000${NC}"
         elif [ -f "/etc/systemd/system/frps.service" ]; then
             echo -e "          状态: ${YELLOW}已安装但未运行${NC}"
         else
@@ -5780,6 +5815,16 @@ function safeline_waf_management() {
             # 改为直接检测管理容器是否在运行，更准确
             if docker ps --format '{{.Names}}' | grep -q "^safeline-mgt-api$"; then
                 status_text="${GREEN}运行中${NC}"
+                
+                # 获取映射端口和显示IP信息
+                local host_port=$(docker inspect safeline-mgt-api --format='{{(index (index .NetworkSettings.Ports "9443/tcp") 0).HostPort}}' 2>/dev/null)
+                host_port=${host_port:-9443}
+                
+                IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+                
+                echo -e "${CYAN}-----------------------------------------${NC}"
+                [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}https://${ipv4}:${host_port}${NC}"
+                [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}https://[${ipv6}]:${host_port}${NC}"
             else
                 status_text="${YELLOW}已安装但未运行${NC}"
             fi
@@ -6141,6 +6186,16 @@ function vscode_management() {
         if docker ps -a --format '{{.Names}}' | grep -q "^vscode-server$"; then
             if docker ps --format '{{.Names}}' | grep -q "^vscode-server$"; then
                 status_text="${GREEN}运行中${NC}"
+                
+                # 获取映射端口和显示IP信息
+                local host_port=$(docker inspect vscode-server --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}' 2>/dev/null)
+                host_port=${host_port:-8080}
+                
+                IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+                
+                echo -e "${CYAN}-----------------------------------------${NC}"
+                [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+                [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
             else
                 status_text="${YELLOW}已停止${NC}"
             fi
@@ -6309,6 +6364,16 @@ function lucky_management() {
         if command -v docker &> /dev/null && docker ps -a --format '{{.Names}}' | grep -q "^lucky$"; then
             if docker ps --format '{{.Names}}' | grep -q "^lucky$"; then
                 status_text="${GREEN}运行中 (Docker)${NC}"
+                
+                # 获取映射端口和显示IP信息
+                local host_port=$(docker inspect lucky --format='{{(index (index .NetworkSettings.Ports "16601/tcp") 0).HostPort}}' 2>/dev/null)
+                host_port=${host_port:-16601}
+                
+                IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+                
+                echo -e "${CYAN}-----------------------------------------${NC}"
+                [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+                [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
             else
                 status_text="${YELLOW}已停止 (Docker)${NC}"
             fi
@@ -6317,6 +6382,15 @@ function lucky_management() {
         elif systemctl list-units --full -all | grep -q "lucky.service"; then
             if systemctl is-active --quiet lucky; then
                 status_text="${GREEN}运行中 (直接安装)${NC}"
+                
+                # 显示服务器IP信息
+                IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+                
+                echo -e "${CYAN}-----------------------------------------${NC}"
+                echo -e "${BLUE}服务器IP信息:${NC}"
+                [ -n "$ipv4" ] && echo -e "IPv4 地址: ${YELLOW}${ipv4}${NC}"
+                [ -n "$ipv6" ] && echo -e "IPv6 地址: ${YELLOW}${ipv6}${NC}"
+                echo -e "Lucky 默认端口: ${YELLOW}16601${NC}"
             else
                 status_text="${YELLOW}已停止 (直接安装)${NC}"
             fi
@@ -6870,7 +6944,21 @@ function xiaoya_alist_management() {
             echo -e "${RED}⚠️  Docker 服务未运行或未安装！${NC}"
         else
             if docker ps -a --format '{{.Names}}' | grep -q "^xiaoya-alist$"; then
-                echo -e "          状态: ${GREEN}已部署${NC}"
+                if docker ps --format '{{.Names}}' | grep -q "^xiaoya-alist$"; then
+                    echo -e "          状态: ${GREEN}运行中${NC}"
+                    
+                    # 获取映射端口和显示IP信息
+                    local host_port=$(docker inspect xiaoya-alist --format='{{(index (index .NetworkSettings.Ports "5678/tcp") 0).HostPort}}' 2>/dev/null)
+                    host_port=${host_port:-5678}
+                    
+                    IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+                    
+                    echo -e "${CYAN}-----------------------------------------${NC}"
+                    [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+                    [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+                else
+                    echo -e "          状态: ${YELLOW}已停止${NC}"
+                fi
             else
                 echo -e "          状态: ${RED}未部署${NC}"
             fi
