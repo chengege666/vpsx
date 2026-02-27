@@ -7730,17 +7730,15 @@ function install_librespeed() {
         return
     fi
 
-    if docker ps -a --format '{{.Names}}' | grep -q "^librespeed$"; then
-        echo -e "${YELLOW}检测到 LibreSpeed 已安装。${NC}"
-        read -p "是否重新安装？(y/N): " reinstall
-        [[ ! "$reinstall" =~ ^[yY]$ ]] && return
-        docker stop librespeed &>/dev/null
-        docker rm librespeed &>/dev/null
-    fi
+    # 创建部署目录
+    deploy_dir="/opt/librespeed"
+    mkdir -p "$deploy_dir"
 
+    # 获取端口，默认8888
     read -p "请输入宿主机映射端口 (默认 8888): " host_port
     host_port=${host_port:-8888}
 
+    # 检查端口占用
     if command -v ss &> /dev/null; then
         if ss -tuln | grep -q ":${host_port} "; then
             echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
@@ -7749,49 +7747,125 @@ function install_librespeed() {
         fi
     fi
 
-    echo -e "${BLUE}正在拉取 LibreSpeed 镜像...${NC}"
-    docker pull ghcr.io/librespeed/speedtest:latest
+    # 生成 docker-compose.yml 文件
+    # 修复：使用 linuxserver/librespeed 镜像 (托管在Docker Hub，更稳定)
+    cat > "$deploy_dir/docker-compose.yml" << EOF
+version: '3'
+services:
+  librespeed:
+    image: linuxserver/librespeed:latest
+    container_name: librespeed
+    restart: always
+    ports:
+      - "${host_port}:80"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Asia/Shanghai
+      - TITLE=LibreSpeed
+EOF
 
-    echo -e "${BLUE}正在启动容器...${NC}"
-    docker run -d \
-        --name librespeed \
-        --restart always \
-        -p ${host_port}:80 \
-        -e TITLE="LibreSpeed Test" \
-        -e MODE="standalone" \
-        ghcr.io/librespeed/speedtest:latest
+    echo -e "${BLUE}正在使用 Docker Compose 部署 LibreSpeed...${NC}"
+    cd "$deploy_dir"
+    
+    # 停止并删除旧容器（如果有）
+    if docker ps -a --format '{{.Names}}' | grep -q "^librespeed$"; then
+        echo -e "${YELLOW}清理旧容器...${NC}"
+        docker stop librespeed &>/dev/null
+        docker rm librespeed &>/dev/null
+    fi
+
+    # 拉取并启动
+    if command -v docker compose &> /dev/null; then
+        docker compose pull && docker compose up -d
+    elif command -v docker-compose &> /dev/null; then
+        docker-compose pull && docker-compose up -d
+    else
+        echo -e "${RED}❌ 未检测到 docker-compose，无法部署。${NC}"
+        return
+    fi
 
     if [ $? -eq 0 ]; then
         IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
         echo -e "${GREEN}LibreSpeed 安装成功！${NC}"
+        echo -e "部署目录: ${YELLOW}$deploy_dir${NC}"
+        echo -e "使用的镜像: ${GREEN}linuxserver/librespeed${NC}"
         [ -n "$ipv4" ] && echo -e "访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
         [ -n "$ipv6" ] && echo -e "访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+        echo ""
+        echo -e "${RED}注意：如果无法访问，请务必检查服务器防火墙是否放行了端口 ${host_port}！${NC}"
     else
-        echo -e "${RED}容器启动失败，请检查 Docker 日志。${NC}"
+        echo -e "${RED}部署失败，请检查上方错误日志。${NC}"
     fi
+    cd - > /dev/null
     read -p "按回车键继续..."
 }
 
 function start_librespeed() {
-    docker start librespeed && echo -e "${GREEN}已启动${NC}" || echo -e "${RED}启动失败${NC}"
+    deploy_dir="/opt/librespeed"
+    if [ -d "$deploy_dir" ] && [ -f "$deploy_dir/docker-compose.yml" ]; then
+        cd "$deploy_dir"
+        if command -v docker compose &> /dev/null; then
+            docker compose start && echo -e "${GREEN}已启动${NC}" || echo -e "${RED}启动失败${NC}"
+        else
+            docker-compose start && echo -e "${GREEN}已启动${NC}" || echo -e "${RED}启动失败${NC}"
+        fi
+        cd - > /dev/null
+    else
+        docker start librespeed && echo -e "${GREEN}已启动${NC}" || echo -e "${RED}启动失败${NC}"
+    fi
     read -p "按回车键继续..."
 }
 
 function stop_librespeed() {
-    docker stop librespeed && echo -e "${GREEN}已停止${NC}" || echo -e "${RED}停止失败${NC}"
+    deploy_dir="/opt/librespeed"
+    if [ -d "$deploy_dir" ] && [ -f "$deploy_dir/docker-compose.yml" ]; then
+        cd "$deploy_dir"
+        if command -v docker compose &> /dev/null; then
+            docker compose stop && echo -e "${GREEN}已停止${NC}" || echo -e "${RED}停止失败${NC}"
+        else
+            docker-compose stop && echo -e "${GREEN}已停止${NC}" || echo -e "${RED}停止失败${NC}"
+        fi
+        cd - > /dev/null
+    else
+        docker stop librespeed && echo -e "${GREEN}已停止${NC}" || echo -e "${RED}停止失败${NC}"
+    fi
     read -p "按回车键继续..."
 }
 
 function restart_librespeed() {
-    docker restart librespeed && echo -e "${GREEN}已重启${NC}" || echo -e "${RED}重启失败${NC}"
+    deploy_dir="/opt/librespeed"
+    if [ -d "$deploy_dir" ] && [ -f "$deploy_dir/docker-compose.yml" ]; then
+        cd "$deploy_dir"
+        if command -v docker compose &> /dev/null; then
+            docker compose restart && echo -e "${GREEN}已重启${NC}" || echo -e "${RED}重启失败${NC}"
+        else
+            docker-compose restart && echo -e "${GREEN}已重启${NC}" || echo -e "${RED}重启失败${NC}"
+        fi
+        cd - > /dev/null
+    else
+        docker restart librespeed && echo -e "${GREEN}已重启${NC}" || echo -e "${RED}重启失败${NC}"
+    fi
     read -p "按回车键继续..."
 }
 
 function uninstall_librespeed() {
     read -p "确定要卸载 LibreSpeed 吗？(y/N): " confirm
     if [[ "$confirm" =~ ^[yY]$ ]]; then
-        docker stop librespeed &>/dev/null
-        docker rm librespeed &>/dev/null
+        deploy_dir="/opt/librespeed"
+        if [ -d "$deploy_dir" ] && [ -f "$deploy_dir/docker-compose.yml" ]; then
+            cd "$deploy_dir"
+            if command -v docker compose &> /dev/null; then
+                docker compose down
+            else
+                docker-compose down
+            fi
+            cd - > /dev/null
+            rm -rf "$deploy_dir"
+        else
+            docker stop librespeed &>/dev/null
+            docker rm librespeed &>/dev/null
+        fi
         echo -e "${GREEN}LibreSpeed 已卸载。${NC}"
     fi
     read -p "按回车键继续..."
