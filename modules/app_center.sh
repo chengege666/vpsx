@@ -21,6 +21,7 @@ function app_center_menu() {
         echo -e " ${GREEN}19.${NC} Lucky (大神级 DDNS/反代/SSL)    ${GREEN}20.${NC} Docker 镜像加速站一站式管理"
         echo -e " ${GREEN}21.${NC} 小雅alist 管理                  ${GREEN}22.${NC} Open WebUI 管理"
         echo -e " ${GREEN}23.${NC} LibreSpeed 测速工具             ${GREEN}24.${NC} MAME 街机模拟器"
+        echo -e " ${GREEN}25.${NC} MyIP 工具箱 (IP/网络工具)"
         echo -e "${CYAN}----------------------------------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}================================================================${NC}"
@@ -51,6 +52,7 @@ function app_center_menu() {
             22) open_webui_management ;;
             23) librespeed_management ;;
             24) mame_management ;;
+            25) myip_management ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -8237,3 +8239,165 @@ function uninstall_mame() {
     read -p "按回车键继续..."
 }
 
+# =================================================================
+# MyIP 工具箱管理模块 (基于 jason5ng32/myip)
+# =================================================================
+
+function myip_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}             MyIP 工具箱管理${NC}"
+        
+        local status_text="${RED}未安装${NC}"
+        local host_port=""
+        
+        if docker ps -a --format '{{.Names}}' | grep -q "^myip$"; then
+            if docker inspect --format='{{.State.Status}}' myip 2>/dev/null | grep -q "running"; then
+                status_text="${GREEN}运行中${NC}"
+                host_port=$(docker inspect myip --format='{{(index (index .NetworkSettings.Ports "18966/tcp") 0).HostPort}}' 2>/dev/null)
+            else
+                status_text="${YELLOW}已停止${NC}"
+            fi
+        fi
+
+        echo -e "          状态: ${status_text}"
+        if [ -n "$host_port" ]; then
+            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+            echo -e "${CYAN}-----------------------------------------${NC}"
+            [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+            [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+        fi
+        
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "MyIP 是一个极其强大的 IP 工具箱，支持检查 IP 归属地、"
+        echo -e "DNS 泄露、WebRTC 检测、网速测试、GFW 连通性等。"
+        echo ""
+        echo -e " ${GREEN}1.${NC}  安装/更新 MyIP"
+        echo -e " ${GREEN}2.${NC}  启动 MyIP"
+        echo -e " ${GREEN}3.${NC}  停止 MyIP"
+        echo -e " ${GREEN}4.${NC}  重启 MyIP"
+        echo -e " ${GREEN}5.${NC}  查看容器日志"
+        echo -e " ${GREEN}6.${NC}  卸载 MyIP"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC}  返回上一级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 (0-6): " myip_choice
+
+        case "$myip_choice" in
+            1) install_myip ;;
+            2) manage_myip_container "start" ;;
+            3) manage_myip_container "stop" ;;
+            4) manage_myip_container "restart" ;;
+            5) docker logs --tail 50 myip; read -p "按回车键继续..." ;;
+            6) uninstall_myip ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+function install_myip() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          安装/更新 MyIP 工具箱${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if ! docker info &>/dev/null; then
+        echo -e "${RED}❌ Docker 服务未运行或不可用。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    deploy_dir="/opt/myip"
+    mkdir -p "$deploy_dir"
+
+    read -p "请输入宿主机映射端口 (默认 18966): " host_port
+    host_port=${host_port:-18966}
+
+    # 端口占用检查
+    if command -v ss &> /dev/null; then
+        if ss -tuln | grep -q ":${host_port} "; then
+            echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
+            read -p "按回车键继续..."
+            return
+        fi
+    fi
+
+    cat > "$deploy_dir/docker-compose.yml" << EOF
+services:
+  myip:
+    image: jason5ng32/myip:latest
+    container_name: myip
+    restart: always
+    ports:
+      - "${host_port}:18966"
+    environment:
+      - TZ=Asia/Shanghai
+EOF
+
+    echo -e "${BLUE}正在部署 MyIP 容器...${NC}"
+    cd "$deploy_dir"
+    
+    if docker ps -a --format '{{.Names}}' | grep -q "^myip$"; then
+        docker stop myip &>/dev/null
+        docker rm myip &>/dev/null
+    fi
+
+    if docker compose version &> /dev/null; then
+        docker compose pull && docker compose up -d
+    else
+        docker-compose pull && docker-compose up -d
+    fi
+
+    if [ $? -eq 0 ]; then
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        echo -e "${GREEN}✅ MyIP 工具箱安装成功！${NC}"
+        [ -n "$ipv4" ] && echo -e "访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+    else
+        echo -e "${RED}❌ 部署失败，请检查 Docker 日志。${NC}"
+    fi
+    cd - > /dev/null
+    read -p "按回车键继续..."
+}
+
+function manage_myip_container() {
+    local action=$1
+    local deploy_dir="/opt/myip"
+    if [ -d "$deploy_dir" ] && [ -f "$deploy_dir/docker-compose.yml" ]; then
+        cd "$deploy_dir"
+        if docker compose version &> /dev/null; then
+            docker compose "$action"
+        else
+            docker-compose "$action"
+        fi
+        echo -e "${GREEN}操作 ${action} 已完成。${NC}"
+        cd - > /dev/null
+    else
+        echo -e "${RED}未检测到安装目录。${NC}"
+    fi
+    sleep 1
+}
+
+function uninstall_myip() {
+    read -p "确定要卸载 MyIP 吗？(y/N): " confirm
+    if [[ "$confirm" =~ ^[yY]$ ]]; then
+        deploy_dir="/opt/myip"
+        if [ -d "$deploy_dir" ]; then
+            cd "$deploy_dir"
+            if docker compose version &> /dev/null; then
+                docker compose down
+            else
+                docker-compose down
+            fi
+            cd - > /dev/null
+            rm -rf "$deploy_dir"
+            echo -e "${GREEN}MyIP 已彻底卸载。${NC}"
+        else
+            docker stop myip &>/dev/null
+            docker rm myip &>/dev/null
+            echo -e "${GREEN}容器已移除。${NC}"
+        fi
+    fi
+    read -p "按回车键继续..."
+}
