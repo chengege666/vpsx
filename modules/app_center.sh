@@ -29,11 +29,12 @@ function app_center_menu() {
         echo -e " ${GREEN}18.${NC} VScode 网页版 (code-server)"
         echo -e " ${GREEN}19.${NC} Lucky (大神级 DDNS/反代/SSL工具)"
         echo -e " ${GREEN}20.${NC} Docker 镜像加速站一站式管理"
-        echo -e " ${GREEN}21.${NC} 小雅alist 管理"
+        echo -e " ${GREEN}21.${NC}  小雅alist 管理"
+        echo -e " ${GREEN}22.${NC}  Open WebUI 管理"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-21) : " app_choice
+        read -p "请输入你的选择 (0-22) : " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
@@ -57,6 +58,7 @@ function app_center_menu() {
             19) lucky_management ;;
             20) docker_proxy_management ;;
             21) xiaoya_alist_management ;;
+            22) open_webui_management ;;
             0) break ;; 
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -7413,5 +7415,260 @@ function access_xiaoya_alist_web() {
     echo ""
     echo -e "${YELLOW}提示：默认用户名为 admin。若忘记密码，请在“修改配置”中重置。${NC}"
     read -p "按回车键返回..."
+}
+
+# Open WebUI 管理模块
+function open_webui_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}            Open WebUI 管理${NC}"
+        
+        # 状态检测逻辑
+        local status_text="${RED}未安装${NC}"
+        local host_port=""
+        
+        if docker ps -a --format '{{.Names}}' | grep -q "^open-webui$"; then
+            if docker inspect --format='{{.State.Status}}' open-webui 2>/dev/null | grep -q "running"; then
+                status_text="${GREEN}运行中${NC}"
+                host_port=$(docker inspect open-webui --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}' 2>/dev/null)
+            else
+                status_text="${YELLOW}已停止${NC}"
+            fi
+        fi
+
+        echo -e "          状态: ${status_text}"
+        if [ -n "$host_port" ]; then
+            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+            echo -e "${CYAN}-----------------------------------------${NC}"
+            [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+            [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+        fi
+        
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e " ${GREEN}1.${NC}  安装/更新 Open WebUI"
+        echo -e " ${GREEN}2.${NC}  启动 Open WebUI"
+        echo -e " ${GREEN}3.${NC}  停止 Open WebUI"
+        echo -e " ${GREEN}4.${NC}  重启 Open WebUI"
+        echo -e " ${GREEN}5.${NC}  查看容器状态"
+        echo -e " ${GREEN}6.${NC}  查看容器日志"
+        echo -e " ${GREEN}7.${NC}  卸载 Open WebUI"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC}  返回上一级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 (0-7): " webui_choice
+
+        case "$webui_choice" in
+            1) install_open_webui ;;
+            2) start_open_webui ;;
+            3) stop_open_webui ;;
+            4) restart_open_webui ;;
+            5) view_open_webui_status ;;
+            6) docker logs --tail 50 open-webui; read -p "按回车键继续..." ;;
+            7) uninstall_open_webui ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+function install_open_webui() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          安装/更新 Open WebUI${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    # 检查Docker是否运行
+    if ! docker info &>/dev/null; then
+        echo -e "${RED}❌ Docker 服务未运行或不可用，请先启动Docker服务。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    # 检查磁盘空间
+    echo -e "${BLUE}正在检查系统资源...${NC}"
+    local available_space=$(df /var/lib/docker 2>/dev/null | awk 'NR==2 {print $4}')
+    if [ -n "$available_space" ] && [ "$available_space" -lt 5000000 ]; then
+        echo -e "${RED}❌ 磁盘空间不足！至少需要5GB可用空间。${NC}"
+        echo -e "当前可用空间: $((available_space / 1024))MB"
+        echo -e "${YELLOW}请清理磁盘空间或扩展存储后再试。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    if docker ps -a --format '{{.Names}}' | grep -q "^open-webui$"; then
+        echo -e "${YELLOW}检测到 Open WebUI 已安装。${NC}"
+        read -p "是否重新安装？(y/N): " reinstall
+        [[ ! "$reinstall" =~ ^[yY]$ ]] && return
+        docker stop open-webui &>/dev/null
+        docker rm open-webui &>/dev/null
+    fi
+
+    # 获取宿主机端口
+    read -p "请输入宿主机映射端口 (默认 3000): " host_port
+    host_port=${host_port:-3000}
+
+    # 验证端口占用
+    if command -v ss &> /dev/null; then
+        if ss -tuln | grep -q ":${host_port} "; then
+            echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
+            read -p "按回车键继续..."
+            return
+        fi
+    fi
+
+    echo -e "${BLUE}正在准备数据目录...${NC}"
+    mkdir -p /opt/open-webui/data
+
+    # 先拉取镜像，检查是否成功
+    echo -e "${BLUE}正在拉取 Open WebUI 镜像...${NC}"
+    if docker pull ghcr.io/open-webui/open-webui:main; then
+        echo -e "${GREEN}镜像拉取成功！${NC}"
+        
+        echo -e "${BLUE}正在创建容器...${NC}"
+        docker run -d \
+            --name open-webui \
+            --restart always \
+            -p ${host_port}:8080 \
+            -v /opt/open-webui/data:/app/backend/data \
+            -e "WEBUI_AUTH=true" \
+            -e "OLLAMA_BASE_URLS=http://host.docker.internal:11434" \
+            ghcr.io/open-webui/open-webui:main
+
+        if [ $? -eq 0 ]; then
+            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+
+            echo -e "${GREEN}Open WebUI 安装成功！${NC}"
+            echo -e "${YELLOW}默认用户名: admin${NC}"
+            echo -e "${YELLOW}默认密码: admin123456${NC}"
+            [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+            [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+            echo -e "${CYAN}-----------------------------------------${NC}"
+            echo -e "${YELLOW}重要提示：首次登录后请立即修改默认密码！${NC}"
+        else
+            echo -e "${RED}容器创建失败，请检查 Docker 日志。${NC}"
+        fi
+    else
+        echo -e "${RED}镜像拉取失败，请检查网络连接和磁盘空间。${NC}"
+        echo -e "${YELLOW}可能的原因：${NC}"
+        echo -e "  • 网络连接问题"
+        echo -e "  • 磁盘空间不足（至少需要5GB）"
+        echo -e "  • Docker服务异常"
+    fi
+    read -p "按回车键继续..."
+}
+
+function start_open_webui() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          启动 Open WebUI${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if docker ps -a --format '{{.Names}}' | grep -q "^open-webui$"; then
+        echo -e "${BLUE}正在启动 Open WebUI...${NC}"
+        docker start open-webui
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}Open WebUI 启动成功！${NC}"
+        else
+            echo -e "${RED}启动失败，请检查容器状态。${NC}"
+        fi
+    else
+        echo -e "${RED}未检测到 Open WebUI 容器，请先安装。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function stop_open_webui() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          停止 Open WebUI${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if docker ps -a --format '{{.Names}}' | grep -q "^open-webui$"; then
+        echo -e "${BLUE}正在停止 Open WebUI...${NC}"
+        docker stop open-webui
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}Open WebUI 已停止。${NC}"
+        else
+            echo -e "${RED}停止失败，请检查容器状态。${NC}"
+        fi
+    else
+        echo -e "${RED}未检测到 Open WebUI 容器。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function restart_open_webui() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          重启 Open WebUI${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if docker ps -a --format '{{.Names}}' | grep -q "^open-webui$"; then
+        echo -e "${BLUE}正在重启 Open WebUI...${NC}"
+        docker restart open-webui
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}Open WebUI 重启成功！${NC}"
+        else
+            echo -e "${RED}重启失败，请检查容器状态。${NC}"
+        fi
+    else
+        echo -e "${RED}未检测到 Open WebUI 容器，请先安装。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function view_open_webui_status() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          Open WebUI 状态信息${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if docker ps -a --format '{{.Names}}' | grep -q "^open-webui$"; then
+        echo -e "${BLUE}容器状态:${NC}"
+        docker ps -a --filter "name=open-webui" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+        
+        echo -e "\n${BLUE}容器详细信息:${NC}"
+        docker inspect open-webui --format=''
+        
+        local host_port=$(docker inspect open-webui --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}' 2>/dev/null)
+        if [ -n "$host_port" ]; then
+            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+            echo -e "\n${BLUE}访问信息:${NC}"
+            [ -n "$ipv4" ] && echo -e "IPv4 地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+            [ -n "$ipv6" ] && echo -e "IPv6 地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+        fi
+    else
+        echo -e "${RED}未检测到 Open WebUI 容器。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function uninstall_open_webui() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${RED}          卸载 Open WebUI${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    read -p "确定要卸载 Open WebUI 吗？此操作将删除所有数据 (y/N): " confirm
+    if [[ "$confirm" =~ ^[yY]$ ]]; then
+        if docker ps -a --format '{{.Names}}' | grep -q "^open-webui$"; then
+            docker stop open-webui &>/dev/null
+            docker rm open-webui &>/dev/null
+        fi
+        
+        if [ -d "/opt/open-webui" ]; then
+            read -p "是否删除数据目录 /opt/open-webui？(y/N): " delete_data
+            if [[ "$delete_data" =~ ^[yY]$ ]]; then
+                rm -rf /opt/open-webui
+                echo -e "${GREEN}数据目录已删除。${NC}"
+            fi
+        fi
+        
+        echo -e "${GREEN}Open WebUI 卸载完成。${NC}"
+    else
+        echo "操作已取消。"
+    fi
+    read -p "按回车键继续..."
 }
 
