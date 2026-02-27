@@ -7887,6 +7887,16 @@ function mame_management() {
             if docker ps -a --format '{{.Names}}' | grep -q "^romm$"; then
                 if docker ps --format '{{.Names}}' | grep -q "^romm$"; then
                     echo -e "          状态: ${GREEN}运行中${NC}"
+                    
+                    # 获取映射端口和显示IP信息
+                    local host_port=$(docker inspect romm --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}' 2>/dev/null)
+                    host_port=${host_port:-8080}
+                    
+                    IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+                    
+                    echo -e "${CYAN}-----------------------------------------${NC}"
+                    [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+                    [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
                 else
                     echo -e "          状态: ${YELLOW}已停止${NC}"
                 fi
