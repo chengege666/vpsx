@@ -1330,9 +1330,40 @@ function change_hostname() {
 }
 
 function configure_chinese_locale() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}          中文语言支持管理${NC}"
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e " ${GREEN}1.${NC}  安装/配置中文语言支持"
+        echo -e " ${GREEN}2.${NC}  还原/恢复英文语言环境"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC}  返回上一级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择: " locale_choice
+
+        case "$locale_choice" in
+            1)
+                install_chinese_locale
+                ;;
+            2)
+                restore_chinese_locale
+                ;;
+            0)
+                break
+                ;;
+            *)
+                echo -e "${RED}无效的选择，请重新输入！${NC}"
+                sleep 2
+                ;;
+        esac
+    done
+}
+
+function install_chinese_locale() {
     clear
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}          配置中文语言支持${NC}"
+    echo -e "${GREEN}          安装中文语言支持${NC}"
     echo -e "${CYAN}=========================================${NC}"
     
     # 检查是否为 Debian/Ubuntu
@@ -1387,5 +1418,43 @@ function configure_chinese_locale() {
     echo -e "${GREEN}=== 中文环境配置完成！ ===${NC}"
     echo -e "请执行 ${YELLOW}source ~/.bashrc${NC} 使配置立即生效。"
     echo -e "或断开 SSH 重新连接。测试命令：${YELLOW}date${NC} 应显示中文日期。"
+    read -p "按任意键继续..."
+}
+
+function restore_chinese_locale() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          还原语言支持 (恢复英文)${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    # 1. 还原环境变量
+    echo -e "${BLUE}[1/4] 正在从 ~/.bashrc 中移除中文环境变量...${NC}"
+    sed -i '/export LANG=zh_CN.UTF-8/d' ~/.bashrc
+    sed -i '/export LANGUAGE=zh_CN:zh/d' ~/.bashrc
+    sed -i '/export LC_ALL=zh_CN.UTF-8/d' ~/.bashrc
+    sed -i "/alias cman='man -L zh_CN'/d" ~/.bashrc
+    
+    # 2. 还原系统 Locale
+    echo -e "${BLUE}[2/4] 正在重置系统 Locale 为 en_US.UTF-8...${NC}"
+    if command -v update-locale &>/dev/null; then
+        update-locale LANG=en_US.UTF-8 LC_ALL= LANGUAGE=
+    fi
+    locale-gen en_US.UTF-8
+
+    # 3. 还原 SSH 配置
+    echo -e "${BLUE}[3/4] 正在恢复 SSH AcceptEnv 配置...${NC}"
+    if [ -f /etc/ssh/sshd_config ]; then
+        sed -i 's/^#AcceptEnv LANG LC_*/AcceptEnv LANG LC_*/g' /etc/ssh/sshd_config
+        systemctl restart sshd 2>/dev/null || service ssh restart 2>/dev/null
+    fi
+
+    echo -e "${BLUE}[4/4] 刷新当前会话环境变量...${NC}"
+    export LANG=en_US.UTF-8
+    export LC_ALL=en_US.UTF-8
+    unset LANGUAGE
+
+    echo -e "${GREEN}=== 语言环境还原完成！ ===${NC}"
+    echo -e "系统已切换回英文环境 (en_US.UTF-8)。"
+    echo -e "请执行 ${YELLOW}source ~/.bashrc${NC} 或重新连接 SSH 以完全生效。"
     read -p "按任意键继续..."
 }
