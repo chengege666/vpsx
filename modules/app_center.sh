@@ -2841,7 +2841,7 @@ function install_moontv() {
     mkdir -p /opt/moontv
     
     echo -e "${BLUE}正在拉取镜像...${NC}"
-    docker pull ghcr.io/szemeng76/lunatv:latest
+    docker pull ghcr.io/moontechlab/lunatv:latest
     docker pull apache/kvrocks
 
     echo -e "${BLUE}正在创建 Docker Compose 配置文件...${NC}"
@@ -2850,7 +2850,7 @@ function install_moontv() {
     cat > /opt/moontv/docker-compose.yml << EOF
 services:
   moontv-core:
-    image: ghcr.io/szemeng76/lunatv:latest
+    image: ghcr.io/moontechlab/lunatv:latest
     container_name: moontv-core
     restart: on-failure
     ports:
