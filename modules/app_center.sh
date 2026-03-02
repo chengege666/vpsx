@@ -3133,6 +3133,184 @@ function uninstall_moontv() {
     read -p "按回车键继续..."
 }
 
+function modify_moontv_config() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          修改 MoonTV 配置${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    if [ ! -f "/opt/moontv/docker-compose.yml" ]; then
+        echo -e "${RED}❌ MoonTV 未安装，请先安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+    
+    # 获取当前配置
+    local old_port=$(grep -E "[0-9]+:3000" /opt/moontv/docker-compose.yml | grep -oP "[0-9]+(?=:3000)" | head -1)
+    old_port=${old_port:-3000}
+    
+    local old_username=$(grep -oP "USERNAME=\K[^ ]+" /opt/moontv/docker-compose.yml | head -1)
+    old_username=${old_username:-admin}
+    
+    echo -e "${YELLOW}当前配置：${NC}"
+    echo -e "端口：${GREEN}${old_port}${NC}"
+    echo -e "用户名：${GREEN}${old_username}${NC}"
+    echo -e "密码：${YELLOW}已隐藏${NC}"
+    echo ""
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${YELLOW}提示：${NC}"
+    echo "1. 直接回车表示保持当前配置不变"
+    echo "2. 修改配置后将自动重启容器"
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo ""
+    
+    # 获取新端口
+    read -p "请输入新的宿主机映射端口 [${old_port}]: " new_port
+    new_port=${new_port:-$old_port}
+    
+    # 验证端口
+    if [ "$new_port" != "$old_port" ]; then
+        if command -v ss &> /dev/null; then
+            if ss -tuln | grep -q ":${new_port} "; then
+                echo -e "${RED}❌ 端口 ${new_port} 已被占用，请选择其他端口。${NC}"
+                read -p "按回车键继续..."
+                return
+            fi
+        fi
+    fi
+    
+    # 获取新用户名
+    read -p "请输入新的管理员用户名 [${old_username}]: " new_username
+    new_username=${new_username:-$old_username}
+    
+    # 获取新密码
+    echo ""
+    read -sp "请输入新的管理员密码 (留空表示不变): " new_password
+    echo ""
+    
+    if [ -n "$new_password" ]; then
+        read -sp "请再次输入密码确认： " password_confirm
+        echo ""
+        
+        if [ "$new_password" != "$password_confirm" ]; then
+            echo -e "${RED}❌ 两次输入的密码不一致，配置已取消。${NC}"
+            read -p "按回车键继续..."
+            return
+        fi
+    else
+        new_password=$(grep -oP "PASSWORD=\K[^ ]+" /opt/moontv/docker-compose.yml | head -1)
+    fi
+    
+    # 获取站点名称
+    local old_site_name=$(grep -oP "NEXT_PUBLIC_SITE_NAME=\K.+" /opt/moontv/docker-compose.yml | head -1 | tr -d '"')
+    old_site_name=${old_site_name:-"LunaTV Enhanced"}
+    read -p "请输入站点名称 [${old_site_name}]: " new_site_name
+    new_site_name=${new_site_name:-$old_site_name}
+    
+    echo ""
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo -e "${YELLOW}配置确认：${NC}"
+    echo -e "端口：${GREEN}${new_port}${NC}"
+    echo -e "用户名：${GREEN}${new_username}${NC}"
+    echo -e "站点名称：${GREEN}${new_site_name}${NC}"
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    echo ""
+    
+    read -p "确认修改并重启容器？(y/N): " confirm_modify
+    if [[ ! "$confirm_modify" =~ ^[yY]$ ]]; then
+        echo "配置修改已取消。"
+        read -p "按回车键继续..."
+        return
+    fi
+    
+    echo -e "${BLUE}正在更新配置...${NC}"
+    
+    # 备份原配置
+    cp /opt/moontv/docker-compose.yml /opt/moontv/docker-compose.yml.bak
+    
+    # 创建新的 docker-compose.yml
+    cat > /opt/moontv/docker-compose.yml << EOF
+services:
+  moontv-core:
+    image: ghcr.io/moontechlab/lunatv:latest
+    container_name: moontv-core
+    restart: on-failure
+    ports:
+      - '${new_port}:3000'
+    environment:
+      - USERNAME=${new_username}
+      - PASSWORD=${new_password}
+      - NEXT_PUBLIC_STORAGE_TYPE=kvrocks
+      - KVROCKS_URL=redis://moontv-kvrocks:6666
+      - VIDEO_CACHE_DIR=/app/video-cache
+      - NEXT_PUBLIC_SITE_NAME=${new_site_name}
+    volumes:
+      - video-cache:/app/video-cache
+    depends_on:
+      - moontv-kvrocks
+    networks:
+      moontv-network:
+        aliases:
+          - moontv-core
+
+  moontv-kvrocks:
+    image: apache/kvrocks
+    container_name: moontv-kvrocks
+    restart: unless-stopped
+    volumes:
+      - kvrocks-data:/var/lib/kvrocks
+    networks:
+      moontv-network:
+        aliases:
+          - moontv-kvrocks
+
+networks:
+  moontv-network:
+    name: moontv-network
+    driver: bridge
+
+volumes:
+  kvrocks-data:
+    name: kvrocks-data
+  video-cache:
+    name: video-cache
+EOF
+    
+    echo -e "${BLUE}正在重启容器使配置生效...${NC}"
+    cd /opt/moontv
+    
+    if docker compose version &> /dev/null; then
+        docker_compose_cmd="docker compose"
+    else
+        docker_compose_cmd="docker-compose"
+    fi
+    
+    $docker_compose_cmd up -d
+    
+    if [ $? -eq 0 ]; then
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        
+        echo -e "${GREEN}✅ 配置修改成功！${NC}"
+        echo ""
+        echo -e "${CYAN}新的访问信息：${NC}"
+        [ -n "$ipv4" ] && echo -e "IPv4 访问地址：${YELLOW}http://${ipv4}:${new_port}${NC}"
+        [ -n "$ipv6" ] && echo -e "IPv6 访问地址：${YELLOW}http://[${ipv6}]:${new_port}${NC}"
+        echo ""
+        echo -e "${CYAN}新的登录凭据：${NC}"
+        echo -e "用户名：${GREEN}${new_username}${NC}"
+        echo -e "密码：${GREEN}${new_password}${NC}"
+        echo ""
+        echo -e "${YELLOW}提示：${NC}"
+        echo "容器正在重启中，请稍等片刻后访问新地址"
+    else
+        echo -e "${RED}❌ 配置修改失败，已恢复备份配置。${NC}"
+        cp /opt/moontv/docker-compose.yml.bak /opt/moontv/docker-compose.yml
+    fi
+    
+    cd - > /dev/null
+    read -p "按回车键继续..."
+}
+
 function access_moontv_web() {
     clear
     echo -e "${CYAN}=========================================${NC}"
@@ -3156,12 +3334,12 @@ function access_moontv_web() {
     IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
     
     echo -e "您的 MoonTV 访问地址为："
-    [ -n "$ipv4" ] && echo -e "IPv4 地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
-    [ -n "$ipv6" ] && echo -e "IPv6 地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+    [ -n "$ipv4" ] && echo -e "IPv4 地址：${YELLOW}http://${ipv4}:${host_port}${NC}"
+    [ -n "$ipv6" ] && echo -e "IPv6 地址：${YELLOW}http://[${ipv6}]:${host_port}${NC}"
     echo ""
     echo -e "${CYAN}登录凭据：${NC}"
-    echo -e "用户名: ${GREEN}${username}${NC}"
-    echo -e "密码: ${YELLOW}(安装时设置，可在修改配置中查看)${NC}"
+    echo -e "用户名：${GREEN}${username}${NC}"
+    echo -e "密码：${YELLOW}(安装时设置，可在修改配置中查看)${NC}"
     echo ""
     echo -e "${YELLOW}提示：${NC}"
     echo "1. 如果忘记密码，可通过修改配置功能重置"
