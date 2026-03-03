@@ -22,11 +22,11 @@ function app_center_menu() {
         echo -e " ${GREEN}21.${NC} 小雅alist 管理                  ${GREEN}22.${NC} Open WebUI 管理"
         echo -e " ${GREEN}23.${NC} LibreSpeed 测速工具             ${GREEN}24.${NC} MAME 街机模拟器"
         echo -e " ${GREEN}25.${NC} MyIP 工具箱 (IP/网络工具)       ${GREEN}26.${NC} IT-Tools (万能工具箱)"
-        echo -e " ${GREEN}27.${NC} Uptime Kuma (站点监控)          ${GREEN}28.${NC} 功能待定"
+        echo -e " ${GREEN}27.${NC} Uptime Kuma (站点监控)"
         echo -e "${CYAN}----------------------------------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}================================================================${NC}"
-        read -p "请输入你的选择 (0-28) : " app_choice
+        read -p "请输入你的选择 (0-27) : " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
