@@ -9115,15 +9115,19 @@ ACCESS_PASSWORD=${new_access_pwd}
 SITE_NAME=${new_site_name}
 EOF
 
+    # 在 /opt/kvideo 下创建一个 data 目录
+    mkdir -p "$deploy_dir/data"
+
     docker run -d \
         --name kvideo \
         --restart always \
-        -p ${new_port}:3000 \
-        -e ADMIN_PASSWORD="${new_admin_pwd}" \
-        -e ACCESS_PASSWORD="${new_access_pwd}" \
-        -e NEXT_PUBLIC_SITE_NAME="${new_site_name}" \
+        -p ${host_port}:3000 \
+        -v "$deploy_dir/data:/app/data" \  # <--- 新增这一行进行持久化
+        -e ADMIN_PASSWORD="${admin_pwd}" \
+        -e ACCESS_PASSWORD="${access_pwd}" \
+        -e NEXT_PUBLIC_SITE_NAME="${site_name}" \
         kuekhaoyang/kvideo:latest
-
+        
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✅ 配置已更新！${NC}"
     else
@@ -9137,8 +9141,15 @@ function uninstall_kvideo() {
     if [[ "$confirm" =~ ^[yY]$ ]]; then
         docker stop kvideo &>/dev/null
         docker rm kvideo &>/dev/null
-        rm -rf /opt/kvideo
-        echo -e "${GREEN}✅ KVideo 已卸载。${NC}"
+        
+        read -p "是否删除所有持久化数据 (位于 /opt/kvideo)？(y/N): " del_data
+        if [[ "$del_data" =~ ^[yY]$ ]]; then
+            rm -rf /opt/kvideo
+            echo -e "${GREEN}✅ 数据已清理。${NC}"
+        else
+            echo -e "${YELLOW}已保留数据目录 /opt/kvideo。${NC}"
+        fi
+        echo -e "${GREEN}✅ KVideo 容器已卸载。${NC}"
     fi
     read -p "按回车键继续..."
 }
