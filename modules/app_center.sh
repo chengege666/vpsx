@@ -6,23 +6,79 @@
 function app_center_menu() {
     while true; do
         clear
+        
+        # 获取所有容器名称列表以加速检测
+        local all_containers=""
+        if command -v docker &> /dev/null; then
+            all_containers=$(docker ps -a --format '{{.Names}}' 2>/dev/null)
+        fi
+
+        # 获取所有 systemd 服务状态以加速检测
+        local all_services=""
+        if command -v systemctl &> /dev/null; then
+            all_services=$(systemctl list-units --type=service --all --no-legend --no-pager 2>/dev/null)
+        fi
+
+        # 定义状态检测辅助函数
+        function check_installed() {
+            local type=$1
+            local name=$2
+            case "$type" in
+                "cmd") command -v "$name" &> /dev/null && return 0 ;;
+                "file") [ -f "$name" ] && return 0 ;;
+                "dir") [ -d "$name" ] && return 0 ;;
+                "docker") echo "$all_containers" | grep -q "^$name$" && return 0 ;;
+                "service") echo "$all_services" | grep -q "$name" && return 0 ;;
+            esac
+            return 1
+        }
+
+        # 设置每个菜单项的颜色
+        local c1=$(check_installed "cmd" "1pctl" && echo "$GREEN" || echo "$NC")
+        local c2=$(check_installed "file" "/etc/systemd/system/nezha-agent.service" && echo "$GREEN" || echo "$NC")
+        local c3=$(check_installed "file" "/etc/sysctl.d/99-vpsx-tcp-tuning.conf" && echo "$GREEN" || echo "$NC")
+        local c4=$(check_installed "cmd" "ncdu" && echo "$GREEN" || echo "$NC")
+        local c5=$(check_installed "cmd" "btop" && echo "$GREEN" || echo "$NC")
+        local c6="$NC" # 一键更换软件源，始终白色
+        local c7=$(check_installed "docker" "komari" && echo "$GREEN" || echo "$NC")
+        local c8=$(check_installed "docker" "pansou" && echo "$GREEN" || echo "$NC")
+        local c9=$(check_installed "docker" "watchtower" && echo "$GREEN" || echo "$NC")
+        local c10=$(check_installed "file" "/opt/AdGuardHome/AdGuardHome" && echo "$GREEN" || echo "$NC")
+        local c11=$(check_installed "dir" "/opt/npm" && echo "$GREEN" || echo "$NC")
+        local c12=$(check_installed "docker" "github-proxy" && echo "$GREEN" || echo "$NC")
+        local c13=$(check_installed "docker" "moontv-core" && echo "$GREEN" || echo "$NC")
+        local c14=$(check_installed "docker" "libretv" && echo "$GREEN" || echo "$NC")
+        local c15=$NC; (check_installed "service" "frps" || check_installed "service" "frpc") && c15="$GREEN"
+        local c16=$(check_installed "docker" "safeline-mgt-api" && echo "$GREEN" || echo "$NC")
+        local c17="$NC" # AkileCloud 专用脚本，始终白色
+        local c18=$(check_installed "docker" "vscode-server" && echo "$GREEN" || echo "$NC")
+        local c19=$NC; (check_installed "docker" "lucky" || check_installed "service" "lucky") && c19="$GREEN"
+        local c20=$(check_installed "docker" "registry" && echo "$GREEN" || echo "$NC")
+        local c21=$(check_installed "docker" "xiaoya-alist" && echo "$GREEN" || echo "$NC")
+        local c22=$(check_installed "docker" "open-webui" && echo "$GREEN" || echo "$NC")
+        local c23=$(check_installed "docker" "librespeed" && echo "$GREEN" || echo "$NC")
+        local c24=$(check_installed "docker" "romm" && echo "$GREEN" || echo "$NC")
+        local c25=$(check_installed "docker" "myip" && echo "$GREEN" || echo "$NC")
+        local c26=$(check_installed "docker" "it-tools" && echo "$GREEN" || echo "$NC")
+        local c27=$(check_installed "docker" "uptime-kuma" && echo "$GREEN" || echo "$NC")
+
         echo -e "${CYAN}================================================================${NC}"
         echo -e "${GREEN}                        应用中心菜单${NC}"
         echo -e "${CYAN}================================================================${NC}"
-        echo -e " ${GREEN}1.${NC}  1Panel新一代管理面板            ${GREEN}2.${NC}  哪吒探针VPS监控面板"
-        echo -e " ${GREEN}3.${NC}  TCP窗口调优                     ${GREEN}4.${NC}  磁盘空间分析"
-        echo -e " ${GREEN}5.${NC}  BTOP系统监控工具                ${GREEN}6.${NC}  一键更换软件源"
-        echo -e " ${GREEN}7.${NC}  Komari管理                      ${GREEN}8.${NC}  PanSou网盘管理"
-        echo -e " ${GREEN}9.${NC}  Watchtower容器自动更新          ${GREEN}10.${NC} AdGuard Home安装（vps）"
-        echo -e " ${GREEN}11.${NC} Nginx Proxy Manager管理         ${GREEN}12.${NC} GitHub加速站"
-        echo -e " ${GREEN}13.${NC} MoonTV流媒体应用管理            ${GREEN}14.${NC} LibreTV流媒体应用管理"
-        echo -e " ${GREEN}15.${NC} FRP内网穿透管理                 ${GREEN}16.${NC} 雷池WAF安全防护系统"
-        echo -e " ${GREEN}17.${NC} AkileCloud专用脚本              ${GREEN}18.${NC} VScode 网页版 (code-server)"
-        echo -e " ${GREEN}19.${NC} Lucky (大神级 DDNS/反代/SSL)    ${GREEN}20.${NC} Docker 镜像加速站一站式管理"
-        echo -e " ${GREEN}21.${NC} 小雅alist 管理                  ${GREEN}22.${NC} Open WebUI 管理"
-        echo -e " ${GREEN}23.${NC} LibreSpeed 测速工具             ${GREEN}24.${NC} MAME 街机模拟器"
-        echo -e " ${GREEN}25.${NC} MyIP 工具箱 (IP/网络工具)       ${GREEN}26.${NC} IT-Tools (万能工具箱)"
-        echo -e " ${GREEN}27.${NC} Uptime Kuma (站点监控)"
+        echo -e " ${GREEN}1.${NC}  ${c1}1Panel新一代管理面板${NC}            ${GREEN}2.${NC}  ${c2}哪吒探针VPS监控面板${NC}"
+        echo -e " ${GREEN}3.${NC}  ${c3}TCP窗口调优${NC}                     ${GREEN}4.${NC}  ${c4}磁盘空间分析${NC}"
+        echo -e " ${GREEN}5.${NC}  ${c5}BTOP系统监控工具${NC}                ${GREEN}6.${NC}  ${c6}一键更换软件源${NC}"
+        echo -e " ${GREEN}7.${NC}  ${c7}Komari管理${NC}                      ${GREEN}8.${NC}  ${c8}PanSou网盘管理${NC}"
+        echo -e " ${GREEN}9.${NC}  ${c9}Watchtower容器自动更新${NC}          ${GREEN}10.${NC} ${c10}AdGuard Home安装（vps）${NC}"
+        echo -e " ${GREEN}11.${NC} ${c11}Nginx Proxy Manager管理${NC}         ${GREEN}12.${NC} ${c12}GitHub加速站${NC}"
+        echo -e " ${GREEN}13.${NC} ${c13}MoonTV流媒体应用管理${NC}            ${GREEN}14.${NC} ${c14}LibreTV流媒体应用管理${NC}"
+        echo -e " ${GREEN}15.${NC} ${c15}FRP内网穿透管理${NC}                 ${GREEN}16.${NC} ${c16}雷池WAF安全防护系统${NC}"
+        echo -e " ${GREEN}17.${NC} ${c17}AkileCloud专用脚本${NC}              ${GREEN}18.${NC} ${c18}VScode 网页版 (code-server)${NC}"
+        echo -e " ${GREEN}19.${NC} ${c19}Lucky (大神级 DDNS/反代/SSL)${NC}    ${GREEN}20.${NC} ${c20}Docker 镜像加速站一站式管理${NC}"
+        echo -e " ${GREEN}21.${NC} ${c21}小雅alist 管理${NC}                  ${GREEN}22.${NC} ${c22}Open WebUI 管理${NC}"
+        echo -e " ${GREEN}23.${NC} ${c23}LibreSpeed 测速工具${NC}             ${GREEN}24.${NC} ${c24}MAME 街机模拟器${NC}"
+        echo -e " ${GREEN}25.${NC} ${c25}MyIP 工具箱 (IP/网络工具)${NC}       ${GREEN}26.${NC} ${c26}IT-Tools (万能工具箱)${NC}"
+        echo -e " ${GREEN}27.${NC} ${c27}Uptime Kuma (站点监控)${NC}"
         echo -e "${CYAN}----------------------------------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}================================================================${NC}"
