@@ -61,6 +61,7 @@ function app_center_menu() {
         local c25=$(check_installed "docker" "myip" && echo "$GREEN" || echo "$NC")
         local c26=$(check_installed "docker" "it-tools" && echo "$GREEN" || echo "$NC")
         local c27=$(check_installed "docker" "uptime-kuma" && echo "$GREEN" || echo "$NC")
+        local c28=$(check_installed "docker" "beecount-cloud" && echo "$GREEN" || echo "$NC")
 
         echo -e "${CYAN}================================================================${NC}"
         echo -e "${GREEN}                        应用中心菜单${NC}"
@@ -78,7 +79,7 @@ function app_center_menu() {
         echo -e " ${GREEN}21.${NC} ${c21}小雅alist 管理${NC}                  ${GREEN}22.${NC} ${c22}Open WebUI 管理${NC}"
         echo -e " ${GREEN}23.${NC} ${c23}LibreSpeed 测速工具${NC}             ${GREEN}24.${NC} ${c24}MAME 街机模拟器${NC}"
         echo -e " ${GREEN}25.${NC} ${c25}MyIP 工具箱 (IP/网络工具)${NC}       ${GREEN}26.${NC} ${c26}IT-Tools (万能工具箱)${NC}"
-        echo -e " ${GREEN}27.${NC} ${c27}Uptime Kuma (站点监控)${NC}"
+        echo -e " ${GREEN}27.${NC} ${c27}Uptime Kuma (站点监控)${NC}          ${GREEN}28.${NC} ${c28}蜜蜂记账 (个人记账系统)${NC}"
         echo -e "${CYAN}----------------------------------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}================================================================${NC}"
@@ -112,6 +113,7 @@ function app_center_menu() {
             25) myip_management ;;
             26) it_tools_management ;;
             27) uptime_kuma_management ;;
+            28) beecount_management ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -8991,6 +8993,129 @@ function uninstall_uptime_kuma() {
         echo -e "${GREEN}卸载流程完成。${NC}"
     else
         echo -e "${YELLOW}已取消卸载操作。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+# 密封记账 (BeeCount) 管理模块
+function beecount_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}             密封记账 (BeeCount)${NC}"
+        
+        local status_text="${RED}未安装${NC}"
+        if docker ps -a --format '{{.Names}}' | grep -q "^beecount-cloud$"; then
+            if docker inspect --format='{{.State.Status}}' beecount-cloud 2>/dev/null | grep -q "running"; then
+                status_text="${GREEN}运行中${NC}"
+            else
+                status_text="${YELLOW}已停止${NC}"
+            fi
+        fi
+        
+        echo -e "          状态: ${status_text}"
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e " ${GREEN}1.${NC} 安装/更新 蜜蜂记账"
+        echo -e " ${GREEN}2.${NC} 启动 蜜蜂记账"
+        echo -e " ${GREEN}3.${NC} 停止 蜜蜂记账"
+        echo -e " ${GREEN}4.${NC} 重启 蜜蜂记账"
+        echo -e " ${GREEN}5.${NC} 查看容器日志"
+        echo -e " ${GREEN}6.${NC} 卸载 蜜蜂记账"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC} 返回应用中心菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入选择 (0-6): " choice
+
+        case "$choice" in
+            1) install_beecount ;;
+            2) cd /opt/beecount && docker compose start ;;
+            3) cd /opt/beecount && docker compose stop ;;
+            4) cd /opt/beecount && docker compose restart ;;
+            5) docker logs --tail 50 beecount-cloud; read -p "按回车键继续..." ;;
+            6) uninstall_beecount ;;
+            0) break ;;
+            *) echo -e "${RED}无效选择${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+function install_beecount() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          安装/更新 蜜蜂记账${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    mkdir -p /opt/beecount
+    read -p "请输入宿主机映射端口 (默认 8080): " host_port
+    host_port=${host_port:-8080}
+
+    cat > /opt/beecount/docker-compose.yml << EOF
+services:
+  beecount-cloud:
+    image: sunxiao0721/beecount-cloud:latest
+    container_name: beecount-cloud
+    restart: unless-stopped
+    ports:
+      - "${host_port}:8080"
+    volumes:
+      - beecount_data:/data
+
+volumes:
+  beecount_data:
+EOF
+
+    echo -e "${BLUE}正在拉取镜像并部署...${NC}"
+    cd /opt/beecount
+    # 强制重新部署以触发初始密码生成
+    docker compose down &>/dev/null
+    docker compose pull
+    docker compose up -d
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ 蜜蜂记账 容器已启动。${NC}"
+        
+        # 循环检查日志，等待初始化完成
+        echo -e "${BLUE}正在监听日志以获取管理员账号 (最长等待 15 秒)...${NC}"
+        
+        local found=0
+        for i in {1..5}; do
+            local logs=$(docker logs beecount-cloud 2>&1)
+            if echo "$logs" | grep -q "初始创建管理员账号"; then
+                local email=$(echo "$logs" | grep -oP '邮箱:\s*\K\S+')
+                local password=$(echo "$logs" | grep -oP '密码:\s*\K\S+')
+                
+                echo -e "${CYAN}-----------------------------------------${NC}"
+                echo -e "${GREEN}发现初始管理员账号: ${email}${NC}"
+                echo -e "${GREEN}发现初始管理员密码: ${password}${NC}"
+                echo -e "${CYAN}-----------------------------------------${NC}"
+                found=1
+                break
+            fi
+            sleep 3
+        done
+
+        if [ $found -eq 0 ]; then
+            echo -e "${YELLOW}提示：未能在日志中捕捉到初始密码。${NC}"
+            echo -e "可能原因："
+            echo -e "1. 容器早已完成初始化，请使用上次设置的密码。"
+            echo -e "2. 容器尚未完全就绪，请稍后运行: ${CYAN}docker logs beecount-cloud${NC}"
+        fi
+        
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        echo -e "访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+    else
+        echo -e "${RED}❌ 部署失败${NC}"
+    fi
+    cd - > /dev/null
+    read -p "按回车键继续..."
+}
+
+function uninstall_beecount() {
+    read -p "确定要卸载 蜜蜂记账 吗？(y/N): " confirm
+    if [[ "$confirm" =~ ^[yY]$ ]]; then
+        cd /opt/beecount && docker compose down -v
+        rm -rf /opt/beecount
+        echo -e "${GREEN}蜜蜂记账 已彻底卸载。${NC}"
     fi
     read -p "按回车键继续..."
 }
