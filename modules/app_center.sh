@@ -9400,30 +9400,20 @@ function install_rustdesk() {
     local deploy_dir="/opt/rustdesk"
     mkdir -p "$deploy_dir/data"
 
-    local default_hbbs_port=21116
-    local default_hbbr_port=21117
-
-    if [ -f "$deploy_dir/docker-compose.yml" ]; then
-        local exist_hbbs=$(grep -oP '^\s+-\s+"\K[0-9]+(?=:21116")' "$deploy_dir/docker-compose.yml" | head -1)
-        local exist_hbbr=$(grep -oP '^\s+-\s+"\K[0-9]+(?=:21117")' "$deploy_dir/docker-compose.yml" | head -1)
-        default_hbbs_port=${exist_hbbs:-21116}
-        default_hbbr_port=${exist_hbbr:-21117}
-    fi
-
-    read -p "请输入 hbbs ID 服务端口 (默认 $default_hbbs_port): " hbbs_port
-    hbbs_port=${hbbs_port:-$default_hbbs_port}
-    read -p "请输入 hbbr 中继服务端口 (默认 $default_hbbr_port): " hbbr_port
-    hbbr_port=${hbbr_port:-$default_hbbr_port}
+    local hbbs_port=21116
+    local hbbr_port=21117
 
     if ! docker ps -a --format '{{.Names}}' | grep -q "^rustdesk-hbbs$"; then
         if command -v ss &> /dev/null; then
-            if ss -tuln | grep -q ":${hbbs_port} "; then
-                echo -e "${RED}❌ 端口 ${hbbs_port} 已被占用。${NC}"
-                read -p "按回车键继续..."
-                return
-            fi
-            if ss -tuln | grep -q ":${hbbr_port} "; then
-                echo -e "${RED}❌ 端口 ${hbbr_port} 已被占用。${NC}"
+            local port_check_failed=0
+            for p in 21115 21116 21117; do
+                if ss -tuln | grep -q ":${p} "; then
+                    echo -e "${RED}❌ 端口 ${p} 已被占用。RustDesk 需要使用端口 21115、21116、21117。${NC}"
+                    port_check_failed=1
+                fi
+            done
+            if [ $port_check_failed -eq 1 ]; then
+                echo -e "${YELLOW}请先释放以上端口后再安装。${NC}"
                 read -p "按回车键继续..."
                 return
             fi
@@ -9438,7 +9428,7 @@ services:
     restart: always
     command: hbbs
     ports:
-      - "${hbbs_port}:21115"
+      - "21115:21115"
       - "${hbbs_port}:21116"
       - "${hbbs_port}:21116/udp"
     volumes:
