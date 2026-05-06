@@ -63,6 +63,7 @@ function app_center_menu() {
         local c27=$(check_installed "docker" "uptime-kuma" && echo "$GREEN" || echo "$NC")
         local c28=$(check_installed "docker" "beecount-cloud" && echo "$GREEN" || echo "$NC")
         local c29=$(check_installed "docker" "pairdrop" && echo "$GREEN" || echo "$NC")
+        local c30=$(check_installed "docker" "rustdesk-hbbs" && echo "$GREEN" || echo "$NC")
 
         echo -e "${CYAN}================================================================${NC}"
         echo -e "${GREEN}                        应用中心菜单${NC}"
@@ -81,11 +82,11 @@ function app_center_menu() {
         echo -e " ${GREEN}23.${NC} ${c23}LibreSpeed 测速工具${NC}             ${GREEN}24.${NC} ${c24}MAME 街机模拟器${NC}"
         echo -e " ${GREEN}25.${NC} ${c25}MyIP 工具箱 (IP/网络工具)${NC}       ${GREEN}26.${NC} ${c26}IT-Tools (万能工具箱)${NC}"
         echo -e " ${GREEN}27.${NC} ${c27}Uptime Kuma (站点监控)${NC}          ${GREEN}28.${NC} ${c28}蜜蜂记账 (个人记账系统)${NC}"
-        echo -e " ${GREEN}29.${NC} ${c29}PairDrop (局域网文件传输)${NC}"
+        echo -e " ${GREEN}29.${NC} ${c29}PairDrop (局域网文件传输)${NC}       ${GREEN}30.${NC} ${c30}RustDesk (远程桌面服务端)${NC}"
         echo -e "${CYAN}----------------------------------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}================================================================${NC}"
-        read -p "请输入你的选择 (0-29) : " app_choice
+        read -p "请输入你的选择 (0-30) : " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
@@ -117,6 +118,7 @@ function app_center_menu() {
             27) uptime_kuma_management ;;
             28) beecount_management ;;
             29) pairdrop_management ;;
+            30) rustdesk_management ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -9288,6 +9290,244 @@ function uninstall_pairdrop() {
         else
             docker stop pairdrop &>/dev/null
             docker rm pairdrop &>/dev/null
+            echo -e "${GREEN}容器已移除。${NC}"
+        fi
+    else
+        echo -e "${YELLOW}已取消卸载。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+# RustDesk 远程桌面服务端
+function rustdesk_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}           RustDesk 管理${NC}"
+
+        local status_text="${RED}未安装${NC}"
+        local hbbs_port=""
+        local hbbr_port=""
+        local pub_key=""
+
+        if docker ps -a --format '{{.Names}}' | grep -q "^rustdesk-hbbs$"; then
+            if docker inspect --format='{{.State.Status}}' rustdesk-hbbs 2>/dev/null | grep -q "running"; then
+                status_text="${GREEN}运行中${NC}"
+                hbbs_port=$(docker inspect rustdesk-hbbs --format='{{(index (index .NetworkSettings.Ports "21116/tcp") 0).HostPort}}' 2>/dev/null)
+                hbbr_port=$(docker inspect rustdesk-hbbr --format='{{(index (index .NetworkSettings.Ports "21117/tcp") 0).HostPort}}' 2>/dev/null)
+                if [ -f "/opt/rustdesk/data/id_ed25519.pub" ]; then
+                    pub_key=$(cat /opt/rustdesk/data/id_ed25519.pub 2>/dev/null)
+                fi
+            else
+                status_text="${YELLOW}已停止${NC}"
+            fi
+        fi
+
+        echo -e "          状态: ${status_text}"
+        if [ -n "$hbbs_port" ]; then
+            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+            echo -e "${CYAN}-----------------------------------------${NC}"
+            [ -n "$ipv4" ] && echo -e "ID 服务器: ${YELLOW}${ipv4}:${hbbs_port}${NC}"
+            [ -n "$ipv6" ] && echo -e "ID 服务器: ${YELLOW}[${ipv6}]:${hbbs_port}${NC}"
+            [ -n "$ipv4" ] && [ -n "$hbbr_port" ] && echo -e "中继服务器: ${YELLOW}${ipv4}:${hbbr_port}${NC}"
+            if [ -n "$pub_key" ]; then
+                echo -e "公钥 (Key): ${YELLOW}${pub_key}${NC}"
+            fi
+        fi
+
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "RustDesk 是一款开源的远程桌面软件，自建"
+        echo -e "服务端后可完全掌控数据传输，安全可靠。"
+        echo ""
+        echo -e " ${GREEN}1.${NC} 安装/更新 RustDesk 服务端"
+        echo -e " ${GREEN}2.${NC} 启动 RustDesk"
+        echo -e " ${GREEN}3.${NC} 停止 RustDesk"
+        echo -e " ${GREEN}4.${NC} 重启 RustDesk"
+        echo -e " ${GREEN}5.${NC} 查看容器日志"
+        echo -e " ${GREEN}6.${NC} 查看公钥 (Key)"
+        echo -e " ${GREEN}7.${NC} 卸载 RustDesk"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC} 返回上一级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 (0-7): " rust_choice
+
+        case "$rust_choice" in
+            1) install_rustdesk ;;
+            2) manage_rustdesk_container "start" ;;
+            3) manage_rustdesk_container "stop" ;;
+            4) manage_rustdesk_container "restart" ;;
+            5)
+                echo -e "${BLUE}--- hbbs 日志 ---${NC}"
+                docker logs --tail 30 rustdesk-hbbs 2>/dev/null
+                echo -e "${BLUE}--- hbbr 日志 ---${NC}"
+                docker logs --tail 30 rustdesk-hbbr 2>/dev/null
+                read -p "按回车键继续..."
+                ;;
+            6)
+                clear
+                echo -e "${CYAN}=========================================${NC}"
+                echo -e "${GREEN}          RustDesk 公钥 (Key)${NC}"
+                echo -e "${CYAN}=========================================${NC}"
+                if [ -f "/opt/rustdesk/data/id_ed25519.pub" ]; then
+                    pub_key=$(cat /opt/rustdesk/data/id_ed25519.pub)
+                    echo -e "公钥: ${YELLOW}${pub_key}${NC}"
+                    echo ""
+                    echo -e "在 RustDesk 客户端中填入以上公钥即可。"
+                else
+                    echo -e "${RED}未找到公钥文件，请先安装并启动服务端。${NC}"
+                fi
+                read -p "按回车键继续..."
+                ;;
+            7) uninstall_rustdesk ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+function install_rustdesk() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}        安装/更新 RustDesk 服务端${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if ! docker info &>/dev/null; then
+        echo -e "${RED}❌ Docker 服务未运行。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    local deploy_dir="/opt/rustdesk"
+    mkdir -p "$deploy_dir/data"
+
+    local default_hbbs_port=21116
+    local default_hbbr_port=21117
+
+    if [ -f "$deploy_dir/docker-compose.yml" ]; then
+        local exist_hbbs=$(grep -oP '^\s+-\s+"\K[0-9]+(?=:21116")' "$deploy_dir/docker-compose.yml" | head -1)
+        local exist_hbbr=$(grep -oP '^\s+-\s+"\K[0-9]+(?=:21117")' "$deploy_dir/docker-compose.yml" | head -1)
+        default_hbbs_port=${exist_hbbs:-21116}
+        default_hbbr_port=${exist_hbbr:-21117}
+    fi
+
+    read -p "请输入 hbbs ID 服务端口 (默认 $default_hbbs_port): " hbbs_port
+    hbbs_port=${hbbs_port:-$default_hbbs_port}
+    read -p "请输入 hbbr 中继服务端口 (默认 $default_hbbr_port): " hbbr_port
+    hbbr_port=${hbbr_port:-$default_hbbr_port}
+
+    if ! docker ps -a --format '{{.Names}}' | grep -q "^rustdesk-hbbs$"; then
+        if command -v ss &> /dev/null; then
+            if ss -tuln | grep -q ":${hbbs_port} "; then
+                echo -e "${RED}❌ 端口 ${hbbs_port} 已被占用。${NC}"
+                read -p "按回车键继续..."
+                return
+            fi
+            if ss -tuln | grep -q ":${hbbr_port} "; then
+                echo -e "${RED}❌ 端口 ${hbbr_port} 已被占用。${NC}"
+                read -p "按回车键继续..."
+                return
+            fi
+        fi
+    fi
+
+    cat > "$deploy_dir/docker-compose.yml" << EOF
+services:
+  hbbs:
+    image: rustdesk/rustdesk-server:latest
+    container_name: rustdesk-hbbs
+    restart: always
+    command: hbbs
+    ports:
+      - "${hbbs_port}:21115"
+      - "${hbbs_port}:21116"
+      - "${hbbs_port}:21116/udp"
+    volumes:
+      - ./data:/root
+    environment:
+      - TZ=Asia/Shanghai
+
+  hbbr:
+    image: rustdesk/rustdesk-server:latest
+    container_name: rustdesk-hbbr
+    restart: always
+    command: hbbr
+    ports:
+      - "${hbbr_port}:21117"
+    volumes:
+      - ./data:/root
+    environment:
+      - TZ=Asia/Shanghai
+EOF
+
+    echo -e "${BLUE}正在拉取镜像并部署...${NC}"
+    cd "$deploy_dir"
+
+    docker stop rustdesk-hbbs rustdesk-hbbr &>/dev/null
+    docker rm rustdesk-hbbs rustdesk-hbbr &>/dev/null
+
+    if docker compose version &> /dev/null; then
+        docker compose pull && docker compose up -d --remove-orphans
+    else
+        docker-compose pull && docker-compose up -d --remove-orphans
+    fi
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ RustDesk 服务端安装/更新成功！${NC}"
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        [ -n "$ipv4" ] && echo -e "ID 服务器: ${YELLOW}${ipv4}:${hbbs_port}${NC}"
+        [ -n "$ipv4" ] && echo -e "中继服务器: ${YELLOW}${ipv4}:${hbbr_port}${NC}"
+        sleep 2
+        if [ -f "$deploy_dir/data/id_ed25519.pub" ]; then
+            local pub_key=$(cat "$deploy_dir/data/id_ed25519.pub")
+            echo -e "公钥 (Key): ${YELLOW}${pub_key}${NC}"
+            echo -e "${GREEN}请在 RustDesk 客户端中填入以上信息。${NC}"
+        else
+            echo -e "${YELLOW}公钥正在生成中，请稍后查看。${NC}"
+        fi
+    else
+        echo -e "${RED}❌ 部署失败。${NC}"
+    fi
+    cd - > /dev/null
+    read -p "按回车键继续..."
+}
+
+function manage_rustdesk_container() {
+    local action=$1
+    local deploy_dir="/opt/rustdesk"
+    if [ -d "$deploy_dir" ] && [ -f "$deploy_dir/docker-compose.yml" ]; then
+        cd "$deploy_dir"
+        echo -e "${BLUE}正在对 RustDesk 执行 ${action} 操作...${NC}"
+        if docker compose version &> /dev/null; then
+            docker compose "$action"
+        else
+            docker-compose "$action"
+        fi
+        echo -e "${GREEN}操作完成。${NC}"
+        cd - > /dev/null
+    else
+        echo -e "${RED}❌ 未检测到安装目录。${NC}"
+    fi
+    sleep 1
+}
+
+function uninstall_rustdesk() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${RED}          卸载 RustDesk${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    read -p "确定要彻底删除 RustDesk 服务端吗？(y/N): " confirm
+    if [[ "$confirm" =~ ^[yY]$ ]]; then
+        local deploy_dir="/opt/rustdesk"
+        if [ -d "$deploy_dir" ]; then
+            cd "$deploy_dir"
+            if docker compose version &> /dev/null; then docker compose down; else docker-compose down; fi
+            cd - > /dev/null
+            rm -rf "$deploy_dir"
+            echo -e "${GREEN}✅ RustDesk 已彻底卸载。${NC}"
+        else
+            docker stop rustdesk-hbbs rustdesk-hbbr &>/dev/null
+            docker rm rustdesk-hbbs rustdesk-hbbr &>/dev/null
             echo -e "${GREEN}容器已移除。${NC}"
         fi
     else
