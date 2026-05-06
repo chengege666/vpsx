@@ -9220,7 +9220,7 @@ function install_portainer() {
     cat > "$deploy_dir/docker-compose.yml" << EOF
 services:
   portainer:
-    image: portainer/portainer-ce:latest
+    image: shangbiao/portainer-zh:latest
     container_name: portainer
     restart: always
     ports:
