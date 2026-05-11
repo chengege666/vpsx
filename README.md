@@ -38,7 +38,9 @@ git clone https://github.com/chengege666/vpsx.git /root/vpsx && chmod +x /root/v
 ```bash
 bash <(curl -sL vpsx.1231818.xyz)
 ```
-
+```bash
+bash <(curl -sL https://lj.1231818.xyz/vpsx)
+```
 ## ⌨️ 常用命令
 
 安装完成后，您可以使用以下命令：
