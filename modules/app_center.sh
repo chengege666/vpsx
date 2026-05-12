@@ -36,87 +36,82 @@ function app_center_menu() {
         # 设置每个菜单项的颜色
         local c1=$(check_installed "cmd" "1pctl" && echo "$GREEN" || echo "$NC")
         local c2=$(check_installed "file" "/etc/systemd/system/nezha-agent.service" && echo "$GREEN" || echo "$NC")
-        local c3=$(check_installed "cmd" "ncdu" && echo "$GREEN" || echo "$NC")
-        local c4=$(check_installed "cmd" "btop" && echo "$GREEN" || echo "$NC")
-        local c5="$NC" # 一键更换软件源，始终白色
-        local c6=$(check_installed "docker" "komari" && echo "$GREEN" || echo "$NC")
-        local c7=$(check_installed "docker" "pansou" && echo "$GREEN" || echo "$NC")
-        local c8=$(check_installed "docker" "watchtower" && echo "$GREEN" || echo "$NC")
-        local c9=$(check_installed "file" "/opt/AdGuardHome/AdGuardHome" && echo "$GREEN" || echo "$NC")
-        local c10=$(check_installed "dir" "/opt/npm" && echo "$GREEN" || echo "$NC")
-        local c11=$(check_installed "docker" "github-proxy" && echo "$GREEN" || echo "$NC")
-        local c12=$(check_installed "docker" "moontv-core" && echo "$GREEN" || echo "$NC")
-        local c13=$(check_installed "docker" "libretv" && echo "$GREEN" || echo "$NC")
-        local c14=$NC; (check_installed "service" "frps" || check_installed "service" "frpc") && c14="$GREEN"
-        local c15=$(check_installed "docker" "safeline-mgt-api" && echo "$GREEN" || echo "$NC")
-        local c16="$NC" # AkileCloud 专用脚本，始终白色
-        local c17=$(check_installed "docker" "vscode-server" && echo "$GREEN" || echo "$NC")
-        local c18=$NC; (check_installed "docker" "lucky" || check_installed "service" "lucky") && c18="$GREEN"
-        local c19=$(check_installed "docker" "registry" && echo "$GREEN" || echo "$NC")
-        local c20=$(check_installed "docker" "xiaoya-alist" && echo "$GREEN" || echo "$NC")
-        local c21=$(check_installed "docker" "open-webui" && echo "$GREEN" || echo "$NC")
-        local c22=$(check_installed "docker" "librespeed" && echo "$GREEN" || echo "$NC")
-        local c23=$(check_installed "docker" "romm" && echo "$GREEN" || echo "$NC")
-        local c24=$(check_installed "docker" "myip" && echo "$GREEN" || echo "$NC")
-        local c25=$(check_installed "docker" "it-tools" && echo "$GREEN" || echo "$NC")
-        local c26=$(check_installed "docker" "uptime-kuma" && echo "$GREEN" || echo "$NC")
-        local c27=$(check_installed "docker" "beecount-cloud" && echo "$GREEN" || echo "$NC")
-        local c28=$(check_installed "docker" "pairdrop" && echo "$GREEN" || echo "$NC")
-        local c29=$(check_installed "docker" "rustdesk-hbbs" && echo "$GREEN" || echo "$NC")
+        local c3="$NC" # 一键更换软件源，始终白色
+        local c4=$(check_installed "docker" "komari" && echo "$GREEN" || echo "$NC")
+        local c5=$(check_installed "docker" "pansou" && echo "$GREEN" || echo "$NC")
+        local c6=$(check_installed "docker" "watchtower" && echo "$GREEN" || echo "$NC")
+        local c7=$(check_installed "file" "/opt/AdGuardHome/AdGuardHome" && echo "$GREEN" || echo "$NC")
+        local c8=$(check_installed "dir" "/opt/npm" && echo "$GREEN" || echo "$NC")
+        local c9=$(check_installed "docker" "github-proxy" && echo "$GREEN" || echo "$NC")
+        local c10=$(check_installed "docker" "moontv-core" && echo "$GREEN" || echo "$NC")
+        local c11=$(check_installed "docker" "libretv" && echo "$GREEN" || echo "$NC")
+        local c12=$NC; (check_installed "service" "frps" || check_installed "service" "frpc") && c12="$GREEN"
+        local c13=$(check_installed "docker" "safeline-mgt-api" && echo "$GREEN" || echo "$NC")
+        local c14="$NC" # AkileCloud 专用脚本，始终白色
+        local c15=$(check_installed "docker" "vscode-server" && echo "$GREEN" || echo "$NC")
+        local c16=$NC; (check_installed "docker" "lucky" || check_installed "service" "lucky") && c16="$GREEN"
+        local c17=$(check_installed "docker" "registry" && echo "$GREEN" || echo "$NC")
+        local c18=$(check_installed "docker" "xiaoya-alist" && echo "$GREEN" || echo "$NC")
+        local c19=$(check_installed "docker" "open-webui" && echo "$GREEN" || echo "$NC")
+        local c20=$(check_installed "docker" "librespeed" && echo "$GREEN" || echo "$NC")
+        local c21=$(check_installed "docker" "romm" && echo "$GREEN" || echo "$NC")
+        local c22=$(check_installed "docker" "myip" && echo "$GREEN" || echo "$NC")
+        local c23=$(check_installed "docker" "it-tools" && echo "$GREEN" || echo "$NC")
+        local c24=$(check_installed "docker" "uptime-kuma" && echo "$GREEN" || echo "$NC")
+        local c25=$(check_installed "docker" "beecount-cloud" && echo "$GREEN" || echo "$NC")
+        local c26=$(check_installed "docker" "pairdrop" && echo "$GREEN" || echo "$NC")
+        local c27=$(check_installed "docker" "rustdesk-hbbs" && echo "$GREEN" || echo "$NC")
 
         echo -e "${CYAN}================================================================${NC}"
         echo -e "${GREEN}                        应用中心菜单${NC}"
         echo -e "${CYAN}================================================================${NC}"
         echo -e " ${GREEN}1.${NC}  ${c1}1Panel新一代管理面板${NC}                ${GREEN}2.${NC}  ${c2}哪吒探针VPS监控面板${NC}"
-        echo -e " ${GREEN}3.${NC}  ${c3}磁盘空间分析${NC}                        ${GREEN}4.${NC}  ${c4}BTOP系统监控工具${NC}"
-        echo -e " ${GREEN}5.${NC}  ${c5}一键更换软件源${NC}                      ${GREEN}6.${NC}  ${c6}Komari管理${NC}"
-        echo -e " ${GREEN}7.${NC}  ${c7}PanSou网盘管理${NC}                      ${GREEN}8.${NC}  ${c8}Watchtower容器自动更新${NC}"
-        echo -e " ${GREEN}9.${NC}  ${c9}AdGuard Home安装（vps）${NC}             ${GREEN}10.${NC} ${c10}Nginx Proxy Manager管理${NC}"
-        echo -e " ${GREEN}11.${NC} ${c11}GitHub加速站${NC}                        ${GREEN}12.${NC} ${c12}MoonTV流媒体应用管理${NC}"
-        echo -e " ${GREEN}13.${NC} ${c13}LibreTV流媒体应用管理${NC}               ${GREEN}14.${NC} ${c14}FRP内网穿透管理${NC}"
-        echo -e " ${GREEN}15.${NC} ${c15}雷池WAF安全防护系统${NC}                 ${GREEN}16.${NC} ${c16}AkileCloud专用脚本${NC}"
-        echo -e " ${GREEN}17.${NC} ${c17}VScode 网页版 (code-server)${NC}         ${GREEN}18.${NC} ${c18}Lucky (大神级 DDNS/反代/SSL)${NC}"
-        echo -e " ${GREEN}19.${NC} ${c19}Docker 镜像加速站一站式管理${NC}         ${GREEN}20.${NC} ${c20}小雅alist 管理${NC}"
-        echo -e " ${GREEN}21.${NC} ${c21}Open WebUI 管理${NC}                     ${GREEN}22.${NC} ${c22}LibreSpeed 测速工具${NC}"
-        echo -e " ${GREEN}23.${NC} ${c23}MAME 街机模拟器${NC}                     ${GREEN}24.${NC} ${c24}MyIP 工具箱 (IP/网络工具)${NC}"
-        echo -e " ${GREEN}25.${NC} ${c25}IT-Tools (万能工具箱)${NC}               ${GREEN}26.${NC} ${c26}Uptime Kuma (站点监控)${NC}"
-        echo -e " ${GREEN}27.${NC} ${c27}蜜蜂记账 (个人记账系统)${NC}             ${GREEN}28.${NC} ${c28}PairDrop (局域网文件传输)${NC}"
-        echo -e " ${GREEN}29.${NC} ${c29}RustDesk (远程桌面服务端)${NC}"
+        echo -e " ${GREEN}3.${NC}  ${c3}一键更换软件源${NC}                      ${GREEN}4.${NC}  ${c4}Komari管理${NC}"
+        echo -e " ${GREEN}5.${NC}  ${c5}PanSou网盘管理${NC}                      ${GREEN}6.${NC}  ${c6}Watchtower容器自动更新${NC}"
+        echo -e " ${GREEN}7.${NC}  ${c7}AdGuard Home安装（vps）${NC}             ${GREEN}8.${NC}  ${c8}Nginx Proxy Manager管理${NC}"
+        echo -e " ${GREEN}9.${NC}  ${c9}GitHub加速站${NC}                        ${GREEN}10.${NC} ${c10}MoonTV流媒体应用管理${NC}"
+        echo -e " ${GREEN}11.${NC} ${c11}LibreTV流媒体应用管理${NC}               ${GREEN}12.${NC} ${c12}FRP内网穿透管理${NC}"
+        echo -e " ${GREEN}13.${NC} ${c13}雷池WAF安全防护系统${NC}                 ${GREEN}14.${NC} ${c14}AkileCloud专用脚本${NC}"
+        echo -e " ${GREEN}15.${NC} ${c15}VScode 网页版 (code-server)${NC}         ${GREEN}16.${NC} ${c16}Lucky (大神级 DDNS/反代/SSL)${NC}"
+        echo -e " ${GREEN}17.${NC} ${c17}Docker 镜像加速站一站式管理${NC}         ${GREEN}18.${NC} ${c18}小雅alist 管理${NC}"
+        echo -e " ${GREEN}19.${NC} ${c19}Open WebUI 管理${NC}                     ${GREEN}20.${NC} ${c20}LibreSpeed 测速工具${NC}"
+        echo -e " ${GREEN}21.${NC} ${c21}MAME 街机模拟器${NC}                     ${GREEN}22.${NC} ${c22}MyIP 工具箱 (IP/网络工具)${NC}"
+        echo -e " ${GREEN}23.${NC} ${c23}IT-Tools (万能工具箱)${NC}               ${GREEN}24.${NC} ${c24}Uptime Kuma (站点监控)${NC}"
+        echo -e " ${GREEN}25.${NC} ${c25}蜜蜂记账 (个人记账系统)${NC}             ${GREEN}26.${NC} ${c26}PairDrop (局域网文件传输)${NC}"
+        echo -e " ${GREEN}27.${NC} ${c27}RustDesk (远程桌面服务端)${NC}"
         echo -e "${CYAN}----------------------------------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}================================================================${NC}"
-        read -p "请输入你的选择 (0-29) : " app_choice
+        read -p "请输入你的选择 (0-27) : " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
             2) nezha_probe_management ;;
-            3) analyze_disk_space ;;
-            4) btop_management ;;
-            5) change_software_source ;;
-            6) komari_management ;;
-            7) pansou_management ;;
-            8) watchtower_management ;;
-            9) adguard_home_management ;;
-            10) nginx_proxy_manager_management ;;
-            11) github_proxy_management ;;
-            12) moontv_management ;;
-            13) libretv_management ;;
-            14) frp_management ;;
-            15) safeline_waf_management ;;
-            16) akilecloud_management ;;
-            17) vscode_management ;;
-            18) lucky_management ;;
-            19) docker_proxy_management ;;
-            20) xiaoya_alist_management ;;
-            21) open_webui_management ;;
-            22) librespeed_management ;;
-            23) mame_management ;;
-            24) myip_management ;;
-            25) it_tools_management ;;
-            26) uptime_kuma_management ;;
-            27) beecount_management ;;
-            28) pairdrop_management ;;
-            29) rustdesk_management ;;
+            3) change_software_source ;;
+            4) komari_management ;;
+            5) pansou_management ;;
+            6) watchtower_management ;;
+            7) adguard_home_management ;;
+            8) nginx_proxy_manager_management ;;
+            9) github_proxy_management ;;
+            10) moontv_management ;;
+            11) libretv_management ;;
+            12) frp_management ;;
+            13) safeline_waf_management ;;
+            14) akilecloud_management ;;
+            15) vscode_management ;;
+            16) lucky_management ;;
+            17) docker_proxy_management ;;
+            18) xiaoya_alist_management ;;
+            19) open_webui_management ;;
+            20) librespeed_management ;;
+            21) mame_management ;;
+            22) myip_management ;;
+            23) it_tools_management ;;
+            24) uptime_kuma_management ;;
+            25) beecount_management ;;
+            26) pairdrop_management ;;
+            27) rustdesk_management ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -601,325 +596,6 @@ function manage_github_proxy_container() {
     else
         echo -e "${RED}操作失败，请检查 Docker 日志。${NC}"
     fi
-    read -p "按回车键继续..."
-}
-
-
-
-# 磁盘空间分析
-function analyze_disk_space() {
-    while true; do
-        clear
-        echo -e "${CYAN}=========================================${NC}"
-        echo -e "${GREEN}            磁盘空间分析${NC}"
-        echo -e "${CYAN}=========================================${NC}"
-        echo -e "${BLUE}系统磁盘概况：${NC}"
-        df -h
-        echo -e "${CYAN}-----------------------------------------${NC}"
-        echo -e " ${GREEN}1.${NC}  查看根目录各文件夹大小"
-        echo -e " ${GREEN}2.${NC}  查找系统最大的 20 个文件 (支持删除)"
-        echo -e " ${GREEN}3.${NC}  使用 ncdu 进行交互式分析 (推荐)"
-        echo -e "${CYAN}-----------------------------------------${NC}"
-        echo -e " ${RED}0.${NC}  返回应用中心菜单"
-        echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-3): " disk_choice
-
-        case "$disk_choice" in
-            1)
-                echo -e "${BLUE}正在分析根目录各文件夹大小，请稍候...${NC}"
-                # 排除一些虚拟文件系统目录以加快速度并避免错误
-                du -h --max-depth=1 --exclude=/proc --exclude=/sys --exclude=/dev --exclude=/run / 2>/dev/null | sort -hr
-                echo -e "${CYAN}-----------------------------------------${NC}"
-                read -p "按回车键继续..."
-                ;;
-            2)
-                echo -e "${BLUE}正在查找系统最大的 20 个文件，这可能需要一点时间...${NC}"
-                # 查找系统最大的20个文件，排除虚拟文件系统
-                # 使用当前目录下的临时文件，避免 /tmp 不存在的问题
-                temp_file="./disk_analysis_temp_$(date +%s).txt"
-                find / -type f -not -path "/proc/*" -not -path "/sys/*" -not -path "/dev/*" -not -path "/run/*" -not -path "/boot/*" -exec du -h {} + 2>/dev/null | sort -hr | head -n 20 > "$temp_file"
-                
-                if [ ! -s "$temp_file" ]; then
-                    echo -e "${YELLOW}未找到文件。${NC}"
-                else
-                    echo -e "${CYAN}-----------------------------------------${NC}"
-                    echo -e "序号\t大小\t状态\t\t文件路径"
-                    i=1
-                    declare -A file_map
-                    while read -r size path; do
-                        # 检查文件是否被进程占用
-                        if command -v lsof &> /dev/null; then
-                            usage_check=$(lsof "$path" 2>/dev/null | tail -n +2)
-                        else
-                            # 如果没有 lsof，尝试用 fuser
-                            if command -v fuser &> /dev/null; then
-                                usage_check=$(fuser "$path" 2>/dev/null)
-                            else
-                                usage_check=""
-                            fi
-                        fi
-
-                        if [ -n "$usage_check" ]; then
-                            status="${RED}[占用中]${NC}"
-                            desc="(建议不要删除)"
-                        elif [[ "$path" == *".log"* ]]; then
-                            status="${GREEN}[日志]${NC}  "
-                            desc="(通常可删)"
-                        elif [[ "$path" == *".tmp"* || "$path" == *"/tmp/"* ]]; then
-                            status="${GREEN}[临时]${NC}  "
-                            desc="(通常可删)"
-                        elif [[ "$path" == *".gz"* || "$path" == *".zip"* || "$path" == *".tar"* || "$path" == *".iso"* ]]; then
-                            status="${YELLOW}[压缩包]${NC}"
-                            desc="(确认内容后可删)"
-                        elif [[ "$path" == *"/swap"* || "$path" == *"swapfile"* ]]; then
-                            status="${RED}[交换区]${NC}"
-                            desc="(系统文件，勿删)"
-                        else
-                            status="${BLUE}[文件]${NC}  "
-                            desc=""
-                        fi
-
-                        echo -e " [${GREEN}$i${NC}]\t$size\t$status\t$path $desc"
-                        file_map[$i]="$path"
-                        ((i++))
-                    done < "$temp_file"
-                    
-                    echo -e "${CYAN}-----------------------------------------${NC}"
-                    read -p "请输入要删除的文件序号 (支持多选，空格分隔，输入 0 或回车不删除): " del_input
-                    
-                    # 将输入转换为数组
-                    read -ra del_choices <<< "$del_input"
-                    
-                    files_to_delete=()
-                    valid_files=()
-
-                    for choice in "${del_choices[@]}"; do
-                        if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -gt 0 ] && [ "$choice" -lt "$i" ]; then
-                             file_path="${file_map[$choice]}"
-                             
-                             # 再次检查占用情况，防止误删关键文件
-                             is_locked=false
-                             if command -v lsof &> /dev/null; then
-                                 if lsof "$file_path" &>/dev/null; then is_locked=true; fi
-                             elif command -v fuser &> /dev/null; then
-                                 if fuser "$file_path" &>/dev/null; then is_locked=true; fi
-                             fi
-
-                             if [ "$is_locked" = true ]; then
-                                 echo -e "${RED}警告：文件被占用，跳过: $file_path${NC}"
-                             elif [[ "$file_path" == *"/swap"* || "$file_path" == *"swapfile"* ]]; then
-                                 echo -e "${RED}警告：可能是系统 Swap 文件，跳过: $file_path${NC}"
-                             else
-                                 files_to_delete+=("$file_path")
-                                 valid_files+=("$choice")
-                             fi
-                        elif [ "$choice" != "0" ]; then
-                             echo -e "${YELLOW}忽略无效序号: $choice${NC}"
-                        fi
-                    done
-
-                    if [ ${#files_to_delete[@]} -gt 0 ]; then
-                        echo -e "${RED}即将删除以下 ${#files_to_delete[@]} 个文件:${NC}"
-                        for file in "${files_to_delete[@]}"; do
-                            echo -e "  - $file"
-                        done
-                        
-                        read -p "确认全部删除吗？(y/n): " confirm
-                        if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
-                            for file in "${files_to_delete[@]}"; do
-                                rm -f "$file"
-                                if [ $? -eq 0 ]; then
-                                    echo -e "${GREEN}删除成功: $file${NC}"
-                                else
-                                    echo -e "${RED}删除失败: $file${NC}"
-                                fi
-                            done
-                        else
-                            echo -e "${YELLOW}已取消删除。${NC}"
-                        fi
-                    elif [[ "$del_input" != "0" && -n "$del_input" ]]; then
-                        echo -e "${YELLOW}未选择有效文件。${NC}"
-                    fi
-                fi
-                rm -f "$temp_file"
-                echo -e "${CYAN}-----------------------------------------${NC}"
-                read -p "按回车键继续..."
-                ;;
-            3)
-                if ! command -v ncdu &> /dev/null; then
-                    echo -e "${YELLOW}未检测到 ncdu，正在安装...${NC}"
-                    if [ -f /etc/debian_version ]; then
-                        apt-get update && apt-get install -y ncdu
-                    elif [ -f /etc/redhat-release ]; then
-                        if ! rpm -qa | grep -q epel-release; then
-                            yum install -y epel-release
-                        fi
-                        yum install -y ncdu
-                    else
-                        echo -e "${RED}不支持的系统，请手动安装 ncdu。${NC}"
-                    fi
-                fi
-                
-                if command -v ncdu &> /dev/null; then
-                    ncdu /
-                else
-                    echo -e "${RED}ncdu 安装失败或不可用。${NC}"
-                    read -p "按回车键继续..."
-                fi
-                ;;
-            0)
-                break
-                ;;
-            *)
-                echo -e "${RED}无效的选择，请重新输入！${NC}"
-                sleep 2
-                ;;
-        esac
-    done
-}
-
-# BTOP 监控管理
-function btop_management() {
-    while true; do
-        clear
-        echo -e "${CYAN}=========================================${NC}"
-        echo -e "${GREEN}             BTOP 系统监控${NC}"
-        if command -v btop &> /dev/null; then
-            echo -e "          当前状态: ${GREEN}已安装${NC}"
-        else
-            echo -e "          当前状态: ${RED}未安装${NC}"
-        fi
-        echo -e "${CYAN}-----------------------------------------${NC}"
-        echo -e " ${GREEN}1.${NC}  启动 btop 监控"
-        echo -e " ${GREEN}2.${NC}  安装/更新 btop"
-        echo -e " ${GREEN}3.${NC}  卸载 btop"
-        echo -e " ${GREEN}4.${NC}  btop 配置说明"
-        echo -e "${CYAN}-----------------------------------------${NC}"
-        echo -e " ${RED}0.${NC}  返回应用中心菜单"
-        echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-4): " btop_choice
-
-        case "$btop_choice" in
-            1)
-                if command -v btop &> /dev/null; then
-                    btop
-                else
-                    echo -e "${RED}未检测到 btop，请先安装！${NC}"
-                    sleep 2
-                fi
-                ;;
-            2) install_update_btop ;;
-            3) uninstall_btop ;;
-            4) btop_help_info ;;
-            0) break ;;
-            *) echo -e "${RED}无效的选择！${NC}"; sleep 2 ;;
-        esac
-    done
-}
-
-function install_update_btop() {
-    clear
-    echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}          安装/更新 BTOP${NC}"
-    echo -e "${CYAN}=========================================${NC}"
-
-    # 检查架构
-    local arch=$(uname -m)
-    local download_url=""
-
-    case "$arch" in
-        x86_64) download_url="https://github.com/aristocratos/btop/releases/latest/download/btop-x86_64-linux-musl.tbz" ;;
-        aarch64) download_url="https://github.com/aristocratos/btop/releases/latest/download/btop-aarch64-linux-musl.tbz" ;;
-        *)
-            echo -e "${RED}不支持的架构: $arch${NC}"
-            read -p "按回车键继续..."
-            return
-            ;;
-    esac
-
-    echo -e "${BLUE}正在从 GitHub 下载最新版 BTOP ($arch)...${NC}"
-    
-    # 创建临时目录
-    local tmp_dir=$(mktemp -d)
-    cd "$tmp_dir"
-
-    if curl -L "$download_url" -o btop.tbz; then
-        echo -e "${BLUE}正在解压并安装...${NC}"
-        tar -xjf btop.tbz
-        
-        # BTOP 官方包解压后通常包含 install.sh 或直接是 binary
-        if [ -f "install.sh" ]; then
-            bash install.sh
-        else
-            # 手动安装逻辑
-            mkdir -p /usr/local/bin
-            cp ./bin/btop /usr/local/bin/btop
-            chmod +x /usr/local/bin/btop
-        fi
-
-        if command -v btop &> /dev/null; then
-            echo -e "${GREEN}BTOP 安装/更新成功！${NC}"
-        else
-            echo -e "${RED}安装失败，请检查系统权限或依赖。${NC}"
-        fi
-    else
-        echo -e "${RED}下载失败，请检查网络连接。${NC}"
-    fi
-
-    # 清理
-    rm -rf "$tmp_dir"
-    cd - &> /dev/null
-    read -p "按回车键继续..."
-}
-
-function uninstall_btop() {
-    clear
-    echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}          卸载 BTOP${NC}"
-    echo -e "${CYAN}=========================================${NC}"
-
-    if ! command -v btop &> /dev/null; then
-        echo -e "${YELLOW}未发现 BTOP，无需卸载。${NC}"
-        read -p "按回车键继续..."
-        return
-    fi
-
-    read -p "确定要卸载 BTOP 吗？(y/N): " confirm_uninstall
-    if [[ "$confirm_uninstall" =~ ^[yY]$ ]]; then
-        echo -e "${BLUE}正在移除 BTOP 程序文件...${NC}"
-        
-        # 尝试使用官方卸载方式或手动移除
-        if [ -f "/usr/local/bin/btop" ]; then
-            rm -f /usr/local/bin/btop
-            # 同时也尝试移除可能存在的配置目录
-            rm -rf ~/.config/btop
-            echo -e "${GREEN}BTOP 已成功卸载。${NC}"
-        else
-            # 如果是通过包管理器安装的
-            if command -v apt &> /dev/null; then
-                apt remove -y btop
-            elif command -v yum &> /dev/null; then
-                yum remove -y btop
-            fi
-            echo -e "${GREEN}卸载命令已执行。${NC}"
-        fi
-    else
-        echo "取消卸载。"
-    fi
-    read -p "按回车键继续..."
-}
-
-function btop_help_info() {
-    clear
-    echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}          BTOP 配置说明${NC}"
-    echo -e "${CYAN}=========================================${NC}"
-    echo -e "${YELLOW}BTOP 是一个现代化的系统资源监视器。${NC}"
-    echo -e "1. 按 ${GREEN}m${NC} 切换统计视图。"
-    echo -e "2. 按 ${GREEN}f${NC} 搜索进程。"
-    echo -e "3. 按 ${GREEN}q${NC} 或 ${GREEN}Esc${NC} 退出监控。"
-    echo -e "4. 支持鼠标操作和自定义配色。"
-    echo -e "${CYAN}=========================================${NC}"
     read -p "按回车键继续..."
 }
 
