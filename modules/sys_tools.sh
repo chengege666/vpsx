@@ -20,9 +20,10 @@ function sys_tools_menu() {
         echo -e " ${GREEN}9.${NC}  修改DNS服务器（手动/自动）"
         echo -e " ${GREEN}10.${NC} Fail2ban配置（SSH防护）"
         echo -e " ${GREEN}11.${NC} SSL证书管理（Let's Encrypt）"
-        echo -e " ${GREEN}12.${NC} 进程管理工具（查看/终止）"
-        echo -e " ${GREEN}13.${NC} 系统环境修复 (权限/磁盘/APT)"
-        echo -e " ${GREEN}14.${NC} 配置中文语言支持 (Debian/Ubuntu)"
+        echo -e " ${GREEN}12.${NC} TCP窗口调优"
+        echo -e " ${GREEN}13.${NC} 进程管理工具（查看/终止）"
+        echo -e " ${GREEN}14.${NC} 系统环境修复 (权限/磁盘/APT)"
+        echo -e " ${GREEN}15.${NC} 配置中文语言支持 (Debian/Ubuntu)"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
@@ -63,12 +64,15 @@ function sys_tools_menu() {
                 ssl_certificate_management
                 ;;
             12)
-                process_management
+                tcp_window_tuning
                 ;;
             13)
+                process_management
+                ;;
+            14)
                 system_environment_repair
                 ;;
-           14)
+           15)
                 configure_chinese_locale
                 ;;
             0)
@@ -1485,4 +1489,114 @@ function restore_chinese_locale() {
     echo -e "系统已切换回英文环境 (en_US.UTF-8)。"
     echo -e "请执行 ${YELLOW}source ~/.bashrc${NC} 或重新连接 SSH 以完全生效。"
     read -p "按任意键继续..."
+}
+
+# TCP 窗口调优功能实现
+function tcp_window_tuning() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}             TCP 窗口调优${NC}"
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e " ${GREEN}1.${NC}  应用最佳调优配置 (针对高带宽延迟)"
+        echo -e " ${GREEN}2.${NC}  查看当前 TCP 参数状态"
+        echo -e " ${GREEN}3.${NC}  恢复系统默认配置 (备份还原)"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC}  返回"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 (0-3): " tcp_choice
+
+        case "$tcp_choice" in
+            1) apply_tcp_tuning ;;
+            2) view_tcp_status ;;
+            3) restore_tcp_defaults ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择！${NC}"; sleep 2 ;;
+        esac
+    done
+}
+
+function apply_tcp_tuning() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          应用 TCP 最佳调优配置${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    # 备份原配置
+    if [ ! -f /etc/sysctl.conf.bak ]; then
+        cp /etc/sysctl.conf /etc/sysctl.conf.bak
+        echo -e "${BLUE}已创建系统配置备份: /etc/sysctl.conf.bak${NC}"
+    fi
+
+    echo -e "${BLUE}正在优化 TCP 窗口参数...${NC}"
+
+    # 定义优化参数
+    cat << EOF > /etc/sysctl.d/99-vpsx-tcp-tuning.conf
+# TCP Window Tuning by VPSX
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.ipv4.tcp_rmem = 4096 87380 16777216
+net.ipv4.tcp_wmem = 4096 65536 16777216
+net.ipv4.tcp_window_scaling = 1
+net.ipv4.tcp_timestamps = 1
+net.ipv4.tcp_sack = 1
+net.ipv4.tcp_no_metrics_save = 1
+net.core.netdev_max_backlog = 5000
+net.ipv4.tcp_slow_start_after_idle = 0
+net.ipv4.tcp_mtu_probing = 1
+net.ipv4.tcp_fastopen = 3
+EOF
+
+    sysctl -p /etc/sysctl.d/99-vpsx-tcp-tuning.conf &> /dev/null
+    sysctl --system &> /dev/null
+
+    echo -e "${GREEN}TCP 优化配置已应用！${NC}"
+    echo -e "${YELLOW}优化内容包括：rmem/wmem 扩大、窗口缩放开启、SACK 开启等。${NC}"
+    read -p "按回车键继续..."
+}
+
+function view_tcp_status() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          当前 TCP 关键参数状态${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    
+    echo -e "${BLUE}核心接收/发送窗口限制:${NC}"
+    sysctl net.core.rmem_max net.core.wmem_max
+    
+    echo -e "\n${BLUE}TCP 读写缓冲区配置:${NC}"
+    sysctl net.ipv4.tcp_rmem net.ipv4.tcp_wmem
+    
+    echo -e "\n${BLUE}其他关键特性:${NC}"
+    sysctl net.ipv4.tcp_window_scaling net.ipv4.tcp_sack net.ipv4.tcp_fastopen
+    
+    echo -e "${CYAN}=========================================${NC}"
+    read -p "按回车键继续..."
+}
+
+function restore_tcp_defaults() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          恢复 TCP 默认配置${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ -f /etc/sysctl.d/99-vpsx-tcp-tuning.conf ]; then
+        rm -f /etc/sysctl.d/99-vpsx-tcp-tuning.conf
+        sysctl --system &> /dev/null
+        echo -e "${GREEN}已移除 VPSX 优化配置文件。${NC}"
+    else
+        echo -e "${YELLOW}未发现优化配置文件，系统可能处于默认状态。${NC}"
+    fi
+
+    if [ -f /etc/sysctl.conf.bak ]; then
+        read -p "是否还原 /etc/sysctl.conf 备份？(y/N): " restore_bak
+        if [[ "$restore_bak" =~ ^[yY]$ ]]; then
+            cp /etc/sysctl.conf.bak /etc/sysctl.conf
+            sysctl -p &> /dev/null
+            echo -e "${GREEN}系统主配置文件已还原。${NC}"
+        fi
+    fi
+    
+    echo -e "${GREEN}TCP 参数已尝试恢复至默认。${NC}"
+    read -p "按回车键继续..."
 }

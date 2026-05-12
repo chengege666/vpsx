@@ -36,89 +36,87 @@ function app_center_menu() {
         # 设置每个菜单项的颜色
         local c1=$(check_installed "cmd" "1pctl" && echo "$GREEN" || echo "$NC")
         local c2=$(check_installed "file" "/etc/systemd/system/nezha-agent.service" && echo "$GREEN" || echo "$NC")
-        local c3=$(check_installed "file" "/etc/sysctl.d/99-vpsx-tcp-tuning.conf" && echo "$GREEN" || echo "$NC")
-        local c4=$(check_installed "cmd" "ncdu" && echo "$GREEN" || echo "$NC")
-        local c5=$(check_installed "cmd" "btop" && echo "$GREEN" || echo "$NC")
-        local c6="$NC" # 一键更换软件源，始终白色
-        local c7=$(check_installed "docker" "komari" && echo "$GREEN" || echo "$NC")
-        local c8=$(check_installed "docker" "pansou" && echo "$GREEN" || echo "$NC")
-        local c9=$(check_installed "docker" "watchtower" && echo "$GREEN" || echo "$NC")
-        local c10=$(check_installed "file" "/opt/AdGuardHome/AdGuardHome" && echo "$GREEN" || echo "$NC")
-        local c11=$(check_installed "dir" "/opt/npm" && echo "$GREEN" || echo "$NC")
-        local c12=$(check_installed "docker" "github-proxy" && echo "$GREEN" || echo "$NC")
-        local c13=$(check_installed "docker" "moontv-core" && echo "$GREEN" || echo "$NC")
-        local c14=$(check_installed "docker" "libretv" && echo "$GREEN" || echo "$NC")
-        local c15=$NC; (check_installed "service" "frps" || check_installed "service" "frpc") && c15="$GREEN"
-        local c16=$(check_installed "docker" "safeline-mgt-api" && echo "$GREEN" || echo "$NC")
-        local c17="$NC" # AkileCloud 专用脚本，始终白色
-        local c18=$(check_installed "docker" "vscode-server" && echo "$GREEN" || echo "$NC")
-        local c19=$NC; (check_installed "docker" "lucky" || check_installed "service" "lucky") && c19="$GREEN"
-        local c20=$(check_installed "docker" "registry" && echo "$GREEN" || echo "$NC")
-        local c21=$(check_installed "docker" "xiaoya-alist" && echo "$GREEN" || echo "$NC")
-        local c22=$(check_installed "docker" "open-webui" && echo "$GREEN" || echo "$NC")
-        local c23=$(check_installed "docker" "librespeed" && echo "$GREEN" || echo "$NC")
-        local c24=$(check_installed "docker" "romm" && echo "$GREEN" || echo "$NC")
-        local c25=$(check_installed "docker" "myip" && echo "$GREEN" || echo "$NC")
-        local c26=$(check_installed "docker" "it-tools" && echo "$GREEN" || echo "$NC")
-        local c27=$(check_installed "docker" "uptime-kuma" && echo "$GREEN" || echo "$NC")
-        local c28=$(check_installed "docker" "beecount-cloud" && echo "$GREEN" || echo "$NC")
-        local c29=$(check_installed "docker" "pairdrop" && echo "$GREEN" || echo "$NC")
-        local c30=$(check_installed "docker" "rustdesk-hbbs" && echo "$GREEN" || echo "$NC")
+        local c3=$(check_installed "cmd" "ncdu" && echo "$GREEN" || echo "$NC")
+        local c4=$(check_installed "cmd" "btop" && echo "$GREEN" || echo "$NC")
+        local c5="$NC" # 一键更换软件源，始终白色
+        local c6=$(check_installed "docker" "komari" && echo "$GREEN" || echo "$NC")
+        local c7=$(check_installed "docker" "pansou" && echo "$GREEN" || echo "$NC")
+        local c8=$(check_installed "docker" "watchtower" && echo "$GREEN" || echo "$NC")
+        local c9=$(check_installed "file" "/opt/AdGuardHome/AdGuardHome" && echo "$GREEN" || echo "$NC")
+        local c10=$(check_installed "dir" "/opt/npm" && echo "$GREEN" || echo "$NC")
+        local c11=$(check_installed "docker" "github-proxy" && echo "$GREEN" || echo "$NC")
+        local c12=$(check_installed "docker" "moontv-core" && echo "$GREEN" || echo "$NC")
+        local c13=$(check_installed "docker" "libretv" && echo "$GREEN" || echo "$NC")
+        local c14=$NC; (check_installed "service" "frps" || check_installed "service" "frpc") && c14="$GREEN"
+        local c15=$(check_installed "docker" "safeline-mgt-api" && echo "$GREEN" || echo "$NC")
+        local c16="$NC" # AkileCloud 专用脚本，始终白色
+        local c17=$(check_installed "docker" "vscode-server" && echo "$GREEN" || echo "$NC")
+        local c18=$NC; (check_installed "docker" "lucky" || check_installed "service" "lucky") && c18="$GREEN"
+        local c19=$(check_installed "docker" "registry" && echo "$GREEN" || echo "$NC")
+        local c20=$(check_installed "docker" "xiaoya-alist" && echo "$GREEN" || echo "$NC")
+        local c21=$(check_installed "docker" "open-webui" && echo "$GREEN" || echo "$NC")
+        local c22=$(check_installed "docker" "librespeed" && echo "$GREEN" || echo "$NC")
+        local c23=$(check_installed "docker" "romm" && echo "$GREEN" || echo "$NC")
+        local c24=$(check_installed "docker" "myip" && echo "$GREEN" || echo "$NC")
+        local c25=$(check_installed "docker" "it-tools" && echo "$GREEN" || echo "$NC")
+        local c26=$(check_installed "docker" "uptime-kuma" && echo "$GREEN" || echo "$NC")
+        local c27=$(check_installed "docker" "beecount-cloud" && echo "$GREEN" || echo "$NC")
+        local c28=$(check_installed "docker" "pairdrop" && echo "$GREEN" || echo "$NC")
+        local c29=$(check_installed "docker" "rustdesk-hbbs" && echo "$GREEN" || echo "$NC")
 
         echo -e "${CYAN}================================================================${NC}"
         echo -e "${GREEN}                        应用中心菜单${NC}"
         echo -e "${CYAN}================================================================${NC}"
-        echo -e " ${GREEN}1.${NC}  ${c1}1Panel新一代管理面板${NC}            ${GREEN}2.${NC}  ${c2}哪吒探针VPS监控面板${NC}"
-        echo -e " ${GREEN}3.${NC}  ${c3}TCP窗口调优${NC}                     ${GREEN}4.${NC}  ${c4}磁盘空间分析${NC}"
-        echo -e " ${GREEN}5.${NC}  ${c5}BTOP系统监控工具${NC}                ${GREEN}6.${NC}  ${c6}一键更换软件源${NC}"
-        echo -e " ${GREEN}7.${NC}  ${c7}Komari管理${NC}                      ${GREEN}8.${NC}  ${c8}PanSou网盘管理${NC}"
-        echo -e " ${GREEN}9.${NC}  ${c9}Watchtower容器自动更新${NC}          ${GREEN}10.${NC} ${c10}AdGuard Home安装（vps）${NC}"
-        echo -e " ${GREEN}11.${NC} ${c11}Nginx Proxy Manager管理${NC}         ${GREEN}12.${NC} ${c12}GitHub加速站${NC}"
-        echo -e " ${GREEN}13.${NC} ${c13}MoonTV流媒体应用管理${NC}            ${GREEN}14.${NC} ${c14}LibreTV流媒体应用管理${NC}"
-        echo -e " ${GREEN}15.${NC} ${c15}FRP内网穿透管理${NC}                 ${GREEN}16.${NC} ${c16}雷池WAF安全防护系统${NC}"
-        echo -e " ${GREEN}17.${NC} ${c17}AkileCloud专用脚本${NC}              ${GREEN}18.${NC} ${c18}VScode 网页版 (code-server)${NC}"
-        echo -e " ${GREEN}19.${NC} ${c19}Lucky (大神级 DDNS/反代/SSL)${NC}    ${GREEN}20.${NC} ${c20}Docker 镜像加速站一站式管理${NC}"
-        echo -e " ${GREEN}21.${NC} ${c21}小雅alist 管理${NC}                  ${GREEN}22.${NC} ${c22}Open WebUI 管理${NC}"
-        echo -e " ${GREEN}23.${NC} ${c23}LibreSpeed 测速工具${NC}             ${GREEN}24.${NC} ${c24}MAME 街机模拟器${NC}"
-        echo -e " ${GREEN}25.${NC} ${c25}MyIP 工具箱 (IP/网络工具)${NC}       ${GREEN}26.${NC} ${c26}IT-Tools (万能工具箱)${NC}"
-        echo -e " ${GREEN}27.${NC} ${c27}Uptime Kuma (站点监控)${NC}          ${GREEN}28.${NC} ${c28}蜜蜂记账 (个人记账系统)${NC}"
-        echo -e " ${GREEN}29.${NC} ${c29}PairDrop (局域网文件传输)${NC}       ${GREEN}30.${NC} ${c30}RustDesk (远程桌面服务端)${NC}"
+        echo -e " ${GREEN}1.${NC}  ${c1}1Panel新一代管理面板${NC}                ${GREEN}2.${NC}  ${c2}哪吒探针VPS监控面板${NC}"
+        echo -e " ${GREEN}3.${NC}  ${c3}磁盘空间分析${NC}                         ${GREEN}4.${NC}  ${c4}BTOP系统监控工具${NC}"
+        echo -e " ${GREEN}5.${NC}  ${c5}一键更换软件源${NC}                       ${GREEN}6.${NC}  ${c6}Komari管理${NC}"
+        echo -e " ${GREEN}7.${NC}  ${c7}PanSou网盘管理${NC}                        ${GREEN}8.${NC}  ${c8}Watchtower容器自动更新${NC}"
+        echo -e " ${GREEN}9.${NC}  ${c9}AdGuard Home安装（vps）${NC}             ${GREEN}10.${NC} ${c10}Nginx Proxy Manager管理${NC}"
+        echo -e " ${GREEN}11.${NC} ${c11}GitHub加速站${NC}                       ${GREEN}12.${NC} ${c12}MoonTV流媒体应用管理${NC}"
+        echo -e " ${GREEN}13.${NC} ${c13}LibreTV流媒体应用管理${NC}               ${GREEN}14.${NC} ${c14}FRP内网穿透管理${NC}"
+        echo -e " ${GREEN}15.${NC} ${c15}雷池WAF安全防护系统${NC}                 ${GREEN}16.${NC} ${c16}AkileCloud专用脚本${NC}"
+        echo -e " ${GREEN}17.${NC} ${c17}VScode 网页版 (code-server)${NC}        ${GREEN}18.${NC} ${c18}Lucky (大神级 DDNS/反代/SSL)${NC}"
+        echo -e " ${GREEN}19.${NC} ${c19}Docker 镜像加速站一站式管理${NC}        ${GREEN}20.${NC} ${c20}小雅alist 管理${NC}"
+        echo -e " ${GREEN}21.${NC} ${c21}Open WebUI 管理${NC}                  ${GREEN}22.${NC} ${c22}LibreSpeed 测速工具${NC}"
+        echo -e " ${GREEN}23.${NC} ${c23}MAME 街机模拟器${NC}                   ${GREEN}24.${NC} ${c24}MyIP 工具箱 (IP/网络工具)${NC}"
+        echo -e " ${GREEN}25.${NC} ${c25}IT-Tools (万能工具箱)${NC}              ${GREEN}26.${NC} ${c26}Uptime Kuma (站点监控)${NC}"
+        echo -e " ${GREEN}27.${NC} ${c27}蜜蜂记账 (个人记账系统)${NC}             ${GREEN}28.${NC} ${c28}PairDrop (局域网文件传输)${NC}"
+        echo -e " ${GREEN}29.${NC} ${c29}RustDesk (远程桌面服务端)${NC}"
         echo -e "${CYAN}----------------------------------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}================================================================${NC}"
-        read -p "请输入你的选择 (0-30) : " app_choice
+        read -p "请输入你的选择 (0-29) : " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
             2) nezha_probe_management ;;
-            3) tcp_window_tuning ;;
-            4) analyze_disk_space ;;
-            5) btop_management ;;
-            6) change_software_source ;;
-            7) komari_management ;;
-            8) pansou_management ;;
-            9) watchtower_management ;;
-            10) adguard_home_management ;;
-            11) nginx_proxy_manager_management ;;
-            12) github_proxy_management ;;
-            13) moontv_management ;;
-            14) libretv_management ;;
-            15) frp_management ;;
-            16) safeline_waf_management ;;
-            17) akilecloud_management ;;
-            18) vscode_management ;;
-            19) lucky_management ;;
-            20) docker_proxy_management ;;
-            21) xiaoya_alist_management ;;
-            22) open_webui_management ;;
-            23) librespeed_management ;;
-            24) mame_management ;;
-            25) myip_management ;;
-            26) it_tools_management ;;
-            27) uptime_kuma_management ;;
-            28) beecount_management ;;
-            29) pairdrop_management ;;
-            30) rustdesk_management ;;
+            3) analyze_disk_space ;;
+            4) btop_management ;;
+            5) change_software_source ;;
+            6) komari_management ;;
+            7) pansou_management ;;
+            8) watchtower_management ;;
+            9) adguard_home_management ;;
+            10) nginx_proxy_manager_management ;;
+            11) github_proxy_management ;;
+            12) moontv_management ;;
+            13) libretv_management ;;
+            14) frp_management ;;
+            15) safeline_waf_management ;;
+            16) akilecloud_management ;;
+            17) vscode_management ;;
+            18) lucky_management ;;
+            19) docker_proxy_management ;;
+            20) xiaoya_alist_management ;;
+            21) open_webui_management ;;
+            22) librespeed_management ;;
+            23) mame_management ;;
+            24) myip_management ;;
+            25) it_tools_management ;;
+            26) uptime_kuma_management ;;
+            27) beecount_management ;;
+            28) pairdrop_management ;;
+            29) rustdesk_management ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -606,115 +604,7 @@ function manage_github_proxy_container() {
     read -p "按回车键继续..."
 }
 
-# TCP 窗口调优功能实现
-function tcp_window_tuning() {
-    while true; do
-        clear
-        echo -e "${CYAN}=========================================${NC}"
-        echo -e "${GREEN}             TCP 窗口调优${NC}"
-        echo -e "${CYAN}=========================================${NC}"
-        echo -e " ${GREEN}1.${NC}  应用最佳调优配置 (针对高带宽延迟)"
-        echo -e " ${GREEN}2.${NC}  查看当前 TCP 参数状态"
-        echo -e " ${GREEN}3.${NC}  恢复系统默认配置 (备份还原)"
-        echo -e "${CYAN}-----------------------------------------${NC}"
-        echo -e " ${RED}0.${NC}  返回"
-        echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-3): " tcp_choice
 
-        case "$tcp_choice" in
-            1) apply_tcp_tuning ;;
-            2) view_tcp_status ;;
-            3) restore_tcp_defaults ;;
-            0) break ;;
-            *) echo -e "${RED}无效的选择！${NC}"; sleep 2 ;;
-        esac
-    done
-}
-
-function apply_tcp_tuning() {
-    clear
-    echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}          应用 TCP 最佳调优配置${NC}"
-    echo -e "${CYAN}=========================================${NC}"
-
-    # 备份原配置
-    if [ ! -f /etc/sysctl.conf.bak ]; then
-        cp /etc/sysctl.conf /etc/sysctl.conf.bak
-        echo -e "${BLUE}已创建系统配置备份: /etc/sysctl.conf.bak${NC}"
-    fi
-
-    echo -e "${BLUE}正在优化 TCP 窗口参数...${NC}"
-
-    # 定义优化参数
-    cat << EOF > /etc/sysctl.d/99-vpsx-tcp-tuning.conf
-# TCP Window Tuning by VPSX
-net.core.rmem_max = 16777216
-net.core.wmem_max = 16777216
-net.ipv4.tcp_rmem = 4096 87380 16777216
-net.ipv4.tcp_wmem = 4096 65536 16777216
-net.ipv4.tcp_window_scaling = 1
-net.ipv4.tcp_timestamps = 1
-net.ipv4.tcp_sack = 1
-net.ipv4.tcp_no_metrics_save = 1
-net.core.netdev_max_backlog = 5000
-net.ipv4.tcp_slow_start_after_idle = 0
-net.ipv4.tcp_mtu_probing = 1
-net.ipv4.tcp_fastopen = 3
-EOF
-
-    sysctl -p /etc/sysctl.d/99-vpsx-tcp-tuning.conf &> /dev/null
-    sysctl --system &> /dev/null
-
-    echo -e "${GREEN}TCP 优化配置已应用！${NC}"
-    echo -e "${YELLOW}优化内容包括：rmem/wmem 扩大、窗口缩放开启、SACK 开启等。${NC}"
-    read -p "按回车键继续..."
-}
-
-function view_tcp_status() {
-    clear
-    echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}          当前 TCP 关键参数状态${NC}"
-    echo -e "${CYAN}=========================================${NC}"
-    
-    echo -e "${BLUE}核心接收/发送窗口限制:${NC}"
-    sysctl net.core.rmem_max net.core.wmem_max
-    
-    echo -e "\n${BLUE}TCP 读写缓冲区配置:${NC}"
-    sysctl net.ipv4.tcp_rmem net.ipv4.tcp_wmem
-    
-    echo -e "\n${BLUE}其他关键特性:${NC}"
-    sysctl net.ipv4.tcp_window_scaling net.ipv4.tcp_sack net.ipv4.tcp_fastopen
-    
-    echo -e "${CYAN}=========================================${NC}"
-    read -p "按回车键继续..."
-}
-
-function restore_tcp_defaults() {
-    clear
-    echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}          恢复 TCP 默认配置${NC}"
-    echo -e "${CYAN}=========================================${NC}"
-
-    if [ -f /etc/sysctl.d/99-vpsx-tcp-tuning.conf ]; then
-        rm -f /etc/sysctl.d/99-vpsx-tcp-tuning.conf
-        sysctl --system &> /dev/null
-        echo -e "${GREEN}已移除 VPSX 优化配置文件。${NC}"
-    else
-        echo -e "${YELLOW}未发现优化配置文件，系统可能处于默认状态。${NC}"
-    fi
-
-    if [ -f /etc/sysctl.conf.bak ]; then
-        read -p "是否还原 /etc/sysctl.conf 备份？(y/N): " restore_bak
-        if [[ "$restore_bak" =~ ^[yY]$ ]]; then
-            cp /etc/sysctl.conf.bak /etc/sysctl.conf
-            sysctl -p &> /dev/null
-            echo -e "${GREEN}系统主配置文件已还原。${NC}"
-        fi
-    fi
-    
-    echo -e "${GREEN}TCP 参数已尝试恢复至默认。${NC}"
-    read -p "按回车键继续..."
-}
 
 # 磁盘空间分析
 function analyze_disk_space() {
