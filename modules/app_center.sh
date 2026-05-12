@@ -6729,19 +6729,6 @@ function install_lucky_docker() {
         return
     fi
 
-    # 1. 配置管理端口
-    read -p "请输入 Lucky 管理端口 (默认 16601): " host_port
-    host_port=${host_port:-16601}
-
-    # 2. 验证端口占用
-    if command -v ss &> /dev/null; then
-        if ss -tuln | grep -q ":${host_port} "; then
-            echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
-            read -p "按回车键继续..."
-            return
-        fi
-    fi
-
     echo -e "${BLUE}正在拉取镜像并启动容器...${NC}"
     
     mkdir -p /opt/lucky/conf
@@ -6752,7 +6739,7 @@ function install_lucky_docker() {
     docker run -d \
         --name lucky \
         --restart always \
-        -p ${host_port}:16601 \
+        --network host \
         -v /opt/lucky/conf:/config \
         gdy666/lucky:v2
 
@@ -6760,7 +6747,8 @@ function install_lucky_docker() {
         IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
         echo ""
         echo -e "${GREEN}✅ Lucky (Docker) 安装成功！${NC}"
-        echo -e "管理地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+        echo -e "管理地址: ${YELLOW}http://${ipv4}:16601${NC}"
+        [ -n "$ipv6" ] && echo -e "IPv6 地址: ${YELLOW}http://[${ipv6}]:16601${NC}"
         echo -e "默认账号: ${GREEN}666${NC}"
         echo -e "默认密码: ${GREEN}666${NC}"
         echo -e "${RED}注意：请务必在首次登录后立即修改账号密码。${NC}"
@@ -6950,10 +6938,8 @@ function upgrade_lucky() {
     if [ "$mode" == "docker" ]; then
         echo -e "${BLUE}正在升级 Lucky (Docker) 到最新版本...${NC}"
         docker pull gdy666/lucky:latest
-        local current_port=$(docker inspect lucky --format='{{(index (index .NetworkSettings.Ports "16601/tcp") 0).HostPort}}' 2>/dev/null)
-        current_port=${current_port:-16601}
         docker stop lucky && docker rm lucky
-        docker run -d --name lucky --restart always -p ${current_port}:16601 -v /opt/lucky/conf:/config gdy666/lucky:latest
+        docker run -d --name lucky --restart always --network host -v /opt/lucky/conf:/config gdy666/lucky:latest
         echo -e "${GREEN}升级完成。${NC}"
     elif [ "$mode" == "systemd" ]; then
         echo -e "${BLUE}正在升级 Lucky (直接安装) 到最新版本...${NC}"
