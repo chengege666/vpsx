@@ -166,6 +166,34 @@ function fail2ban_management() {
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}             Fail2ban 配置管理${NC}"
         echo -e "${CYAN}=========================================${NC}"
+        
+        # 显示运行状态
+        local status_text="${RED}未安装${NC}"
+        local ssh_jail_status="${YELLOW}未知${NC}"
+        
+        if command -v fail2ban-client &> /dev/null; then
+            if systemctl is-active --quiet fail2ban; then
+                status_text="${GREEN}运行中${NC}"
+            else
+                status_text="${YELLOW}已停止${NC}"
+            fi
+            
+            # 检查 SSH jail 是否启用
+            if [ -f /etc/fail2ban/jail.local ]; then
+                if grep -q "enabled = true" /etc/fail2ban/jail.local; then
+                    ssh_jail_status="${GREEN}已启用${NC}"
+                else
+                    ssh_jail_status="${RED}已禁用${NC}"
+                fi
+            else
+                ssh_jail_status="${YELLOW}未配置${NC}"
+            fi
+        fi
+        
+        echo -e "          服务状态: ${status_text}"
+        echo -e "     SSH 防护状态: ${ssh_jail_status}"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        
         echo -e " ${GREEN}1.${NC}  安装 Fail2ban"
         echo -e " ${GREEN}2.${NC}  查看 Fail2ban 运行状态（按q退出）"
         echo -e " ${GREEN}3.${NC}  启用/禁用 SSH 暴力破解防护"
