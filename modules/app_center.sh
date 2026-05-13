@@ -1001,54 +1001,51 @@ function access_komari_web() {
 function pansou_management() {
     while true; do
         clear
-        echo -e "${CYAN}"
-        echo "=========================================="
-        echo "          PanSou 网盘管理菜单"
-        echo "=========================================="
-        echo -e "${NC}"
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}             PanSou 网盘管理${NC}"
         
-        # 检查Docker是否运行
-        if ! docker info > /dev/null 2>&1; then
-            echo -e "${RED}⚠️  Docker 服务未运行或未安装！${NC}"
-            echo "请先确保Docker已安装并启动。"
-            echo ""
+        # 状态检测
+        local status_text="${RED}未安装${NC}"
+        
+        if docker ps -a --format '{{.Names}}' | grep -q "^pansou$"; then
+            if docker ps --format '{{.Names}}' | grep -q "^pansou$"; then
+                status_text="${GREEN}运行中${NC}"
+                
+                local host_port=$(docker inspect pansou --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}' 2>/dev/null)
+                host_port=${host_port:-80}
+                
+                IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+                
+                echo -e "${CYAN}-----------------------------------------${NC}"
+                [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+                [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+            else
+                status_text="${YELLOW}已停止${NC}"
+            fi
         fi
         
-        # 显示当前状态
-        if docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -q "pansou"; then
-            echo -e "${GREEN}✅ PanSou 容器状态：${NC}"
-            docker ps -a --filter "name=pansou" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-        else
-            echo -e "${YELLOW}📭 PanSou 网盘未安装。${NC}"
-        fi
-        
-        echo ""
-        echo "1.  安装 PanSou 网盘 (Docker Run)"
-        echo "2.  安装 PanSou 网盘 (Docker Compose - 推荐)"
-        echo "3.  启动 PanSou 网盘"
-        echo "4.  停止 PanSou 网盘"
-        echo "5.  重启 PanSou 网盘"
-        echo "6.  修改访问端口"
-        echo "7.  查看实时日志"
-        echo "8.  查看容器状态"
-        echo "9.  卸载 PanSou 网盘"
-        echo "10. 查询访问 Web 界面"
-        echo "0.  返回上一级菜单"
-        echo ""
-        echo "=========================================="
-        read -p "请输入你的选择 [0-10]: " choice
+        echo -e "          状态: ${status_text}"
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e " ${GREEN}1.${NC} 安装 PanSou 网盘"
+        echo -e " ${GREEN}2.${NC} 启动 PanSou 网盘"
+        echo -e " ${GREEN}3.${NC} 停止 PanSou 网盘"
+        echo -e " ${GREEN}4.${NC} 重启 PanSou 网盘"
+        echo -e " ${GREEN}5.${NC} 修改访问端口"
+        echo -e " ${GREEN}6.${NC} 查看实时日志"
+        echo -e " ${GREEN}7.${NC} 卸载 PanSou 网盘"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC} 返回上一级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 [0-7]: " choice
         
         case $choice in
-            1) install_pansou_docker_run ;;
-            2) install_pansou_docker_compose ;;
-            3) start_pansou ;;
-            4) stop_pansou ;;
-            5) restart_pansou ;;
-            6) change_pansou_port ;;
-            7) view_pansou_logs ;;
-            8) view_pansou_status ;;
-            9) uninstall_pansou ;;
-            10) access_pansou_web ;;
+            1) install_pansou_docker_compose ;;
+            2) start_pansou ;;
+            3) stop_pansou ;;
+            4) restart_pansou ;;
+            5) change_pansou_port ;;
+            6) view_pansou_logs ;;
+            7) uninstall_pansou ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
@@ -1059,44 +1056,7 @@ function pansou_management() {
 }
 
 # PanSou 占位子功能
-function install_pansou_docker_run() {
-    clear
-    echo -e "${CYAN}==========================================${NC}"
-    echo -e "${CYAN}       安装 PanSou (Docker Run)${NC}"
-    echo -e "${CYAN}==========================================${NC}"
-    
-    # 检查容器是否已存在
-    if docker ps -a --format '{{.Names}}' | grep -q "^pansou$"; then
-        echo -e "${YELLOW}⚠️  PanSou 容器已存在。${NC}"
-        read -p "是否删除现有容器并重新安装？(y/N): " reinstall
-        if [[ ! "$reinstall" =~ ^[yY]$ ]]; then
-            return
-        fi
-        docker stop pansou >/dev/null 2>&1
-        docker rm pansou >/dev/null 2>&1
-    fi
-    
-    # 获取端口设置
-    read -p "请输入宿主机映射端口 (默认 80): " host_port
-    host_port=${host_port:-80}
-    
-    # 验证端口是否被占用
-    if netstat -tuln | grep -q ":${host_port} "; then
-        echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
-        return
-    fi
-    
-    echo "正在拉取镜像并启动容器..."
-    if docker run -d --name pansou -p ${host_port}:80 ghcr.io/fish2018/pansou-web; then
-        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
-        
-        echo -e "${GREEN}✅ PanSou 安装成功！${NC}"
-        [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
-        [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
-    else
-        echo -e "${RED}❌ 安装失败，请检查错误信息。${NC}"
-    fi
-}
+
 function install_pansou_docker_compose() {
     clear
     echo -e "${CYAN}==========================================${NC}"
@@ -1174,142 +1134,114 @@ EOF
 function start_pansou() {
     clear
     echo "正在启动 PanSou..."
-    
-    # 兼容 docker compose (v2) 和 docker-compose (v1)
+
     local compose_cmd="docker-compose"
     if docker compose version &> /dev/null; then
         compose_cmd="docker compose"
     fi
 
-    if [ -f "/opt/pansou/docker-compose.yml" ]; then
-        cd /opt/pansou && $compose_cmd start
-        if [ $? -eq 0 ]; then
-            echo -e "${GREEN}✅ 启动成功！(Docker Compose)${NC}"
-        else
-            echo -e "${RED}❌ 启动失败。${NC}"
-        fi
-        cd - > /dev/null
-    else
-        if docker start pansou 2>/dev/null; then
-            echo -e "${GREEN}✅ 启动成功！(Docker Run)${NC}"
-        else
-            echo -e "${RED}❌ 启动失败，容器可能不存在。${NC}"
-        fi
+    if [ ! -f "/opt/pansou/docker-compose.yml" ]; then
+        echo -e "${RED}❌ 未检测到 Docker Compose 配置，请先安装。${NC}"
+        return
     fi
+
+    cd /opt/pansou && $compose_cmd start
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ 启动成功！${NC}"
+    else
+        echo -e "${RED}❌ 启动失败。${NC}"
+    fi
+    cd - > /dev/null
 }
 function stop_pansou() {
     clear
     echo "正在停止 PanSou..."
-    
-    # 兼容 docker compose (v2) 和 docker-compose (v1)
+
     local compose_cmd="docker-compose"
     if docker compose version &> /dev/null; then
         compose_cmd="docker compose"
     fi
 
-    if [ -f "/opt/pansou/docker-compose.yml" ]; then
-        cd /opt/pansou && $compose_cmd stop
-        if [ $? -eq 0 ]; then
-            echo -e "${GREEN}✅ 停止成功！(Docker Compose)${NC}"
-        else
-            echo -e "${RED}❌ 停止失败。${NC}"
-        fi
-        cd - > /dev/null
-    else
-        if docker stop pansou 2>/dev/null; then
-            echo -e "${GREEN}✅ 停止成功！(Docker Run)${NC}"
-        else
-            echo -e "${RED}❌ 停止失败，容器可能不存在。${NC}"
-        fi
+    if [ ! -f "/opt/pansou/docker-compose.yml" ]; then
+        echo -e "${RED}❌ 未检测到 Docker Compose 配置，请先安装。${NC}"
+        return
     fi
+
+    cd /opt/pansou && $compose_cmd stop
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ 停止成功！${NC}"
+    else
+        echo -e "${RED}❌ 停止失败。${NC}"
+    fi
+    cd - > /dev/null
 }
+
 function restart_pansou() {
     clear
     echo "正在重启 PanSou..."
-    
-    # 兼容 docker compose (v2) 和 docker-compose (v1)
+
     local compose_cmd="docker-compose"
     if docker compose version &> /dev/null; then
         compose_cmd="docker compose"
     fi
 
-    if [ -f "/opt/pansou/docker-compose.yml" ]; then
-        cd /opt/pansou && $compose_cmd restart
-        if [ $? -eq 0 ]; then
-            echo -e "${GREEN}✅ 重启成功！(Docker Compose)${NC}"
-        else
-            echo -e "${RED}❌ 重启失败。${NC}"
-        fi
-        cd - > /dev/null
-    else
-        if docker restart pansou 2>/dev/null; then
-            echo -e "${GREEN}✅ 重启成功！(Docker Run)${NC}"
-        else
-            echo -e "${RED}❌ 重启失败，容器可能不存在。${NC}"
-        fi
+    if [ ! -f "/opt/pansou/docker-compose.yml" ]; then
+        echo -e "${RED}❌ 未检测到 Docker Compose 配置，请先安装。${NC}"
+        return
     fi
+
+    cd /opt/pansou && $compose_cmd restart
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ 重启成功！${NC}"
+    else
+        echo -e "${RED}❌ 重启失败。${NC}"
+    fi
+    cd - > /dev/null
 }
 function change_pansou_port() {
     clear
     echo -e "${CYAN}==========================================${NC}"
     echo -e "${CYAN}         修改 PanSou 访问端口${NC}"
     echo -e "${CYAN}==========================================${NC}"
-    
-    # 检查容器是否存在
-    if ! docker ps -a --format '{{.Names}}' | grep -q "^pansou$"; then
-        echo -e "${RED}❌ PanSou 容器不存在，请先安装。${NC}"
+
+    if [ ! -f "/opt/pansou/docker-compose.yml" ]; then
+        echo -e "${RED}❌ 未检测到 Docker Compose 配置，请先安装。${NC}"
         return
     fi
-    
-    # 兼容 docker compose (v2) 和 docker-compose (v1)
+
     local compose_cmd="docker-compose"
     if docker compose version &> /dev/null; then
         compose_cmd="docker compose"
     fi
-    
-    # 获取当前端口
+
     local current_port=$(docker inspect pansou --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}' 2>/dev/null || echo "80")
     echo -e "当前访问端口: ${YELLOW}${current_port}${NC}"
-    
-    # 获取新端口
+
     read -p "请输入新的宿主机端口: " new_port
     if [[ ! "$new_port" =~ ^[0-9]+$ ]] || [ "$new_port" -lt 1 ] || [ "$new_port" -gt 65535 ]; then
         echo -e "${RED}❌ 端口号无效。请输入 1-65535 之间的数字。${NC}"
         return
     fi
-    
-    # 检查端口占用
+
     if netstat -tuln | grep -q ":${new_port} "; then
         echo -e "${RED}❌ 端口 ${new_port} 已被占用，请选择其他端口。${NC}"
         return
     fi
-    
+
     echo -e "${YELLOW}⚠️  正在修改端口，这将重启容器...${NC}"
-    
-    # 停止并删除现有容器
+
     docker stop pansou >/dev/null 2>&1
     docker rm pansou >/dev/null 2>&1
-    
-    # 判断安装方式并重新创建
-    local method=""
-    if [ -f "/opt/pansou/docker-compose.yml" ]; then
-        # Docker Compose 方式：更新配置文件
-        cd /opt/pansou
-        sed -i "s/- \"[0-9]*:80\"/- \"${new_port}:80\"/" docker-compose.yml
-        $compose_cmd up -d
-        method="Docker Compose"
-        cd - > /dev/null
-    else
-        # Docker Run 方式：重新运行
-        docker run -d --name pansou -p ${new_port}:80 ghcr.io/fish2018/pansou-web
-        method="Docker Run"
-    fi
-    
+
+    cd /opt/pansou
+    sed -i "s/- \"[0-9]*:80\"/- \"${new_port}:80\"/" docker-compose.yml
+    $compose_cmd up -d
+    cd - > /dev/null
+
     if docker ps --format '{{.Names}}' | grep -q "^pansou$"; then
         IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
-        
+
         echo -e "${GREEN}✅ 端口修改成功！${NC}"
-        echo -e "安装方式: ${method}"
         [ -n "$ipv4" ] && echo -e "新 IPv4 访问地址: ${YELLOW}http://${ipv4}:${new_port}${NC}"
         [ -n "$ipv6" ] && echo -e "新 IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${new_port}${NC}"
     else
@@ -1323,72 +1255,19 @@ function view_pansou_logs() {
     echo -e "${CYAN}==========================================${NC}"
     echo "按 Ctrl+C 退出日志查看"
     echo ""
-    
-    # 兼容 docker compose (v2) 和 docker-compose (v1)
+
+    if [ ! -f "/opt/pansou/docker-compose.yml" ]; then
+        echo -e "${RED}❌ 未检测到 Docker Compose 配置，请先安装。${NC}"
+        return
+    fi
+
     local compose_cmd="docker-compose"
     if docker compose version &> /dev/null; then
         compose_cmd="docker compose"
     fi
 
-    if [ -f "/opt/pansou/docker-compose.yml" ]; then
-        cd /opt/pansou && $compose_cmd logs -f
-        cd - > /dev/null
-    else
-        docker logs -f pansou
-    fi
-}
-
-function view_pansou_status() {
-    clear
-    echo -e "${CYAN}==========================================${NC}"
-    echo -e "${CYAN}         PanSou 容器状态${NC}"
-    echo -e "${CYAN}==========================================${NC}"
-    
-    if docker ps -a --format '{{.Names}}' | grep -q "^pansou$"; then
-        echo -e "${GREEN}✅ 容器详细信息：${NC}"
-        docker inspect pansou --format='\
-容器名称: {{.Name}}\n\
-容器状态: {{.State.Status}}\n\
-运行状态: {{.State.Running}}\n\
-镜像: {{.Config.Image}}\n\
-创建时间: {{.Created}}\n\
-端口映射: {{range $p, $conf := .NetworkSettings.Ports}}{{$p}} -> {{(index $conf 0).HostPort}}{{end}}\n\
-日志路径: {{.LogPath}}\n\
-重启策略: {{.HostConfig.RestartPolicy.Name}}' | sed 's/^/\t/'
-        
-        echo ""
-        echo -e "${YELLOW}资源使用情况：${NC}"
-        docker stats pansou --no-stream
-    else
-        echo -e "${RED}❌ PanSou 容器不存在。${NC}"
-    fi
-}
-
-function access_pansou_web() {
-    clear
-    echo -e "${CYAN}==========================================${NC}"
-    echo -e "${GREEN}         查询 PanSou Web 访问地址${NC}"
-    echo -e "${CYAN}==========================================${NC}"
-    
-    if ! docker ps -a --format '{{.Names}}' | grep -q "^pansou$"; then
-        echo -e "${RED}❌ PanSou 容器不存在，请先安装。${NC}"
-        return
-    fi
-    
-    # 获取映射端口
-    local host_port=$(docker inspect pansou --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}' 2>/dev/null)
-    
-    if [ -z "$host_port" ]; then
-        echo -e "${YELLOW}⚠️  未能获取到端口映射信息，请确认容器是否正常运行。${NC}"
-        return
-    fi
-    
-    IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
-    
-    echo -e "您的 PanSou 网盘访问地址为："
-    [ -n "$ipv4" ] && echo -e "IPv4 地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
-    [ -n "$ipv6" ] && echo -e "IPv6 地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
-    echo ""
+    cd /opt/pansou && $compose_cmd logs -f
+    cd - > /dev/null
 }
 
 function uninstall_pansou() {
