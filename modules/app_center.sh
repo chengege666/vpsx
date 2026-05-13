@@ -383,20 +383,22 @@ function github_proxy_management() {
 
         local status_text="${RED}未安装${NC}"
 
-        if docker ps -a --format '{{.Names}}' | grep -q "^github-proxy$"; then
-            if docker ps --format '{{.Names}}' | grep -q "^github-proxy$"; then
-                status_text="${GREEN}运行中${NC}"
+        if command -v docker &> /dev/null; then
+            if docker ps -a --format '{{.Names}}' | grep -q "^github-proxy$"; then
+                if docker ps --format '{{.Names}}' | grep -q "^github-proxy$"; then
+                    status_text="${GREEN}运行中${NC}"
 
-                local host_port=$(docker inspect github-proxy --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}' 2>/dev/null)
-                host_port=${host_port:-7210}
+                    local host_port=$(docker inspect github-proxy --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}' 2>/dev/null)
+                    host_port=${host_port:-7210}
 
-                IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+                    IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
 
-                echo -e "${CYAN}-----------------------------------------${NC}"
-                [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
-                [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
-            else
-                status_text="${YELLOW}已停止${NC}"
+                    echo -e "${CYAN}-----------------------------------------${NC}"
+                    [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+                    [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+                else
+                    status_text="${YELLOW}已停止${NC}"
+                fi
             fi
         fi
 
@@ -674,20 +676,22 @@ function komari_management() {
 
         local status_text="${RED}未部署${NC}"
 
-        if docker ps -a --format '{{.Names}}' | grep -q "^komari$"; then
-            if docker ps --format '{{.Names}}' | grep -q "^komari$"; then
-                status_text="${GREEN}运行中${NC}"
+        if command -v docker &> /dev/null; then
+            if docker ps -a --format '{{.Names}}' | grep -q "^komari$"; then
+                if docker ps --format '{{.Names}}' | grep -q "^komari$"; then
+                    status_text="${GREEN}运行中${NC}"
 
-                local host_port=$(docker inspect komari --format='{{(index (index .NetworkSettings.Ports "25774/tcp") 0).HostPort}}' 2>/dev/null)
-                host_port=${host_port:-8083}
+                    local host_port=$(docker inspect komari --format='{{(index (index .NetworkSettings.Ports "25774/tcp") 0).HostPort}}' 2>/dev/null)
+                    host_port=${host_port:-8083}
 
-                IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+                    IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
 
-                echo -e "${CYAN}-----------------------------------------${NC}"
-                [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
-                [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
-            else
-                status_text="${YELLOW}已停止${NC}"
+                    echo -e "${CYAN}-----------------------------------------${NC}"
+                    [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+                    [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+                else
+                    status_text="${YELLOW}已停止${NC}"
+                fi
             fi
         fi
 
@@ -1018,21 +1022,23 @@ function pansou_management() {
         
         # 状态检测
         local status_text="${RED}未安装${NC}"
-        
-        if docker ps -a --format '{{.Names}}' | grep -q "^pansou$"; then
-            if docker ps --format '{{.Names}}' | grep -q "^pansou$"; then
-                status_text="${GREEN}运行中${NC}"
-                
-                local host_port=$(docker inspect pansou --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}' 2>/dev/null)
-                host_port=${host_port:-80}
-                
-                IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
-                
-                echo -e "${CYAN}-----------------------------------------${NC}"
-                [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
-                [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
-            else
-                status_text="${YELLOW}已停止${NC}"
+
+        if command -v docker &> /dev/null; then
+            if docker ps -a --format '{{.Names}}' | grep -q "^pansou$"; then
+                if docker ps --format '{{.Names}}' | grep -q "^pansou$"; then
+                    status_text="${GREEN}运行中${NC}"
+
+                    local host_port=$(docker inspect pansou --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}' 2>/dev/null)
+                    host_port=${host_port:-80}
+
+                    IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+
+                    echo -e "${CYAN}-----------------------------------------${NC}"
+                    [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+                    [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+                else
+                    status_text="${YELLOW}已停止${NC}"
+                fi
             fi
         fi
         
@@ -1325,7 +1331,7 @@ function nginx_proxy_manager_management() {
 
         local status_text="${RED}未安装${NC}"
 
-        if [ -d "/opt/npm" ] && docker compose -f /opt/npm/docker-compose.yml ps &> /dev/null; then
+        if command -v docker &> /dev/null && [ -d "/opt/npm" ] && docker compose -f /opt/npm/docker-compose.yml ps &> /dev/null; then
             local npm_status=$(docker compose -f /opt/npm/docker-compose.yml ps --status running 2>/dev/null | grep -c "Up")
             if [ "$npm_status" -gt 0 ]; then
                 status_text="${GREEN}运行中${NC}"
@@ -1769,10 +1775,10 @@ function watchtower_management() {
         fi
         
         # 显示Watchtower状态
-        if docker ps -a --format "{{.Names}}" | grep -q "watchtower"; then
+        if command -v docker &> /dev/null && docker ps -a --format "{{.Names}}" | grep -q "watchtower"; then
             echo -e "${GREEN}✅ Watchtower 容器状态：${NC}"
             docker ps -a --filter "name=watchtower" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-            
+
             # 显示监控的容器数量
             container_count=$(docker ps --format "{{.Names}}" | grep -v "watchtower" | wc -l)
             echo -e "\n📊 Watchtower 正在监控 ${YELLOW}${container_count}${NC} 个容器"
@@ -5563,8 +5569,7 @@ function safeline_waf_management() {
         local status_text="${RED}未安装${NC}"
         
         if [ -d "$safeline_dir" ] && [ -f "$safeline_dir/compose.yaml" ]; then
-            # 改为直接检测管理容器是否在运行，更准确
-            if docker ps --format '{{.Names}}' | grep -q "^safeline-mgt-api$"; then
+            if command -v docker &> /dev/null && docker ps --format '{{.Names}}' | grep -q "^safeline-mgt-api$"; then
                 status_text="${GREEN}运行中${NC}"
                 
                 # 获取映射端口和显示IP信息
@@ -5934,21 +5939,22 @@ function vscode_management() {
         
         # 状态检测逻辑
         local status_text="${RED}未安装${NC}"
-        if docker ps -a --format '{{.Names}}' | grep -q "^vscode-server$"; then
-            if docker ps --format '{{.Names}}' | grep -q "^vscode-server$"; then
-                status_text="${GREEN}运行中${NC}"
-                
-                # 获取映射端口和显示IP信息
-                local host_port=$(docker inspect vscode-server --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}' 2>/dev/null)
-                host_port=${host_port:-8080}
-                
-                IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
-                
-                echo -e "${CYAN}-----------------------------------------${NC}"
-                [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
-                [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
-            else
-                status_text="${YELLOW}已停止${NC}"
+        if command -v docker &> /dev/null; then
+            if docker ps -a --format '{{.Names}}' | grep -q "^vscode-server$"; then
+                if docker ps --format '{{.Names}}' | grep -q "^vscode-server$"; then
+                    status_text="${GREEN}运行中${NC}"
+
+                    local host_port=$(docker inspect vscode-server --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}' 2>/dev/null)
+                    host_port=${host_port:-8080}
+
+                    IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+
+                    echo -e "${CYAN}-----------------------------------------${NC}"
+                    [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+                    [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+                else
+                    status_text="${YELLOW}已停止${NC}"
+                fi
             fi
         fi
 
@@ -7114,13 +7120,15 @@ function open_webui_management() {
         # 状态检测逻辑
         local status_text="${RED}未安装${NC}"
         local host_port=""
-        
-        if docker ps -a --format '{{.Names}}' | grep -q "^open-webui$"; then
-            if docker inspect --format='{{.State.Status}}' open-webui 2>/dev/null | grep -q "running"; then
-                status_text="${GREEN}运行中${NC}"
-                host_port=$(docker inspect open-webui --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}' 2>/dev/null)
-            else
-                status_text="${YELLOW}已停止${NC}"
+
+        if command -v docker &> /dev/null; then
+            if docker ps -a --format '{{.Names}}' | grep -q "^open-webui$"; then
+                if docker inspect --format='{{.State.Status}}' open-webui 2>/dev/null | grep -q "running"; then
+                    status_text="${GREEN}运行中${NC}"
+                    host_port=$(docker inspect open-webui --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}' 2>/dev/null)
+                else
+                    status_text="${YELLOW}已停止${NC}"
+                fi
             fi
         fi
 
@@ -7368,13 +7376,15 @@ function librespeed_management() {
         
         local status_text="${RED}未安装${NC}"
         local host_port=""
-        
-        if docker ps -a --format '{{.Names}}' | grep -q "^librespeed$"; then
-            if docker inspect --format='{{.State.Status}}' librespeed 2>/dev/null | grep -q "running"; then
-                status_text="${GREEN}运行中${NC}"
-                host_port=$(docker inspect librespeed --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}' 2>/dev/null)
-            else
-                status_text="${YELLOW}已停止${NC}"
+
+        if command -v docker &> /dev/null; then
+            if docker ps -a --format '{{.Names}}' | grep -q "^librespeed$"; then
+                if docker inspect --format='{{.State.Status}}' librespeed 2>/dev/null | grep -q "running"; then
+                    status_text="${GREEN}运行中${NC}"
+                    host_port=$(docker inspect librespeed --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}' 2>/dev/null)
+                else
+                    status_text="${YELLOW}已停止${NC}"
+                fi
             fi
         fi
 
@@ -7825,13 +7835,15 @@ function myip_management() {
         
         local status_text="${RED}未安装${NC}"
         local host_port=""
-        
-        if docker ps -a --format '{{.Names}}' | grep -q "^myip$"; then
-            if docker inspect --format='{{.State.Status}}' myip 2>/dev/null | grep -q "running"; then
-                status_text="${GREEN}运行中${NC}"
-                host_port=$(docker inspect myip --format='{{(index (index .NetworkSettings.Ports "18966/tcp") 0).HostPort}}' 2>/dev/null)
-            else
-                status_text="${YELLOW}已停止${NC}"
+
+        if command -v docker &> /dev/null; then
+            if docker ps -a --format '{{.Names}}' | grep -q "^myip$"; then
+                if docker inspect --format='{{.State.Status}}' myip 2>/dev/null | grep -q "running"; then
+                    status_text="${GREEN}运行中${NC}"
+                    host_port=$(docker inspect myip --format='{{(index (index .NetworkSettings.Ports "18966/tcp") 0).HostPort}}' 2>/dev/null)
+                else
+                    status_text="${YELLOW}已停止${NC}"
+                fi
             fi
         fi
 
@@ -7988,15 +8000,15 @@ function it_tools_management() {
         
         local status_text="${RED}未安装${NC}"
         local host_port=""
-        
-        # 状态检测
-        if docker ps -a --format '{{.Names}}' | grep -q "^it-tools$"; then
-            if docker inspect --format='{{.State.Status}}' it-tools 2>/dev/null | grep -q "running"; then
-                status_text="${GREEN}运行中${NC}"
-                # 获取映射端口
-                host_port=$(docker inspect it-tools --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}' 2>/dev/null)
-            else
-                status_text="${YELLOW}已停止${NC}"
+
+        if command -v docker &> /dev/null; then
+            if docker ps -a --format '{{.Names}}' | grep -q "^it-tools$"; then
+                if docker inspect --format='{{.State.Status}}' it-tools 2>/dev/null | grep -q "running"; then
+                    status_text="${GREEN}运行中${NC}"
+                    host_port=$(docker inspect it-tools --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}' 2>/dev/null)
+                else
+                    status_text="${YELLOW}已停止${NC}"
+                fi
             fi
         fi
 
@@ -8170,14 +8182,15 @@ function uptime_kuma_management() {
         
         local status_text="${RED}未安装${NC}"
         local host_port=""
-        
-        # 状态检测
-        if docker ps -a --format '{{.Names}}' | grep -q "^uptime-kuma$"; then
-            if docker inspect --format='{{.State.Status}}' uptime-kuma 2>/dev/null | grep -q "running"; then
-                status_text="${GREEN}运行中${NC}"
-                host_port=$(docker inspect uptime-kuma --format='{{(index (index .NetworkSettings.Ports "3001/tcp") 0).HostPort}}' 2>/dev/null)
-            else
-                status_text="${YELLOW}已停止${NC}"
+
+        if command -v docker &> /dev/null; then
+            if docker ps -a --format '{{.Names}}' | grep -q "^uptime-kuma$"; then
+                if docker inspect --format='{{.State.Status}}' uptime-kuma 2>/dev/null | grep -q "running"; then
+                    status_text="${GREEN}运行中${NC}"
+                    host_port=$(docker inspect uptime-kuma --format='{{(index (index .NetworkSettings.Ports "3001/tcp") 0).HostPort}}' 2>/dev/null)
+                else
+                    status_text="${YELLOW}已停止${NC}"
+                fi
             fi
         fi
 
@@ -8344,11 +8357,13 @@ function beecount_management() {
         echo -e "${GREEN}             密封记账 (BeeCount)${NC}"
         
         local status_text="${RED}未安装${NC}"
-        if docker ps -a --format '{{.Names}}' | grep -q "^beecount-cloud$"; then
-            if docker inspect --format='{{.State.Status}}' beecount-cloud 2>/dev/null | grep -q "running"; then
-                status_text="${GREEN}运行中${NC}"
-            else
-                status_text="${YELLOW}已停止${NC}"
+        if command -v docker &> /dev/null; then
+            if docker ps -a --format '{{.Names}}' | grep -q "^beecount-cloud$"; then
+                if docker inspect --format='{{.State.Status}}' beecount-cloud 2>/dev/null | grep -q "running"; then
+                    status_text="${GREEN}运行中${NC}"
+                else
+                    status_text="${YELLOW}已停止${NC}"
+                fi
             fi
         fi
         
@@ -8469,12 +8484,14 @@ function pairdrop_management() {
         local status_text="${RED}未安装${NC}"
         local host_port=""
 
-        if docker ps -a --format '{{.Names}}' | grep -q "^pairdrop$"; then
-            if docker inspect --format='{{.State.Status}}' pairdrop 2>/dev/null | grep -q "running"; then
-                status_text="${GREEN}运行中${NC}"
-                host_port=$(docker inspect pairdrop --format='{{(index (index .NetworkSettings.Ports "3000/tcp") 0).HostPort}}' 2>/dev/null)
-            else
-                status_text="${YELLOW}已停止${NC}"
+        if command -v docker &> /dev/null; then
+            if docker ps -a --format '{{.Names}}' | grep -q "^pairdrop$"; then
+                if docker inspect --format='{{.State.Status}}' pairdrop 2>/dev/null | grep -q "running"; then
+                    status_text="${GREEN}运行中${NC}"
+                    host_port=$(docker inspect pairdrop --format='{{(index (index .NetworkSettings.Ports "3000/tcp") 0).HostPort}}' 2>/dev/null)
+                else
+                    status_text="${YELLOW}已停止${NC}"
+                fi
             fi
         fi
 
@@ -8644,16 +8661,18 @@ function rustdesk_management() {
         local hbbr_port=""
         local pub_key=""
 
-        if docker ps -a --format '{{.Names}}' | grep -q "^rustdesk-hbbs$"; then
-            if docker inspect --format='{{.State.Status}}' rustdesk-hbbs 2>/dev/null | grep -q "running"; then
-                status_text="${GREEN}运行中${NC}"
-                hbbs_port=$(docker inspect rustdesk-hbbs --format='{{(index (index .NetworkSettings.Ports "21116/tcp") 0).HostPort}}' 2>/dev/null)
-                hbbr_port=$(docker inspect rustdesk-hbbr --format='{{(index (index .NetworkSettings.Ports "21117/tcp") 0).HostPort}}' 2>/dev/null)
-                if [ -f "/opt/rustdesk/data/id_ed25519.pub" ]; then
-                    pub_key=$(cat /opt/rustdesk/data/id_ed25519.pub 2>/dev/null)
+        if command -v docker &> /dev/null; then
+            if docker ps -a --format '{{.Names}}' | grep -q "^rustdesk-hbbs$"; then
+                if docker inspect --format='{{.State.Status}}' rustdesk-hbbs 2>/dev/null | grep -q "running"; then
+                    status_text="${GREEN}运行中${NC}"
+                    hbbs_port=$(docker inspect rustdesk-hbbs --format='{{(index (index .NetworkSettings.Ports "21116/tcp") 0).HostPort}}' 2>/dev/null)
+                    hbbr_port=$(docker inspect rustdesk-hbbr --format='{{(index (index .NetworkSettings.Ports "21117/tcp") 0).HostPort}}' 2>/dev/null)
+                    if [ -f "/opt/rustdesk/data/id_ed25519.pub" ]; then
+                        pub_key=$(cat /opt/rustdesk/data/id_ed25519.pub 2>/dev/null)
+                    fi
+                else
+                    status_text="${YELLOW}已停止${NC}"
                 fi
-            else
-                status_text="${YELLOW}已停止${NC}"
             fi
         fi
 
