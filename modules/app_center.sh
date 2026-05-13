@@ -6238,30 +6238,28 @@ function lucky_management() {
         echo -e "Lucky 是一款集 DDNS、反向代理、SSL证书申请、WOL等"
         echo -e "于一体的超强大工具，资源占用极低。"
         echo ""
-        echo -e " ${GREEN}1.${NC} 安装 Lucky (Docker 版)"
-        echo -e " ${GREEN}2.${NC} 安装 Lucky (直接安装)"
-        echo -e " ${GREEN}3.${NC} 启动 Lucky"
-        echo -e " ${GREEN}4.${NC} 停止 Lucky"
-        echo -e " ${GREEN}5.${NC} 重启 Lucky"
-        echo -e " ${GREEN}6.${NC} 查看 Lucky 运行日志"
-        echo -e " ${GREEN}7.${NC} 升级 Lucky 到最新版"
-        echo -e " ${GREEN}8.${NC} 卸载 Lucky"
-        echo -e " ${GREEN}9.${NC} 访问管理界面"
+        echo -e " ${GREEN}1.${NC} 安装 Lucky"
+        echo -e " ${GREEN}2.${NC} 启动 Lucky"
+        echo -e " ${GREEN}3.${NC} 停止 Lucky"
+        echo -e " ${GREEN}4.${NC} 重启 Lucky"
+        echo -e " ${GREEN}5.${NC} 查看 Lucky 运行日志"
+        echo -e " ${GREEN}6.${NC} 升级 Lucky 到最新版"
+        echo -e " ${GREEN}7.${NC} 卸载 Lucky"
+        echo -e " ${GREEN}8.${NC} 访问管理界面"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC} 返回上一级菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-9): " lucky_choice
+        read -p "请输入你的选择 (0-8): " lucky_choice
 
         case "$lucky_choice" in
             1) install_lucky_docker ;;
-            2) install_lucky_direct ;;
-            3) start_lucky "$mode" ;;
-            4) stop_lucky "$mode" ;;
-            5) restart_lucky "$mode" ;;
-            6) view_lucky_log "$mode" ;;
-            7) upgrade_lucky "$mode" ;;
-            8) uninstall_lucky "$mode" ;;
-            9) access_lucky_web "$mode" ;;
+            2) start_lucky "$mode" ;;
+            3) stop_lucky "$mode" ;;
+            4) restart_lucky "$mode" ;;
+            5) view_lucky_log "$mode" ;;
+            6) upgrade_lucky "$mode" ;;
+            7) uninstall_lucky "$mode" ;;
+            8) access_lucky_web "$mode" ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
@@ -6324,134 +6322,6 @@ function install_lucky_docker() {
     read -p "按回车键继续..."
 }
 
-function install_lucky_direct() {
-    clear
-    echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}           安装 Lucky (直接安装)${NC}"
-    echo -e "${CYAN}=========================================${NC}"
-
-    # 检测是否已安装
-    if systemctl list-units --full -all | grep -q "lucky.service"; then
-        echo -e "${YELLOW}检测到 Lucky (直接安装) 已存在。${NC}"
-        read -p "是否重新安装？(y/N): " reinstall
-        [[ ! "$reinstall" =~ ^[yY]$ ]] && return
-        systemctl stop lucky &>/dev/null
-    fi
-
-    # 检测 Docker 版本是否存在
-    if command -v docker &> /dev/null && docker ps -a --format '{{.Names}}' | grep -q "^lucky$"; then
-        echo -e "${RED}检测到 Lucky (Docker) 存在。请先卸载 Docker 版本以避免冲突。${NC}"
-        read -p "按回车键继续..."
-        return
-    fi
-
-    # 1. 获取最新版本
-    echo -e "${BLUE}正在获取最新版本信息...${NC}"
-    local latest_tag=$(curl -s https://api.github.com/repos/gdy666/lucky/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    if [ -z "$latest_tag" ]; then
-        echo -e "${RED}获取版本信息失败，请检查网络连接。${NC}"
-        read -p "按回车键继续..."
-        return
-    fi
-    echo -e "最新版本: ${GREEN}${latest_tag}${NC}"
-
-    # 1.1 配置管理端口
-    read -p "请输入 Lucky 管理端口 (默认 16601): " host_port
-    host_port=${host_port:-16601}
-
-    # 1.2 验证端口占用
-    if command -v ss &> /dev/null; then
-        if ss -tuln | grep -q ":${host_port} "; then
-            echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
-            read -p "按回车键继续..."
-            return
-        fi
-    fi
-
-    # 2. 检测系统架构
-    local arch=$(uname -m)
-    local lucky_arch=""
-    case "$arch" in
-        x86_64) lucky_arch="x86_64" ;;
-        aarch64) lucky_arch="arm64" ;;
-        armv7l) lucky_arch="armv7" ;;
-        *) echo -e "${RED}不支持的架构: $arch${NC}"; read -p "按回车键继续..."; return ;;
-    esac
-
-    # 3. 下载并安装
-    local version_number="${latest_tag#v}"
-    # 尝试构建下载链接
-    local download_url="https://github.com/gdy666/lucky/releases/download/${latest_tag}/lucky_${version_number}_Linux_${lucky_arch}.tar.gz"
-    
-    echo -e "${BLUE}正在下载 Lucky...${NC}"
-    wget -O /tmp/lucky.tar.gz "$download_url"
-    
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}下载失败，尝试使用 jsdelivr 代理...${NC}"
-        download_url="https://ghproxy.com/https://github.com/gdy666/lucky/releases/download/${latest_tag}/lucky_${version_number}_Linux_${lucky_arch}.tar.gz"
-        wget -O /tmp/lucky.tar.gz "$download_url"
-        if [ $? -ne 0 ]; then
-             echo -e "${RED}下载失败。请检查网络。${NC}"
-             read -p "按回车键继续..."
-             return
-        fi
-    fi
-
-    echo -e "${BLUE}正在解压并安装...${NC}"
-    mkdir -p /tmp/lucky_install
-    tar -xzf /tmp/lucky.tar.gz -C /tmp/lucky_install
-    
-    # 查找二进制文件
-    local bin_path=$(find /tmp/lucky_install -name "lucky" -type f | head -n 1)
-    if [ -z "$bin_path" ]; then
-         echo -e "${RED}解压后未找到 lucky 二进制文件。${NC}"
-         rm -rf /tmp/lucky.tar.gz /tmp/lucky_install
-         read -p "按回车键继续..."
-         return
-    fi
-
-    chmod +x "$bin_path"
-    mv "$bin_path" /usr/local/bin/lucky
-    rm -rf /tmp/lucky.tar.gz /tmp/lucky_install
-
-    # 4. 创建配置目录
-    mkdir -p /etc/lucky
-
-    # 5. 创建系统服务
-    cat > /etc/systemd/system/lucky.service <<EOF
-[Unit]
-Description=Lucky Service
-After=network.target
-
-[Service]
-Type=simple
-User=root
-ExecStart=/usr/local/bin/lucky -c /etc/lucky/lucky.conf -p ${host_port}
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    # 6. 启动服务
-    systemctl daemon-reload
-    systemctl enable lucky
-    systemctl start lucky
-    
-    if systemctl is-active --quiet lucky; then
-        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
-        echo -e "${GREEN}✅ Lucky (直接安装) 安装成功！${NC}"
-        echo -e "管理地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
-        echo -e "默认账号: ${GREEN}666${NC}"
-        echo -e "默认密码: ${GREEN}666${NC}"
-        echo -e "${RED}注意：请务必在首次登录后立即修改账号密码。${NC}"
-    else
-        echo -e "${RED}❌ 安装后启动失败，请检查日志 'journalctl -u lucky'。${NC}"
-    fi
-    read -p "按回车键继续..."
-}
-
 function start_lucky() {
     local mode=$1
     if [ "$mode" == "docker" ]; then
@@ -6502,14 +6372,11 @@ function view_lucky_log() {
 function upgrade_lucky() {
     local mode=$1
     if [ "$mode" == "docker" ]; then
-        echo -e "${BLUE}正在升级 Lucky (Docker) 到最新版本...${NC}"
+        echo -e "${BLUE}正在升级 Lucky 到最新版本...${NC}"
         docker pull gdy666/lucky:latest
         docker stop lucky && docker rm lucky
         docker run -d --name lucky --restart always --network host -v /opt/lucky/conf:/config gdy666/lucky:latest
         echo -e "${GREEN}升级完成。${NC}"
-    elif [ "$mode" == "systemd" ]; then
-        echo -e "${BLUE}正在升级 Lucky (直接安装) 到最新版本...${NC}"
-        install_lucky_direct # 复用安装逻辑进行升级
     else
         echo -e "${RED}未检测到 Lucky 安装${NC}"
     fi
