@@ -7443,17 +7443,102 @@ EOF
         docker rm librespeed &>/dev/null
     fi
 
-    # 拉取并启动
+    # 拉取并启动（含 IPv6 失败重试）
+    local pull_ok=false
+    local compose_cmd=""
     if command -v docker compose &> /dev/null; then
-        docker compose pull && docker compose up -d
+        compose_cmd="docker compose"
     elif command -v docker-compose &> /dev/null; then
-        docker-compose pull && docker-compose up -d
+        compose_cmd="docker-compose"
     else
         echo -e "${RED}❌ 未检测到 docker-compose，无法部署。${NC}"
         return
     fi
 
-    if [ $? -eq 0 ]; then
+    # 第一次尝试
+    local pull_output
+    pull_output=$($compose_cmd pull 2>&1)
+    local pull_exit=$?
+
+    if [ $pull_exit -eq 0 ]; then
+        $compose_cmd up -d
+        pull_ok=true
+    else
+        echo -e "${YELLOW}⚠️  首次拉取失败，检查是否由 IPv6 连接问题导致...${NC}"
+        echo "$pull_output" | tail -5
+
+        # 判断是否为 IPv6 连接重置错误
+        if echo "$pull_output" | grep -Eq "connection reset by peer" && echo "$pull_output" | grep -Eq "\[.*\]:[0-9]+->\["; then
+            echo ""
+            echo -e "${YELLOW}检测到 IPv6 连接 Docker Hub CDN 不稳定，是否尝试以下方案？${NC}"
+            echo -e " ${GREEN}1.${NC} 自动配置 Docker DNS（优先使用 IPv4 解析）并重试"
+            echo -e " ${GREEN}2.${NC} 手动修改 /etc/docker/daemon.json 后重试"
+            echo -e " ${GREEN}3.${NC} 跳过，我自己处理"
+            read -p "请选择 (默认 1): " retry_choice
+            retry_choice=${retry_choice:-1}
+
+            case "$retry_choice" in
+                1)
+                    echo -e "${BLUE}正在配置 Docker DNS...${NC}"
+                    local daemon_file="/etc/docker/daemon.json"
+                    local tmp_daemon="/tmp/daemon.json.tmp"
+
+                    if [ -f "$daemon_file" ]; then
+                        # 备份原配置
+                        cp "$daemon_file" "${daemon_file}.bak.$(date +%Y%m%d_%H%M%S)"
+                        # 检查是否已有 dns 配置
+                        if grep -q '"dns"' "$daemon_file"; then
+                            echo -e "${YELLOW}检测到已有 dns 配置，跳过修改。${NC}"
+                        else
+                            # 在现有 json 中插入 dns 配置
+                            python3 -c "
+import json
+with open('$daemon_file') as f:
+    cfg = json.load(f)
+cfg['dns'] = ['8.8.8.8', '1.1.1.1']
+with open('$daemon_file', 'w') as f:
+    json.dump(cfg, f, indent=4)
+" 2>/dev/null || {
+                                # python3 不可用时手动插入
+                                sed -i 's/{/\{'"'"'\\n    "dns": ["8.8.8.8", "1.1.1.1"],'"'"'/' "$daemon_file" 2>/dev/null
+                            }
+                        fi
+                    else
+                        echo '{"dns": ["8.8.8.8", "1.1.1.1"]}' > "$daemon_file"
+                    fi
+
+                    echo -e "${BLUE}正在重启 Docker 服务...${NC}"
+                    systemctl restart docker
+                    sleep 3
+
+                    echo -e "${BLUE}正在重试拉取镜像...${NC}"
+                    cd "$deploy_dir"
+                    if $compose_cmd pull && $compose_cmd up -d; then
+                        pull_ok=true
+                    fi
+                    ;;
+                2)
+                    echo -e "${YELLOW}请手动执行：${NC}"
+                    echo -e "  vi /etc/docker/daemon.json"
+                    echo -e "  添加: ${GREEN}\"dns\": [\"8.8.8.8\", \"1.1.1.1\"]${NC}"
+                    echo -e "  然后: ${GREEN}systemctl restart docker${NC}"
+                    echo ""
+                    read -p "完成后按回车键继续重试..."
+                    cd "$deploy_dir"
+                    if $compose_cmd pull && $compose_cmd up -d; then
+                        pull_ok=true
+                    fi
+                    ;;
+                *)
+                    echo -e "${YELLOW}已跳过。${NC}"
+                    ;;
+            esac
+        else
+            echo -e "${YELLOW}拉取失败原因可能与 IPv6 无关，请手动检查。${NC}"
+        fi
+    fi
+
+    if [ "$pull_ok" = true ]; then
         IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
         echo -e "${GREEN}LibreSpeed 安装成功！${NC}"
         echo -e "部署目录: ${YELLOW}$deploy_dir${NC}"
