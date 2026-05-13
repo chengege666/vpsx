@@ -124,25 +124,21 @@ function one_panel_management() {
         clear
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}          1Panel新一代管理面板${NC}"
-        
+
         local status_text="${RED}未安装${NC}"
         local actual_port=""
-        
+
         if command -v 1pctl &> /dev/null; then
-            status_text="${GREEN}已安装${NC}"
-            
-            # 尝试获取实际端口信息
+            status_text="${GREEN}运行中${NC}"
             actual_port="17001"
-            
-            # 方法1: 从 1Panel 配置文件中读取端口
+
             if [ -f "/opt/1panel/conf/app.conf" ]; then
                 local config_port=$(grep "^server.port" /opt/1panel/conf/app.conf 2>/dev/null | cut -d'=' -f2)
                 if [ -n "$config_port" ] && [ "$config_port" -gt 0 ] 2>/dev/null; then
                     actual_port="$config_port"
                 fi
             fi
-            
-            # 方法2: 从 1pctl 输出中提取端口信息
+
             local user_info=$(1pctl user-info 2>/dev/null)
             if echo "$user_info" | grep -q "面板地址:"; then
                 local panel_url=$(echo "$user_info" | grep "面板地址:" | sed 's/面板地址://' | tr -d ' ')
@@ -150,16 +146,14 @@ function one_panel_management() {
                     actual_port="${BASH_REMATCH[1]}"
                 fi
             fi
-        fi
-        
-        echo -e "          状态: ${status_text}"
-        if [ -n "$actual_port" ] && [ "$actual_port" != "17001" ]; then
+
             IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
             echo -e "${CYAN}-----------------------------------------${NC}"
             [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${actual_port}${NC}"
             [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${actual_port}${NC}"
         fi
-        
+
+        echo -e "          状态: ${status_text}"
         echo -e "${CYAN}=========================================${NC}"
         echo -e " ${GREEN}1.${NC}  安装/更新 1Panel"
         echo -e " ${GREEN}2.${NC}  启动 1Panel"
@@ -386,20 +380,27 @@ function github_proxy_management() {
         clear
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}             GitHub 加速站管理${NC}"
-        
+
+        local status_text="${RED}未安装${NC}"
+
         if docker ps -a --format '{{.Names}}' | grep -q "^github-proxy$"; then
-            echo -e "          状态: ${GREEN}已安装${NC}"
-            # 获取映射端口
-            local host_port=$(docker inspect github-proxy --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}' 2>/dev/null)
-            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
-            
-            echo -e "${CYAN}-----------------------------------------${NC}"
-            [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
-            [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
-        else
-            echo -e "          状态: ${RED}未安装${NC}"
+            if docker ps --format '{{.Names}}' | grep -q "^github-proxy$"; then
+                status_text="${GREEN}运行中${NC}"
+
+                local host_port=$(docker inspect github-proxy --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}' 2>/dev/null)
+                host_port=${host_port:-7210}
+
+                IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+
+                echo -e "${CYAN}-----------------------------------------${NC}"
+                [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+                [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+            else
+                status_text="${YELLOW}已停止${NC}"
+            fi
         fi
-        
+
+        echo -e "          状态: ${status_text}"
         echo -e "${CYAN}=========================================${NC}"
         echo -e " ${GREEN}1.${NC} 安装 GitHub 加速站"
         echo -e " ${GREEN}2.${NC} 更新 GitHub 加速站"
@@ -1321,11 +1322,25 @@ function nginx_proxy_manager_management() {
         clear
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}          Nginx Proxy Manager 管理${NC}"
+
+        local status_text="${RED}未安装${NC}"
+
         if [ -d "/opt/npm" ] && docker compose -f /opt/npm/docker-compose.yml ps &> /dev/null; then
-            echo -e "          状态: ${GREEN}已安装${NC}"
-        else
-            echo -e "          状态: ${RED}未安装${NC}"
+            local npm_status=$(docker compose -f /opt/npm/docker-compose.yml ps --status running 2>/dev/null | grep -c "Up")
+            if [ "$npm_status" -gt 0 ]; then
+                status_text="${GREEN}运行中${NC}"
+
+                IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+
+                echo -e "${CYAN}-----------------------------------------${NC}"
+                [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:81${NC}"
+                [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:81${NC}"
+            else
+                status_text="${YELLOW}已停止${NC}"
+            fi
         fi
+
+        echo -e "          状态: ${status_text}"
         echo -e "${CYAN}=========================================${NC}"
         echo -e " ${GREEN}1.${NC}  安装/更新 Nginx Proxy Manager"
         echo -e " ${GREEN}2.${NC}  启动 Nginx Proxy Manager"
@@ -1594,21 +1609,35 @@ function adguard_home_management() {
         clear
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}       AdGuard Home 管理 (VPS)${NC}"
+
+        local status_text="${RED}未安装${NC}"
+
         if [ -f "/opt/AdGuardHome/AdGuardHome" ]; then
-            echo -e "       状态: ${GREEN}已安装${NC}"
-        else
-            echo -e "       状态: ${RED}未安装${NC}"
+            if command -v systemctl &> /dev/null && systemctl is-active --quiet AdGuardHome 2>/dev/null; then
+                status_text="${GREEN}运行中${NC}"
+
+                IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+
+                echo -e "${CYAN}-----------------------------------------${NC}"
+                [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:3000${NC}"
+                [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:3000${NC}"
+            else
+                status_text="${YELLOW}已停止${NC}"
+            fi
         fi
+
+        echo -e "          状态: ${status_text}"
         echo -e "${CYAN}=========================================${NC}"
-        echo "1. 安装 AdGuard Home"
-        echo "2. 卸载 AdGuard Home"
-        echo "3. 启动 AdGuard Home"
-        echo "4. 停止 AdGuard Home"
-        echo "5. 重启 AdGuard Home"
-        echo "6. 更新 AdGuard Home"
-        echo "7. 查看信息"
-        echo "8. 查看状态"
-        echo "0. 返回上级菜单"
+        echo -e " ${GREEN}1.${NC} 安装 AdGuard Home"
+        echo -e " ${GREEN}2.${NC} 卸载 AdGuard Home"
+        echo -e " ${GREEN}3.${NC} 启动 AdGuard Home"
+        echo -e " ${GREEN}4.${NC} 停止 AdGuard Home"
+        echo -e " ${GREEN}5.${NC} 重启 AdGuard Home"
+        echo -e " ${GREEN}6.${NC} 更新 AdGuard Home"
+        echo -e " ${GREEN}7.${NC} 查看信息"
+        echo -e " ${GREEN}8.${NC} 查看状态"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC} 返回上级菜单"
         echo -e "${CYAN}=========================================${NC}"
         read -p "请输入你的选择: " agh_choice
 
@@ -3478,31 +3507,26 @@ function frp_management() {
         clear
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}          FRP 内网穿透管理${NC}"
-        echo -e "${CYAN}=========================================${NC}"
-        echo "FRP 是一个高性能的反向代理应用，用于将内网服务暴露到公网"
-        echo "支持 TCP/UDP/HTTP/HTTPS 等多种协议"
-        echo ""
-        echo -e "${YELLOW}当前状态：${NC}"
-        
-        # 检查 FRPS 状态
+
+        local frps_status="${RED}未安装${NC}"
+        local frpc_status="${RED}未安装${NC}"
+
         if systemctl is-active --quiet frps 2>/dev/null; then
-            echo -e "FRPS 服务端: ${GREEN}运行中${NC}"
+            frps_status="${GREEN}运行中${NC}"
         elif [ -f "/etc/systemd/system/frps.service" ] || [ -f "/etc/frp/frps.ini" ]; then
-            echo -e "FRPS 服务端: ${YELLOW}已安装但未运行${NC}"
-        else
-            echo -e "FRPS 服务端: ${RED}未安装${NC}"
+            frps_status="${YELLOW}已停止${NC}"
         fi
-        
-        # 检查 FRPC 状态
+
         if systemctl is-active --quiet frpc 2>/dev/null; then
-            echo -e "FRPC 客户端: ${GREEN}运行中${NC}"
+            frpc_status="${GREEN}运行中${NC}"
         elif [ -f "/etc/systemd/system/frpc.service" ] || [ -f "/etc/frp/frpc.ini" ]; then
-            echo -e "FRPC 客户端: ${YELLOW}已安装但未运行${NC}"
-        else
-            echo -e "FRPC 客户端: ${RED}未安装${NC}"
+            frpc_status="${YELLOW}已停止${NC}"
         fi
-        
-        echo ""
+
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e "  FRPS 服务端: ${frps_status}"
+        echo -e "  FRPC 客户端: ${frpc_status}"
+        echo -e "${CYAN}=========================================${NC}"
         echo -e " ${GREEN}1.${NC}  FRPS 服务端管理（部署在公网VPS）"
         echo -e " ${GREEN}2.${NC}  FRPC 客户端管理（部署在内网设备）"
         echo -e " ${GREEN}3.${NC}  快速安装向导"
@@ -3529,24 +3553,24 @@ function frps_management() {
         clear
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}          FRPS 服务端管理${NC}"
-        
-        # 显示当前状态
+
+        local status_text="${RED}未安装${NC}"
+
         if systemctl is-active --quiet frps 2>/dev/null; then
-            echo -e "          状态: ${GREEN}运行中${NC}"
-            
-            # 显示服务器IP信息
+            status_text="${GREEN}运行中${NC}"
+
             IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
-            
+
             echo -e "${CYAN}-----------------------------------------${NC}"
             echo -e "${BLUE}服务器IP信息:${NC}"
             [ -n "$ipv4" ] && echo -e "IPv4 地址: ${YELLOW}${ipv4}${NC}"
             [ -n "$ipv6" ] && echo -e "IPv6 地址: ${YELLOW}${ipv6}${NC}"
             echo -e "FRPS 默认端口: ${YELLOW}7000${NC}"
         elif [ -f "/etc/systemd/system/frps.service" ]; then
-            echo -e "          状态: ${YELLOW}已安装但未运行${NC}"
-        else
-            echo -e "          状态: ${RED}未安装${NC}"
+            status_text="${YELLOW}已停止${NC}"
         fi
+
+        echo -e "          状态: ${status_text}"
         
         echo -e "${CYAN}=========================================${NC}"
         echo "FRPS 是 FRP 的服务端，运行在具有公网 IP 的服务器上"
@@ -3586,15 +3610,16 @@ function frpc_management() {
         clear
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}          FRPC 客户端管理${NC}"
-        
-        # 显示当前状态
+
+        local status_text="${RED}未安装${NC}"
+
         if systemctl is-active --quiet frpc 2>/dev/null; then
-            echo -e "          状态: ${GREEN}运行中${NC}"
+            status_text="${GREEN}运行中${NC}"
         elif [ -f "/etc/systemd/system/frpc.service" ]; then
-            echo -e "          状态: ${YELLOW}已安装但未运行${NC}"
-        else
-            echo -e "          状态: ${RED}未安装${NC}"
+            status_text="${YELLOW}已停止${NC}"
         fi
+
+        echo -e "          状态: ${status_text}"
         
         echo -e "${CYAN}=========================================${NC}"
         echo "FRPC 是 FRP 的客户端，运行在内网设备上"
@@ -5552,7 +5577,7 @@ function safeline_waf_management() {
                 [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
                 [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
             else
-                status_text="${YELLOW}已安装但未运行${NC}"
+                status_text="${YELLOW}已停止${NC}"
             fi
         fi
         
