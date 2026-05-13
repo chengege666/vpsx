@@ -451,9 +451,80 @@ function clean_docker_resources() {
 
 # 更换镜像源
 function change_docker_source() {
-    echo -e "${BLUE}正在调用 LinuxMirrors 脚本更换源...${NC}"
-    bash <(curl -sSL https://linuxmirrors.cn/main.sh)
-    read -p "按任意键继续..."
+    local daemon_file="/etc/docker/daemon.json"
+    mkdir -p /etc/docker
+    [[ ! -f "$daemon_file" ]] && echo "{}" > "$daemon_file"
+
+    while true; do
+        clear
+        echo -e "${CYAN}================================================${NC}"
+        echo -e "           ${GREEN}Docker 镜像源配置${NC}"
+        echo -e "${CYAN}================================================${NC}"
+        
+        local current_registry=$(jq -r '.registry-mirrors // []' "$daemon_file" 2>/dev/null | head -c 100)
+        if [[ "$current_registry" == "[]" ]]; then
+            echo -e "当前状态: ${YELLOW}未配置镜像源${NC}"
+        else
+            echo -e "当前镜像源: ${GREEN}$current_registry${NC}"
+        fi
+        
+        echo -e "${CYAN}------------------------------------------------${NC}"
+        echo -e "  ${GREEN}1.${NC} 配置阿里云镜像源"
+        echo -e "  ${GREEN}2.${NC} 配置腾讯云镜像源"
+        echo -e "  ${GREEN}3.${NC} 配置 Docker 官方镜像源"
+        echo -e "  ${GREEN}4.${NC} 调用 LinuxMirrors 脚本自动配置"
+        echo -e "  ${GREEN}5.${NC} 查看/编辑 daemon.json"
+        echo -e "  ${RED}0.${NC} 返回"
+        echo -e "${CYAN}================================================${NC}"
+        read -p "请选择操作: " source_choice
+
+        case $source_choice in
+            1)
+                echo -e "${BLUE}正在配置阿里云镜像源...${NC}"
+                jq '. + {"registry-mirrors": ["https://registry.cn-hangzhou.aliyuncs.com"]}' "$daemon_file" > "${daemon_file}.tmp" && mv "${daemon_file}.tmp" "$daemon_file"
+                systemctl restart docker
+                echo -e "${GREEN}配置成功！${NC}"
+                read -p "按任意键继续..."
+                ;;
+            2)
+                echo -e "${BLUE}正在配置腾讯云镜像源...${NC}"
+                jq '. + {"registry-mirrors": ["https://mirror.ccs.tencentyun.com"]}' "$daemon_file" > "${daemon_file}.tmp" && mv "${daemon_file}.tmp" "$daemon_file"
+                systemctl restart docker
+                echo -e "${GREEN}配置成功！${NC}"
+                read -p "按任意键继续..."
+                ;;
+            3)
+                echo -e "${BLUE}正在配置 Docker 官方镜像源...${NC}"
+                jq '. + {"registry-mirrors": ["https://registry-1.docker.io"]}' "$daemon_file" > "${daemon_file}.tmp" && mv "${daemon_file}.tmp" "$daemon_file"
+                systemctl restart docker
+                echo -e "${GREEN}配置成功！${NC}"
+                read -p "按任意键继续..."
+                ;;
+            4)
+                echo -e "${BLUE}正在调用 LinuxMirrors 脚本...${NC}"
+                if curl -sSL --connect-timeout 10 https://linuxmirrors.cn/main.sh | bash; then
+                    echo -e "${GREEN}配置成功！${NC}"
+                else
+                    echo -e "${RED}调用失败，网络连接问题！${NC}"
+                    echo -e "${YELLOW}建议手动配置镜像源${NC}"
+                fi
+                read -p "按任意键继续..."
+                ;;
+            5)
+                echo -e "${CYAN}当前 daemon.json 内容:${NC}"
+                cat "$daemon_file"
+                echo -e "${CYAN}------------------------------------------------${NC}"
+                read -p "是否编辑该文件？(y/N): " edit_confirm
+                if [[ "$edit_confirm" =~ ^[Yy]$ ]]; then
+                    nano "$daemon_file" || vi "$daemon_file"
+                    echo -e "${YELLOW}编辑完成，请重启 Docker 服务以生效。${NC}"
+                fi
+                read -p "按任意键继续..."
+                ;;
+            0) break ;;
+            *) echo -e "${RED}无效输入${NC}"; sleep 1 ;;
+        esac
+    done
 }
 
 # 编辑 daemon.json
