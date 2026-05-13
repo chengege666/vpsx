@@ -669,42 +669,51 @@ function komari_management() {
     while true; do
         clear
         echo -e "${CYAN}=========================================${NC}"
-        echo -e "${GREEN}         Komari 监控面板管理${NC}"
+        echo -e "${GREEN}          Komari 监控面板管理${NC}"
+
+        local status_text="${RED}未部署${NC}"
+
         if docker ps -a --format '{{.Names}}' | grep -q "^komari$"; then
-            echo -e "          状态: ${GREEN}已部署${NC}"
-        else
-            echo -e "          状态: ${RED}未部署${NC}"
+            if docker ps --format '{{.Names}}' | grep -q "^komari$"; then
+                status_text="${GREEN}运行中${NC}"
+
+                local host_port=$(docker inspect komari --format='{{(index (index .NetworkSettings.Ports "25774/tcp") 0).HostPort}}' 2>/dev/null)
+                host_port=${host_port:-8083}
+
+                IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+
+                echo -e "${CYAN}-----------------------------------------${NC}"
+                [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+                [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+            else
+                status_text="${YELLOW}已停止${NC}"
+            fi
         fi
+
+        echo -e "          状态: ${status_text}"
         echo -e "${CYAN}=========================================${NC}"
-        echo -e "Komari 是一个现代化的服务器监控面板"
-        echo -e "基于 Docker 容器部署，提供 Web 界面"
-        echo ""
-        echo -e "${YELLOW}当前配置信息：${NC}"
-        echo -e "• Docker 镜像: ${BLUE}ghcr.io/komari-monitor/komari:latest${NC}"
-        echo -e "• 容器端口: ${BLUE}8083${NC}"
-        echo -e "• 数据目录: ${BLUE}/home/docker/komari${NC}"
-        echo -e "• 默认账号: ${BLUE}admin / Z7aiE5jN8co7${NC} (建议首次登录后修改)"
-        echo ""
-        echo -e " ${GREEN}1.${NC} 安装 Docker 环境 (如未安装)"
-        echo -e " ${GREEN}2.${NC} 部署 Komari 监控面板"
-        echo -e " ${GREEN}3.${NC} 启动/停止/重启 Komari 容器"
-        echo -e " ${GREEN}4.${NC} 查看 Komari 状态和日志"
-        echo -e " ${GREEN}5.${NC} 修改 Komari 配置 (JSON 格式)"
-        echo -e " ${GREEN}6.${NC} 卸载 Komari 监控面板"
-        echo -e " ${GREEN}7.${NC} 访问 Komari Web 界面"
+        echo -e " ${GREEN}1.${NC} 部署 Komari 监控面板"
+        echo -e " ${GREEN}2.${NC} 启动 Komari"
+        echo -e " ${GREEN}3.${NC} 停止 Komari"
+        echo -e " ${GREEN}4.${NC} 重启 Komari"
+        echo -e " ${GREEN}5.${NC} 查看状态和日志"
+        echo -e " ${GREEN}6.${NC} 修改配置"
+        echo -e " ${GREEN}7.${NC} 卸载 Komari"
+        echo -e " ${GREEN}8.${NC} 访问 Web 界面"
         echo -e "${CYAN}-----------------------------------------${NC}"
-        echo -e " ${RED}0.${NC} 返回应用中心菜单"
+        echo -e " ${RED}0.${NC} 返回上一级菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择: " komari_choice
+        read -p "请输入你的选择 (0-8): " komari_choice
 
         case "$komari_choice" in
-            1) install_docker_environment ;;
-            2) deploy_komari_panel ;;
-            3) manage_komari_container ;;
-            4) view_komari_status_logs ;;
-            5) modify_komari_config ;;
-            6) uninstall_komari_panel ;;
-            7) access_komari_web ;;
+            1) deploy_komari_panel ;;
+            2) start_komari ;;
+            3) stop_komari ;;
+            4) restart_komari ;;
+            5) view_komari_status_logs ;;
+            6) modify_komari_config ;;
+            7) uninstall_komari_panel ;;
+            8) access_komari_web ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
         esac
@@ -807,61 +816,63 @@ EOF
     read -p "按回车键继续..."
 }
 
-function manage_komari_container() {
+function start_komari() {
     clear
-    echo -e "${CYAN}=========================================${NC}"
-    echo -e "${GREEN}         Komari 容器生命周期管理${NC}"
-    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${BLUE}正在启动 Komari...${NC}"
 
-    if ! docker ps -a --format '{{.Names}}' | grep -q "^komari$"; then
-        echo -e "${RED}未检测到 Komari 容器，请先部署。${NC}"
+    if [ ! -f "/home/docker/komari/docker-compose.yml" ]; then
+        echo -e "${RED}❌ 未检测到 Docker Compose 配置，请先部署。${NC}"
         read -p "按回车键继续..."
         return
     fi
 
-    echo -e " ${GREEN}1.${NC} 启动 Komari"
-    echo -e " ${GREEN}2.${NC} 停止 Komari"
-    echo -e " ${GREEN}3.${NC} 重启 Komari"
-    echo -e " ${RED}0.${NC} 返回"
-    read -p "请选择: " manage_choice
+    cd /home/docker/komari && docker compose start
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ 启动成功！${NC}"
+    else
+        echo -e "${RED}❌ 启动失败。${NC}"
+    fi
+    cd - > /dev/null
+    read -p "按回车键继续..."
+}
 
-    local is_compose=false
-    [ -f "/home/docker/komari/docker-compose.yml" ] && is_compose=true
+function stop_komari() {
+    clear
+    echo -e "${BLUE}正在停止 Komari...${NC}"
 
-    case "$manage_choice" in
-        1)
-            echo -e "${BLUE}正在启动 Komari...${NC}"
-            if [ "$is_compose" = true ]; then
-                cd /home/docker/komari && docker compose start
-                cd - > /dev/null
-            else
-                docker start komari
-            fi
-            echo -e "${GREEN}启动指令已发送。${NC}"
-            ;;
-        2)
-            echo -e "${BLUE}正在停止 Komari...${NC}"
-            if [ "$is_compose" = true ]; then
-                cd /home/docker/komari && docker compose stop
-                cd - > /dev/null
-            else
-                docker stop komari
-            fi
-            echo -e "${GREEN}停止指令已发送。${NC}"
-            ;;
-        3)
-            echo -e "${BLUE}正在重启 Komari...${NC}"
-            if [ "$is_compose" = true ]; then
-                cd /home/docker/komari && docker compose restart
-                cd - > /dev/null
-            else
-                docker restart komari
-            fi
-            echo -e "${GREEN}重启指令已发送。${NC}"
-            ;;
-        0) return ;;
-        *) echo -e "${RED}无效选择。${NC}" ;;
-    esac
+    if [ ! -f "/home/docker/komari/docker-compose.yml" ]; then
+        echo -e "${RED}❌ 未检测到 Docker Compose 配置，请先部署。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    cd /home/docker/komari && docker compose stop
+    if [ $? -eq 0 ]; then
+        echo -e "${YELLOW}✅ 停止成功！${NC}"
+    else
+        echo -e "${RED}❌ 停止失败。${NC}"
+    fi
+    cd - > /dev/null
+    read -p "按回车键继续..."
+}
+
+function restart_komari() {
+    clear
+    echo -e "${BLUE}正在重启 Komari...${NC}"
+
+    if [ ! -f "/home/docker/komari/docker-compose.yml" ]; then
+        echo -e "${RED}❌ 未检测到 Docker Compose 配置，请先部署。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    cd /home/docker/komari && docker compose restart
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ 重启成功！${NC}"
+    else
+        echo -e "${RED}❌ 重启失败。${NC}"
+    fi
+    cd - > /dev/null
     read -p "按回车键继续..."
 }
 
