@@ -32,7 +32,7 @@ function _docker_env_detect() {
 
 # 自动补齐基础依赖
 function _docker_fix_deps() {
-    local deps=("curl" "jq" "tar" "lsof" "ca-certificates" "iptables" "procps")
+    local deps=("curl" "jq" "tar" "lsof" "iptables")
     local missing=()
     for dep in "${deps[@]}"; do
         command -v "$dep" >/dev/null 2>&1 || missing+=("$dep")
@@ -373,14 +373,15 @@ function docker_container_management() {
         [[ -z "$target_id" ]] && { echo -e "${RED}序号无效${NC}"; sleep 1; continue; }
 
         case $op_choice in
-            1) docker start "$target_id" ;;
-            2) docker stop "$target_id" ;;
-            3) docker restart "$target_id" ;;
-            4) docker rm -f "$target_id" ;;
-            5) docker logs --tail 100 -f "$target_id" ;;
+            1) docker start "$target_id" && echo -e "${GREEN}容器已启动${NC}" ;;
+            2) docker stop "$target_id" && echo -e "${GREEN}容器已停止${NC}" ;;
+            3) docker restart "$target_id" && echo -e "${GREEN}容器已重启${NC}" ;;
+            4) docker rm -f "$target_id" && echo -e "${GREEN}容器已删除${NC}" ;;
+            5) echo -e "${BLUE}显示最近 50 行日志 (Ctrl+C 退出):${NC}"; docker logs --tail 50 -f "$target_id" ;;
             6) docker exec -it "$target_id" /bin/bash || docker exec -it "$target_id" /bin/sh ;;
             *) echo -e "${RED}无效操作${NC}" ;;
         esac
+        sleep 1
     done
 }
 
@@ -395,7 +396,25 @@ function create_new_container() {
     read -p "请输入镜像名称 (如 nginx:latest): " image
     read -p "请输入映射端口 (如 8080): " h_port
 
-    # 端口占用判定
+    if [[ -z "$name" || -z "$image" || -z "$h_port" ]]; then
+        echo -e "${RED}错误: 输入不能为空！${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+
+    if ! [[ "$h_port" =~ ^[0-9]+$ ]] || [ "$h_port" -lt 1 ] || [ "$h_port" -gt 65535 ]; then
+        echo -e "${RED}错误: 端口号必须为 1-65535 的数字！${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+
+    name=$(echo "$name" | tr -cd 'a-zA-Z0-9_-')
+    if [ -z "$name" ]; then
+        echo -e "${RED}错误: 名称只能包含字母、数字、下划线和连字符！${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+
     if lsof -i :"$h_port" >/dev/null 2>&1; then
         echo -e "${RED}错误: 宿主机端口 $h_port 已被占用！${NC}"
         lsof -i :"$h_port"
@@ -469,14 +488,18 @@ function docker_ipv6_config() {
         
         echo -e "  ${GREEN}1.${NC} 开启 IPv6 访问"
         echo -e "  ${GREEN}2.${NC} 关闭 IPv6 访问"
+        echo -e "  ${GREEN}3.${NC} 查看当前 IPv6 配置"
         echo -e "  ${RED}0.${NC} 返回"
         echo -e "${CYAN}================================================${NC}"
         read -p "请选择操作: " ipv6_choice
 
         case $ipv6_choice in
             1)
-                echo -e "${BLUE}正在配置 IPv6...${NC}"
-                jq '. + {"ipv6": true, "fixed-cidr-v6": "2001:db8:1::/64"}' "$daemon_file" > "${daemon_file}.tmp" && mv "${daemon_file}.tmp" "$daemon_file"
+                local ipv6_cidr=$(uuidgen 2>/dev/null | sed 's/-//g' | head -c 12 | sed 's/../&:/g' | sed 's/:$//')
+                [ -z "$ipv6_cidr" ] && ipv6_cidr=$(date +%s | md5sum | head -c 12 | sed 's/../&:/g')
+                local fixed_cidr="fd00:${ipv6_cidr}::/64"
+                echo -e "${BLUE}正在配置 IPv6，使用 CIDR: ${fixed_cidr}${NC}"
+                jq ".ipv6 = true | .\"fixed-cidr-v6\" = \"$fixed_cidr\"" "$daemon_file" > "${daemon_file}.tmp" && mv "${daemon_file}.tmp" "$daemon_file"
                 systemctl restart docker
                 echo -e "${GREEN}IPv6 访问已开启。${NC}"
                 read -p "按任意键继续..."
@@ -486,6 +509,11 @@ function docker_ipv6_config() {
                 jq 'del(.ipv6) | del(."fixed-cidr-v6")' "$daemon_file" > "${daemon_file}.tmp" && mv "${daemon_file}.tmp" "$daemon_file"
                 systemctl restart docker
                 echo -e "${YELLOW}IPv6 访问已关闭。${NC}"
+                read -p "按任意键继续..."
+                ;;
+            3)
+                echo -e "${CYAN}当前 daemon.json 内容:${NC}"
+                cat "$daemon_file"
                 read -p "按任意键继续..."
                 ;;
             0) break ;;
@@ -507,13 +535,29 @@ function backup_migrate_restore_docker() {
         read -p "请选择操作: " choice
         case $choice in
             1) 
+                local backup_dir="/opt/docker-backup"
+                mkdir -p "$backup_dir"
+                local backup_file="$backup_dir/docker_backup_$(date +%F_%H%M%S).tar.gz"
                 systemctl stop docker
-                tar -czvf "docker_backup_$(date +%F).tar.gz" /var/lib/docker
+                tar -czvf "$backup_file" /var/lib/docker
                 systemctl start docker
-                echo -e "${GREEN}备份完成。${NC}"; sleep 2 ;;
+                echo -e "${GREEN}备份完成: $backup_file${NC}"; sleep 2 ;;
             2) 
                 read -p "输入备份包完整路径: " b_path
-                [[ -f "$b_path" ]] && { systemctl stop docker; rm -rf /var/lib/docker/*; tar -xzvf "$b_path" -C /; systemctl start docker; echo -e "${GREEN}还原成功${NC}"; }
+                if [[ -f "$b_path" ]]; then
+                    read -p "警告：还原将清空当前所有 Docker 数据！确定继续？(y/N): " confirm
+                    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+                        systemctl stop docker
+                        rm -rf /var/lib/docker/*
+                        tar -xzvf "$b_path" -C /
+                        systemctl start docker
+                        echo -e "${GREEN}还原成功${NC}"
+                    else
+                        echo -e "${YELLOW}已取消还原操作${NC}"
+                    fi
+                else
+                    echo -e "${RED}错误: 备份文件不存在！${NC}"
+                fi
                 sleep 2 ;;
             0) break ;;
         esac
@@ -524,12 +568,13 @@ function backup_migrate_restore_docker() {
 function uninstall_docker() {
     read -p "警告：这将彻底删除所有镜像和容器！确定吗？(y/N): " confirm
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
-        docker ps -aq | xargs -r docker stop
-        docker ps -aq | xargs -r docker rm
-        systemctl stop docker
+        if command -v docker >/dev/null 2>&1; then
+            docker ps -aq | while read -r cid; do docker stop "$cid" 2>/dev/null; docker rm "$cid" 2>/dev/null; done
+        fi
+        systemctl stop docker 2>/dev/null
         if command -v apt-get >/dev/null 2>&1; then
-            apt-get purge -y docker-ce docker-ce-cli containerd.io
-            apt-get autoremove -y
+            apt-get purge -y docker-ce docker-ce-cli containerd.io 2>/dev/null
+            apt-get autoremove -y 2>/dev/null
         fi
         rm -rf /var/lib/docker /etc/docker
         echo -e "${GREEN}卸载完成。${NC}"
