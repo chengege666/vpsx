@@ -72,12 +72,22 @@ function _docker_system_check_and_fix() {
     fi
 
     # 3. 低内存自动 Swap 补救 (防止 OOM)
-    # 获取物理内存大小 (MB)
-    local mem_mb=$(free -m | awk '/Mem:/ {print $2}')
-    local swap_mb=$(free -m | awk '/Swap:/ {print $2}')
+    # 获取物理内存大小 (MB) - 兼容不同系统的 free 命令输出格式
+    local mem_mb=$(free -m 2>/dev/null | awk 'NR==2 {print $2}')
+    local swap_mb=$(free -m 2>/dev/null | awk 'NR==3 {print $2}')
+    
+    # 验证数值有效性
+    if ! [[ "$mem_mb" =~ ^[0-9]+$ ]]; then
+        mem_mb=$(cat /proc/meminfo 2>/dev/null | grep -i MemTotal | awk '{print $2}')
+        [ -n "$mem_mb" ] && mem_mb=$((mem_mb / 1024))
+    fi
+    if ! [[ "$swap_mb" =~ ^[0-9]+$ ]]; then
+        swap_mb=$(cat /proc/meminfo 2>/dev/null | grep -i SwapTotal | awk '{print $2}')
+        [ -n "$swap_mb" ] && swap_mb=$((swap_mb / 1024))
+    fi
     
     # 如果内存小于 1024MB 且无 Swap
-    if [ "$mem_mb" -lt 1024 ] && [ "$swap_mb" -eq 0 ]; then
+    if [[ "$mem_mb" =~ ^[0-9]+$ ]] && [[ "$swap_mb" =~ ^[0-9]+$ ]] && [ "$mem_mb" -lt 1024 ] && [ "$swap_mb" -eq 0 ]; then
         echo -e "${YELLOW}  ! 检测到内存不足 1GB，正在创建 1GB 虚拟内存(Swap)以保障运行...${NC}"
         if ! [ -f /swapfile ]; then
             dd if=/dev/zero of=/swapfile bs=1M count=1024 status=none
