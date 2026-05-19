@@ -113,7 +113,7 @@ function app_center_menu() {
             26) pairdrop_management ;;
             27) rustdesk_management ;;
             0) break ;;
-            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
     done
 }
@@ -558,37 +558,22 @@ function manage_github_proxy_container() {
     echo -e " 3. 重启"
     echo -e " 0. 返回"
     read -p "请选择: " op
-    
-    local is_compose=false
-    [ -f "/opt/ghproxy/docker-compose.yml" ] && is_compose=true
 
     case "$op" in
         1)
             echo -e "${BLUE}正在启动 GitHub 加速站...${NC}"
-            if [ "$is_compose" = true ]; then
-                cd /opt/ghproxy && docker compose start
-                cd - > /dev/null
-            else
-                docker start github-proxy
-            fi
+            cd /opt/ghproxy && docker compose start
+            cd - > /dev/null
             ;;
         2)
             echo -e "${BLUE}正在停止 GitHub 加速站...${NC}"
-            if [ "$is_compose" = true ]; then
-                cd /opt/ghproxy && docker compose stop
-                cd - > /dev/null
-            else
-                docker stop github-proxy
-            fi
+            cd /opt/ghproxy && docker compose stop
+            cd - > /dev/null
             ;;
         3)
             echo -e "${BLUE}正在重启 GitHub 加速站...${NC}"
-            if [ "$is_compose" = true ]; then
-                cd /opt/ghproxy && docker compose restart
-                cd - > /dev/null
-            else
-                docker restart github-proxy
-            fi
+            cd /opt/ghproxy && docker compose restart
+            cd - > /dev/null
             ;;
         0) return ;;
         *) echo -e "${RED}无效选择。${NC}" ;;
@@ -720,7 +705,7 @@ function komari_management() {
             7) uninstall_komari_panel ;;
             8) access_komari_web ;;
             0) break ;;
-            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
     done
 }
@@ -766,14 +751,14 @@ function deploy_komari_panel() {
     host_port=${host_port:-8083}
 
     # 验证端口占用
-    if command -v netstat &> /dev/null; then
-        if netstat -tuln | grep -q ":${host_port} "; then
+    if command -v ss &> /dev/null; then
+        if ss -tuln | grep -q ":${host_port} "; then
             echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
             read -p "按回车键继续..."
             return
         fi
-    elif command -v ss &> /dev/null; then
-        if ss -tuln | grep -q ":${host_port} "; then
+    elif command -v netstat &> /dev/null; then
+        if netstat -tuln | grep -q ":${host_port} "; then
             echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
             read -p "按回车键继续..."
             return
@@ -1094,10 +1079,10 @@ function install_pansou_docker_compose() {
         fi
     fi
     
-    # 兼容 docker compose (v2) 和 docker-compose (v1)
-    local compose_cmd="docker-compose"
-    if docker compose version &> /dev/null; then
-        compose_cmd="docker compose"
+    # 兼容 docker compose (v2) 和 docker-compose (v1)，优先 v2
+    local compose_cmd="docker compose"
+    if ! docker compose version &> /dev/null; then
+        compose_cmd="docker-compose"
     fi
     
     # 创建专用目录
@@ -1112,7 +1097,7 @@ function install_pansou_docker_compose() {
     host_port=${host_port:-80}
     
     # 验证端口
-    if netstat -tuln | grep -q ":${host_port} "; then
+    if ss -tuln | grep -q ":${host_port} "; then
         echo -e "${RED}❌ 端口 ${host_port} 已被占用。${NC}"
         cd - > /dev/null
         return
@@ -1153,9 +1138,9 @@ function start_pansou() {
     clear
     echo "正在启动 PanSou..."
 
-    local compose_cmd="docker-compose"
-    if docker compose version &> /dev/null; then
-        compose_cmd="docker compose"
+    local compose_cmd="docker compose"
+    if ! docker compose version &> /dev/null; then
+        compose_cmd="docker-compose"
     fi
 
     if [ ! -f "/opt/pansou/docker-compose.yml" ]; then
@@ -1175,9 +1160,9 @@ function stop_pansou() {
     clear
     echo "正在停止 PanSou..."
 
-    local compose_cmd="docker-compose"
-    if docker compose version &> /dev/null; then
-        compose_cmd="docker compose"
+    local compose_cmd="docker compose"
+    if ! docker compose version &> /dev/null; then
+        compose_cmd="docker-compose"
     fi
 
     if [ ! -f "/opt/pansou/docker-compose.yml" ]; then
@@ -1198,9 +1183,9 @@ function restart_pansou() {
     clear
     echo "正在重启 PanSou..."
 
-    local compose_cmd="docker-compose"
-    if docker compose version &> /dev/null; then
-        compose_cmd="docker compose"
+    local compose_cmd="docker compose"
+    if ! docker compose version &> /dev/null; then
+        compose_cmd="docker-compose"
     fi
 
     if [ ! -f "/opt/pansou/docker-compose.yml" ]; then
@@ -1227,9 +1212,9 @@ function change_pansou_port() {
         return
     fi
 
-    local compose_cmd="docker-compose"
-    if docker compose version &> /dev/null; then
-        compose_cmd="docker compose"
+    local compose_cmd="docker compose"
+    if ! docker compose version &> /dev/null; then
+        compose_cmd="docker-compose"
     fi
 
     local current_port=$(docker inspect pansou --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}' 2>/dev/null || echo "80")
@@ -1241,7 +1226,7 @@ function change_pansou_port() {
         return
     fi
 
-    if netstat -tuln | grep -q ":${new_port} "; then
+    if ss -tuln | grep -q ":${new_port} "; then
         echo -e "${RED}❌ 端口 ${new_port} 已被占用，请选择其他端口。${NC}"
         return
     fi
@@ -1279,9 +1264,9 @@ function view_pansou_logs() {
         return
     fi
 
-    local compose_cmd="docker-compose"
-    if docker compose version &> /dev/null; then
-        compose_cmd="docker compose"
+    local compose_cmd="docker compose"
+    if ! docker compose version &> /dev/null; then
+        compose_cmd="docker-compose"
     fi
 
     cd /opt/pansou && $compose_cmd logs -f
@@ -1369,7 +1354,7 @@ function nginx_proxy_manager_management() {
             6) view_npm_status ;;
             7) view_npm_login_info ;;
             0) break ;;
-            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
     done
 }
@@ -1768,7 +1753,7 @@ function watchtower_management() {
         echo -e "${NC}"
         
         # 检查Docker状态
-        if ! docker info > /dev/null 2>&1; then
+        if ! command -v docker &> /dev/null; then
             echo -e "${RED}⚠️  Docker 服务未运行或未安装！${NC}"
             echo "请先确保Docker已安装并启动。"
             echo ""
@@ -2259,17 +2244,27 @@ function moontv_management() {
         clear
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}          MoonTV 流媒体应用管理${NC}"
-        
-        # 检查 Docker 是否运行
-        if ! docker info > /dev/null 2>&1; then
-            echo -e "${RED}⚠️  Docker 服务未运行或未安装！${NC}"
-        else
-            # 显示当前状态
+
+        local status_text="${RED}未安装${NC}"
+        local host_port=""
+
+        if command -v docker &> /dev/null; then
             if docker ps -a --format '{{.Names}}' | grep -q "^moontv-core$"; then
-                echo -e "          状态: ${GREEN}已部署${NC}"
-            else
-                echo -e "          状态: ${RED}未部署${NC}"
+                if docker ps --format '{{.Names}}' | grep -q "^moontv-core$"; then
+                    status_text="${GREEN}运行中${NC}"
+                    host_port=$(docker inspect moontv-core --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}' 2>/dev/null)
+                else
+                    status_text="${YELLOW}已停止${NC}"
+                fi
             fi
+        fi
+
+        echo -e "          状态: ${status_text}"
+        if [ -n "$host_port" ]; then
+            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+            echo -e "${CYAN}-----------------------------------------${NC}"
+            [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+            [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
         fi
         
         echo -e "${CYAN}=========================================${NC}"
@@ -2299,7 +2294,7 @@ function moontv_management() {
             7) uninstall_moontv ;;
             8) access_moontv_web ;;
             0) break ;;
-            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
     done
 }
@@ -2908,31 +2903,28 @@ function libretv_management() {
         clear
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}          LibreTV 流媒体应用管理${NC}"
-        
-        # 检查 Docker 是否运行
-        if ! docker info > /dev/null 2>&1; then
-            echo -e "${RED}⚠️  Docker 服务未运行或未安装！${NC}"
-        else
-            # 显示当前状态
-        if docker ps -a --format '{{.Names}}' | grep -q "^libretv$"; then
-            if docker ps --format '{{.Names}}' | grep -q "^libretv$"; then
-                echo -e "          状态: ${GREEN}运行中${NC}"
-                
-                # 获取映射端口和显示IP信息
-                local host_port=$(docker inspect libretv --format='{{(index (index .NetworkSettings.Ports "8899/tcp") 0).HostPort}}' 2>/dev/null)
-                host_port=${host_port:-8899}
-                
-                IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
-                
-                echo -e "${CYAN}-----------------------------------------${NC}"
-                [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
-                [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
-            else
-                echo -e "          状态: ${YELLOW}已停止${NC}"
+
+        local status_text="${RED}未安装${NC}"
+        local host_port=""
+
+        if command -v docker &> /dev/null; then
+            if docker ps -a --format '{{.Names}}' | grep -q "^libretv$"; then
+                if docker ps --format '{{.Names}}' | grep -q "^libretv$"; then
+                    status_text="${GREEN}运行中${NC}"
+                    host_port=$(docker inspect libretv --format='{{(index (index .NetworkSettings.Ports "8899/tcp") 0).HostPort}}' 2>/dev/null)
+                    host_port=${host_port:-8899}
+                else
+                    status_text="${YELLOW}已停止${NC}"
+                fi
             fi
-        else
-            echo -e "          状态: ${RED}未部署${NC}"
         fi
+
+        echo -e "          状态: ${status_text}"
+        if [ -n "$host_port" ]; then
+            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+            echo -e "${CYAN}-----------------------------------------${NC}"
+            [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+            [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
         fi
         
         echo -e "${CYAN}=========================================${NC}"
@@ -2962,7 +2954,7 @@ function libretv_management() {
             7) uninstall_libretv ;;
             8) access_libretv_web ;;
             0) break ;;
-            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
     done
 }
@@ -3548,7 +3540,7 @@ function frp_management() {
             3) frp_quick_wizard ;;
             4) frp_info_help ;;
             0) break ;;
-            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
     done
 }
@@ -3605,7 +3597,7 @@ function frps_management() {
             7) uninstall_frps ;;
             8) view_frps_dashboard ;;
             0) break ;;
-            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
     done
 }
@@ -3654,7 +3646,7 @@ function frpc_management() {
             7) uninstall_frpc ;;
             8) manage_tunnels ;;
             0) break ;;
-            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
     done
 }
@@ -5611,7 +5603,7 @@ function safeline_waf_management() {
             7) upgrade_safeline ;;
             8) uninstall_safeline ;;
             0) break ;;
-            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
     done
 }
@@ -6294,9 +6286,9 @@ function upgrade_lucky() {
     local mode=$1
     if [ "$mode" == "docker" ]; then
         echo -e "${BLUE}正在升级 Lucky 到最新版本...${NC}"
-        docker pull gdy666/lucky:latest
+        docker pull gdy666/lucky:v2
         docker stop lucky && docker rm lucky
-        docker run -d --name lucky --restart always --network host -v /opt/lucky/conf:/config gdy666/lucky:latest
+        docker run -d --name lucky --restart always --network host -v /opt/lucky/conf:/config gdy666/lucky:v2
         echo -e "${GREEN}升级完成。${NC}"
     else
         echo -e "${RED}未检测到 Lucky 安装${NC}"
@@ -6548,30 +6540,28 @@ function xiaoya_alist_management() {
         clear
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}          小雅alist 应用管理${NC}"
-        
-        # 检查 Docker 是否运行
-        if ! docker info > /dev/null 2>&1; then
-            echo -e "${RED}⚠️  Docker 服务未运行或未安装！${NC}"
-        else
+
+        local status_text="${RED}未安装${NC}"
+        local host_port=""
+
+        if command -v docker &> /dev/null; then
             if docker ps -a --format '{{.Names}}' | grep -q "^xiaoya-alist$"; then
                 if docker ps --format '{{.Names}}' | grep -q "^xiaoya-alist$"; then
-                    echo -e "          状态: ${GREEN}运行中${NC}"
-                    
-                    # 获取映射端口和显示IP信息
-                    local host_port=$(docker inspect xiaoya-alist --format='{{(index (index .NetworkSettings.Ports "5678/tcp") 0).HostPort}}' 2>/dev/null)
+                    status_text="${GREEN}运行中${NC}"
+                    host_port=$(docker inspect xiaoya-alist --format='{{(index (index .NetworkSettings.Ports "5678/tcp") 0).HostPort}}' 2>/dev/null)
                     host_port=${host_port:-5678}
-                    
-                    IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
-                    
-                    echo -e "${CYAN}-----------------------------------------${NC}"
-                    [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
-                    [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
                 else
-                    echo -e "          状态: ${YELLOW}已停止${NC}"
+                    status_text="${YELLOW}已停止${NC}"
                 fi
-            else
-                echo -e "          状态: ${RED}未部署${NC}"
             fi
+        fi
+
+        echo -e "          状态: ${status_text}"
+        if [ -n "$host_port" ]; then
+            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+            echo -e "${CYAN}-----------------------------------------${NC}"
+            [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+            [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
         fi
 
         echo -e "${CYAN}=========================================${NC}"
@@ -6601,7 +6591,7 @@ function xiaoya_alist_management() {
             7) uninstall_xiaoya_alist ;;
             8) access_xiaoya_alist_web ;;
             0) break ;;
-            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
     done
 }
@@ -7174,7 +7164,7 @@ function install_open_webui() {
     echo -e "${CYAN}=========================================${NC}"
 
     # 检查Docker是否运行
-    if ! docker info &>/dev/null; then
+    if ! command -v docker &> /dev/null; then
         echo -e "${RED}❌ Docker 服务未运行或不可用，请先启动Docker服务。${NC}"
         read -p "按回车键继续..."
         return
@@ -7427,7 +7417,7 @@ function install_librespeed() {
     echo -e "${GREEN}          安装/更新 LibreSpeed${NC}"
     echo -e "${CYAN}=========================================${NC}"
 
-    if ! docker info &>/dev/null; then
+    if ! command -v docker &> /dev/null; then
         echo -e "${RED}❌ Docker 服务未运行或不可用，请先启动Docker服务。${NC}"
         read -p "按回车键继续..."
         return
@@ -7580,31 +7570,28 @@ function mame_management() {
         clear
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}          MAME 街机模拟器管理 (RomM)${NC}"
-        
-        # 检查 Docker 是否运行
-        if ! docker info > /dev/null 2>&1; then
-            echo -e "${RED}⚠️  Docker 服务未运行或未安装！${NC}"
-        else
-            # 修改后的状态检测逻辑：检测 romm 容器是否存在
+
+        local status_text="${RED}未安装${NC}"
+        local host_port=""
+
+        if command -v docker &> /dev/null; then
             if docker ps -a --format '{{.Names}}' | grep -q "^romm$"; then
                 if docker ps --format '{{.Names}}' | grep -q "^romm$"; then
-                    echo -e "          状态: ${GREEN}运行中${NC}"
-                    
-                    # 获取映射端口和显示IP信息
-                    local host_port=$(docker inspect romm --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}' 2>/dev/null)
+                    status_text="${GREEN}运行中${NC}"
+                    host_port=$(docker inspect romm --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}' 2>/dev/null)
                     host_port=${host_port:-8080}
-                    
-                    IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
-                    
-                    echo -e "${CYAN}-----------------------------------------${NC}"
-                    [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
-                    [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
                 else
-                    echo -e "          状态: ${YELLOW}已停止${NC}"
+                    status_text="${YELLOW}已停止${NC}"
                 fi
-            else
-                echo -e "          状态: ${RED}未部署${NC}"
             fi
+        fi
+
+        echo -e "          状态: ${status_text}"
+        if [ -n "$host_port" ]; then
+            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+            echo -e "${CYAN}-----------------------------------------${NC}"
+            [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+            [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
         fi
         
         echo -e "${CYAN}=========================================${NC}"
@@ -7630,7 +7617,7 @@ function mame_management() {
             5) docker logs --tail 50 romm; read -p "按回车键继续..." ;;
             6) uninstall_mame ;;
             0) break ;;
-            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 2 ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
     done
 }
@@ -7642,7 +7629,7 @@ function install_mame() {
     echo -e "${GREEN}  安装/更新 网页街机模拟器 (RomM 完整全栈版)${NC}"
     echo -e "${CYAN}=========================================${NC}"
 
-    if ! docker info &>/dev/null; then
+    if ! command -v docker &> /dev/null; then
         echo -e "${RED}❌ Docker 服务未运行或不可用，请先启动Docker服务。${NC}"
         read -p "按回车键继续..."
         return
@@ -7889,7 +7876,7 @@ function install_myip() {
     echo -e "${GREEN}          安装/更新 MyIP 工具箱${NC}"
     echo -e "${CYAN}=========================================${NC}"
 
-    if ! docker info &>/dev/null; then
+    if ! command -v docker &> /dev/null; then
         echo -e "${RED}❌ Docker 服务未运行或不可用。${NC}"
         read -p "按回车键继续..."
         return
@@ -8055,7 +8042,7 @@ function install_it_tools() {
     echo -e "${CYAN}=========================================${NC}"
 
     # 1. Docker 环境检查
-    if ! docker info &>/dev/null; then
+    if ! command -v docker &> /dev/null; then
         echo -e "${RED}❌ Docker 服务未运行或未安装，请先安装 Docker。${NC}"
         read -p "按回车键继续..."
         return
@@ -8236,7 +8223,7 @@ function install_uptime_kuma() {
     echo -e "${GREEN}      安装/更新 Uptime Kuma ${NC}"
     echo -e "${CYAN}=========================================${NC}"
 
-    if ! docker info &>/dev/null; then
+    if ! command -v docker &> /dev/null; then
         echo -e "${RED}❌ Docker 服务未运行。${NC}"
         read -p "按回车键继续..."
         return
@@ -8537,7 +8524,7 @@ function install_pairdrop() {
     echo -e "${GREEN}          安装/更新 PairDrop${NC}"
     echo -e "${CYAN}=========================================${NC}"
 
-    if ! docker info &>/dev/null; then
+    if ! command -v docker &> /dev/null; then
         echo -e "${RED}❌ Docker 服务未运行。${NC}"
         read -p "按回车键继续..."
         return
@@ -8744,7 +8731,7 @@ function install_rustdesk() {
     echo -e "${GREEN}        安装/更新 RustDesk 服务端${NC}"
     echo -e "${CYAN}=========================================${NC}"
 
-    if ! docker info &>/dev/null; then
+    if ! command -v docker &> /dev/null; then
         echo -e "${RED}❌ Docker 服务未运行。${NC}"
         read -p "按回车键继续..."
         return
