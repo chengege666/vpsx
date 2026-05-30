@@ -48,7 +48,7 @@ function get_access_ips() {
     
     # 2. 获取 IPv6
     # 优先公网 IPv6
-    ipv6=$(curl -6 -s --connect-timeout 2 ifconfig.me 2>/dev/null || curl -6 -s --connect-timeout 2 ipv6.icanhazip.com 2>/dev/null)
+    ipv6=$(curl -6 -s --connect-timeout 1 ifconfig.me 2>/dev/null || curl -6 -s --connect-timeout 1 ipv6.icanhazip.com 2>/dev/null)
     # 校验 IPv6 格式 (简单检查是否包含冒号)
     if [[ ! "$ipv6" =~ : ]]; then
         ipv6=""
