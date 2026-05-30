@@ -396,7 +396,19 @@ EOF
 # 深度清理资源
 function clean_docker_resources() {
     clear
-    echo -e "${RED}${BOLD}正在执行 Docker 系统深度清理...${NC}"
+    echo -e "${RED}${BOLD}⚠️  此操作将删除：${NC}"
+    echo -e "  - 所有已停止的容器"
+    echo -e "  - 所有未被使用的镜像（含虚悬镜像）"
+    echo -e "  - 所有未被使用的网络"
+    echo -e "  - 所有未被使用的数据卷"
+    echo ""
+    read -p "确定要执行深度清理吗？(y/N): " confirm
+    if [[ ! "$confirm" =~ ^[yY]$ ]]; then
+        echo -e "${YELLOW}已取消${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+    echo -e "${BLUE}正在执行 Docker 系统深度清理...${NC}"
     docker system prune -a --volumes -f
     echo -e "${GREEN}清理完成！${NC}"
     read -p "按任意键继续..."
@@ -424,9 +436,8 @@ function change_docker_source() {
         echo -e "${CYAN}------------------------------------------------${NC}"
         echo -e "  ${GREEN}1.${NC} 配置阿里云镜像源"
         echo -e "  ${GREEN}2.${NC} 配置腾讯云镜像源"
-        echo -e "  ${GREEN}3.${NC} 配置 Docker 官方镜像源"
-        echo -e "  ${GREEN}4.${NC} 调用 LinuxMirrors 脚本自动配置"
-        echo -e "  ${GREEN}5.${NC} 查看/编辑 daemon.json"
+        echo -e "  ${GREEN}3.${NC} 调用 LinuxMirrors 脚本自动配置"
+        echo -e "  ${GREEN}4.${NC} 查看/编辑 daemon.json"
         echo -e "  ${RED}0.${NC} 返回"
         echo -e "${CYAN}================================================${NC}"
         read -p "请选择操作: " source_choice
@@ -447,13 +458,6 @@ function change_docker_source() {
                 read -p "按任意键继续..."
                 ;;
             3)
-                echo -e "${BLUE}正在配置 Docker 官方镜像源...${NC}"
-                jq '. + {"registry-mirrors": ["https://registry-1.docker.io"]}' "$daemon_file" > "${daemon_file}.tmp" && mv "${daemon_file}.tmp" "$daemon_file"
-                systemctl restart docker
-                echo -e "${GREEN}配置成功！${NC}"
-                read -p "按任意键继续..."
-                ;;
-            4)
                 echo -e "${BLUE}正在调用 LinuxMirrors 脚本...${NC}"
                 if curl -sSL --connect-timeout 10 https://linuxmirrors.cn/main.sh | bash; then
                     echo -e "${GREEN}配置成功！${NC}"
@@ -463,7 +467,7 @@ function change_docker_source() {
                 fi
                 read -p "按任意键继续..."
                 ;;
-            5)
+            4)
                 echo -e "${CYAN}当前 daemon.json 内容:${NC}"
                 cat "$daemon_file"
                 echo -e "${CYAN}------------------------------------------------${NC}"
@@ -478,15 +482,6 @@ function change_docker_source() {
             *) echo -e "${RED}无效输入${NC}"; sleep 1 ;;
         esac
     done
-}
-
-# 编辑 daemon.json
-function edit_daemon_json() {
-    local daemon_file="/etc/docker/daemon.json"
-    [[ ! -f "$daemon_file" ]] && mkdir -p /etc/docker && echo "{}" > "$daemon_file"
-    nano "$daemon_file" || vi "$daemon_file"
-    echo -e "${YELLOW}编辑完成，请记得重启 Docker 服务以生效。${NC}"
-    read -p "按任意键继续..."
 }
 
 # IPv6 访问控制 (使用 jq 安全操作)
@@ -850,11 +845,11 @@ function docker_menu() {
         echo -e "  ${GREEN}9.${NC} 网络管理                    ${GREEN}10.${NC}卷管理"
         echo ""
         echo -e "  ${CYAN}[ 高级配置 ]${NC}"
-        echo -e "  ${GREEN}11.${NC} 编辑 daemon.json           ${GREEN}12.${NC} IPv6 访问控制"
-        echo -e "  ${GREEN}13.${NC} 备份/迁移/还原             ${GREEN}14.${NC} 系统一键深度清理"
+        echo -e "  ${GREEN}11.${NC} IPv6 访问控制"
+        echo -e "  ${GREEN}12.${NC} 备份/迁移/还原             ${GREEN}13.${NC} 系统一键深度清理"
         echo ""
         echo -e "  ${CYAN}[ 系统操作 ]${NC}"
-        echo -e "  ${RED}15.${NC} 彻底卸载 Docker 环境        ${RED}0.${NC} 返回上级菜单"
+        echo -e "  ${RED}14.${NC} 彻底卸载 Docker 环境        ${RED}0.${NC} 返回上级菜单"
         echo -e "${CYAN}================================================${NC}"
         read -p "请输入操作代码: " docker_choice
 
@@ -869,11 +864,10 @@ function docker_menu() {
             8) docker_image_management ;;
             9) docker_network_management ;;
             10) docker_volume_management ;;
-            11) edit_daemon_json ;;
-            12) docker_ipv6_config ;;
-            13) backup_migrate_restore_docker ;;
-            14) clean_docker_resources ;;
-            15) uninstall_docker ;;
+            11) docker_ipv6_config ;;
+            12) backup_migrate_restore_docker ;;
+            13) clean_docker_resources ;;
+            14) uninstall_docker ;;
             0) break ;;
             *) echo -e "${RED}无效输入${NC}"; sleep 1 ;;
         esac
