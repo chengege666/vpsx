@@ -198,15 +198,21 @@ function fix_docker_iptables() {
     echo -e "${CYAN}=========================================${NC}"
     echo -e "${GREEN}         Docker 启动故障深度修复${NC}"
     echo -e "${CYAN}=========================================${NC}"
-    
-    # 加载模块
-    modprobe overlay && modprobe br_netfilter
+
+    if ! command -v docker &> /dev/null; then
+        echo -e "${RED}❌ Docker 未安装，请先安装 Docker。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+
+    modprobe overlay 2>/dev/null || echo -e "${YELLOW}⚠️  overlay 模块加载失败（非必需）${NC}"
+    modprobe br_netfilter 2>/dev/null || echo -e "${YELLOW}⚠️  br_netfilter 模块加载失败${NC}"
+
     cat <<EOF > /etc/modules-load.d/docker-fix.conf
 overlay
 br_netfilter
 EOF
 
-    # 优化参数
     cat <<EOF > /etc/sysctl.d/docker-fix.conf
 net.bridge.bridge-nf-call-iptables  = 1
 net.bridge.bridge-nf-call-ip6tables = 1
@@ -214,24 +220,28 @@ net.ipv4.ip_forward                 = 1
 EOF
     sysctl --system >/dev/null 2>&1
 
-    # 强制切换 legacy 模式 (针对 Debian 11/12)
-    if command -v update-alternatives >/dev/null 2>&1; then
-        echo -e "${BLUE}正在切换 iptables 模式...${NC}"
-        update-alternatives --set iptables /usr/sbin/iptables-legacy >/dev/null 2>&1
-        update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy >/dev/null 2>&1
+    if command -v update-alternatives &> /dev/null && [ -f /usr/sbin/iptables-legacy ]; then
+        echo -e "${BLUE}正在切换 iptables 模式为 legacy...${NC}"
+        update-alternatives --set iptables /usr/sbin/iptables-legacy 2>/dev/null
+        update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy 2>/dev/null
     fi
-    
+
     systemctl restart docker
     if systemctl is-active --quiet docker; then
-        echo -e "${GREEN}修复成功！Docker 已恢复运行。${NC}"
+        echo -e "${GREEN}✅ 修复成功！Docker 已恢复运行。${NC}"
     else
-        echo -e "${RED}修复失败，可能涉及内核组件缺失。${NC}"
+        echo -e "${RED}❌ 修复失败，可能涉及内核组件缺失。${NC}"
     fi
     read -p "按任意键继续..."
 }
 
 # 重启 Docker 服务
 function restart_docker_service() {
+    if ! command -v docker &> /dev/null || ! command -v systemctl &> /dev/null; then
+        echo -e "${RED}❌ Docker 未安装，无法重启。${NC}"
+        sleep 1
+        return
+    fi
     echo -e "${BLUE}正在重启 Docker 服务...${NC}"
     systemctl restart docker && echo -e "${GREEN}Docker 服务重启成功。${NC}" || echo -e "${RED}重启失败！${NC}"
     sleep 1
@@ -239,9 +249,16 @@ function restart_docker_service() {
 
 # 停止 Docker 服务
 function stop_docker_service() {
+    if ! command -v docker &> /dev/null || ! command -v systemctl &> /dev/null; then
+        echo -e "${RED}❌ Docker 未安装。${NC}"
+        sleep 1
+        return
+    fi
     read -p "确定要停止 Docker 服务吗？(y/N): " confirm
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
         systemctl stop docker && echo -e "${GREEN}Docker 服务已成功停止。${NC}" || echo -e "${RED}停止失败！${NC}"
+    else
+        echo -e "${YELLOW}已取消${NC}"
     fi
     sleep 1
 }
@@ -484,15 +501,23 @@ function docker_ipv6_config() {
         echo -e "${CYAN}================================================${NC}"
         echo -e "           ${GREEN}Docker IPv6 访问控制${NC}"
         echo -e "${CYAN}================================================${NC}"
-        
-        # 状态检测
+
+        if ! command -v docker &> /dev/null || ! systemctl is-active --quiet docker 2>/dev/null; then
+            echo -e "${RED}❌ Docker 服务未运行，请先启动 Docker。${NC}"
+            echo -e "${CYAN}================================================${NC}"
+            echo -e "  ${RED}0.${NC} 返回"
+            read -p "请选择操作: " ipv6_choice
+            [[ "$ipv6_choice" == "0" ]] && break
+            continue
+        fi
+
         local status_msg="${YELLOW}未启用${NC}"
         if jq -e '.ipv6 == true' "$daemon_file" >/dev/null 2>&1; then
             status_msg="${GREEN}已启用${NC}"
         fi
         echo -e "当前状态: $status_msg"
         echo -e "${CYAN}------------------------------------------------${NC}"
-        
+
         echo -e "  ${GREEN}1.${NC} 开启 IPv6 访问"
         echo -e "  ${GREEN}2.${NC} 关闭 IPv6 访问"
         echo -e "  ${GREEN}3.${NC} 查看当前 IPv6 配置"
@@ -502,9 +527,17 @@ function docker_ipv6_config() {
 
         case $ipv6_choice in
             1)
-                local ipv6_cidr=$(uuidgen 2>/dev/null | sed 's/-//g' | head -c 12 | sed 's/../&:/g' | sed 's/:$//')
-                [ -z "$ipv6_cidr" ] && ipv6_cidr=$(date +%s | md5sum | head -c 12 | sed 's/../&:/g')
-                local fixed_cidr="fd00:${ipv6_cidr}::/64"
+                # 如果已启用 IPv6，读取已有 CIDR 避免 IP 段变化
+                local existing_cidr=$(jq -r '."fixed-cidr-v6" // ""' "$daemon_file" 2>/dev/null)
+                local fixed_cidr="$existing_cidr"
+
+                if [ -z "$fixed_cidr" ]; then
+                    # 生成随机 ULA 前缀
+                    local rand_hex=$(date +%s | md5sum 2>/dev/null | head -c 8 || echo "")
+                    [ -z "$rand_hex" ] && rand_hex=$(date +%N | sha256sum 2>/dev/null | head -c 8 || echo "deadbeef")
+                    fixed_cidr="fd00:${rand_hex:0:4}:${rand_hex:4:4}::/64"
+                fi
+
                 echo -e "${BLUE}正在配置 IPv6，使用 CIDR: ${fixed_cidr}${NC}"
                 jq ".ipv6 = true | .\"fixed-cidr-v6\" = \"$fixed_cidr\"" "$daemon_file" > "${daemon_file}.tmp" && mv "${daemon_file}.tmp" "$daemon_file"
                 systemctl restart docker
@@ -573,19 +606,41 @@ function backup_migrate_restore_docker() {
 
 # 彻底卸载
 function uninstall_docker() {
-    read -p "警告：这将彻底删除所有镜像和容器！确定吗？(y/N): " confirm
-    if [[ "$confirm" =~ ^[Yy]$ ]]; then
-        if command -v docker >/dev/null 2>&1; then
-            docker ps -aq | while read -r cid; do docker stop "$cid" 2>/dev/null; docker rm "$cid" 2>/dev/null; done
-        fi
-        systemctl stop docker 2>/dev/null
-        if command -v apt-get >/dev/null 2>&1; then
-            apt-get purge -y docker-ce docker-ce-cli containerd.io 2>/dev/null
-            apt-get autoremove -y 2>/dev/null
-        fi
-        rm -rf /var/lib/docker /etc/docker
-        echo -e "${GREEN}卸载完成。${NC}"
+    read -p "⚠️  警告：此操作将彻底删除所有 Docker 镜像、容器、数据卷和配置！确定吗？(y/N): " confirm
+    if [[ ! "$confirm" =~ ^[yY]$ ]]; then
+        echo -e "${YELLOW}已取消${NC}"
+        read -p "按任意键继续..."
+        return
     fi
+
+    # 停止并删除所有容器
+    if command -v docker &> /dev/null; then
+        docker ps -aq 2>/dev/null | while read -r cid; do
+            [ -n "$cid" ] && docker stop "$cid" &> /dev/null && docker rm "$cid" &> /dev/null
+        done
+    fi
+
+    # 停止 Docker 服务
+    if command -v systemctl &> /dev/null; then
+        systemctl stop docker &> /dev/null
+        systemctl disable docker &> /dev/null
+    fi
+
+    # 卸载 Docker 包（支持 apt/yum/dnf）
+    if command -v apt-get &> /dev/null; then
+        apt-get purge -y docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-buildx-plugin &> /dev/null
+        apt-get autoremove -y &> /dev/null
+    elif command -v dnf &> /dev/null; then
+        dnf remove -y docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-buildx-plugin &> /dev/null
+    elif command -v yum &> /dev/null; then
+        yum remove -y docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-buildx-plugin &> /dev/null
+    fi
+
+    # 删除数据、配置和 Compose 插件
+    rm -rf /var/lib/docker /etc/docker /var/lib/containerd
+    rm -f /usr/local/lib/docker/cli-plugins/docker-compose
+
+    echo -e "${GREEN}Docker 已彻底卸载。${NC}"
     read -p "按任意键继续..."
 }
 
