@@ -146,124 +146,50 @@ function check_docker_status() {
 
 # 安装/更新 Docker 环境
 function install_update_docker_env() {
-    _docker_env_detect
     _docker_fix_deps
     clear
     echo -e "${CYAN}=========================================${NC}"
     echo -e "${GREEN}        安装/更新 Docker 环境${NC}"
     echo -e "${CYAN}=========================================${NC}"
 
-    # 检测并处理 Snap 版冲突
-    if command -v snap >/dev/null 2>&1 && snap list | grep -q docker; then
-        echo -e "${YELLOW}检测到冲突的 Snap 版 Docker，正在移除...${NC}"
-        snap remove docker >/dev/null 2>&1
-    fi
-
-    local docker_install_choice
-    if command -v docker >/dev/null 2>&1; then
-        echo -e "${YELLOW}检测到 Docker 已安装。${NC}"
-        echo -e " ${GREEN}1.${NC} 更新 Docker"
-        echo -e " ${RED}0.${NC} 返回上级菜单"
-        read -p "请输入选择(0-1): " docker_install_choice
+    if command -v docker &> /dev/null; then
+        echo -e "${YELLOW}检测到 Docker 已安装 (版本: $(docker --version 2>/dev/null | awk '{print $3}' | sed 's/,//'))${NC}"
+        echo ""
+        read -p "是否更新 Docker？(y/N): " confirm
     else
         echo -e "${YELLOW}检测到 Docker 未安装。${NC}"
-        echo -e " ${GREEN}1.${NC} 安装 Docker"
-        echo -e " ${RED}0.${NC} 返回上级菜单"
-        read -p "请输入选择(0-1): " docker_install_choice
+        echo ""
+        read -p "是否安装 Docker？(y/N): " confirm
     fi
 
-    [[ "$docker_install_choice" == "0" ]] && return
-
-    if [[ "$docker_install_choice" == "1" ]]; then
-        # 自动执行环境预检与修复
-        _docker_system_check_and_fix
-        
-        echo -e "${BLUE}开始安装/更新 Docker 环境...${NC}"
-        
-        # 判定镜像源
-        local mirror_param=""
-        local install_script_url="https://get.docker.com"
-        local install_urls=("$install_script_url")
-        
-        if $IS_CN; then
-            mirror_param="--mirror Aliyun"
-            # 国内加速节点列表 (官方源优先)
-            install_urls=(
-                "https://get.docker.com"
-                "https://github.1231818.xyz/https://raw.githubusercontent.com/docker/docker-install/master/install.sh"
-            )
-        fi
-
-        # 尝试下载安装脚本
-        local script_downloaded=false
-        for url in "${install_urls[@]}"; do
-            echo -e "${YELLOW}正在获取安装脚本: $url ...${NC}"
-            if curl -fsSL --connect-timeout 10 --retry 2 "$url" -o get-docker.sh; then
-                script_downloaded=true
-                break
-            fi
-        done
-
-        if ! $script_downloaded; then
-            echo -e "${RED}无法获取 Docker 安装脚本，请检查网络连接！${NC}"
-            read -p "按任意键继续..."
-            return
-        fi
-
-        # 执行安装
-        if sh get-docker.sh $mirror_param; then
-            rm -f get-docker.sh
-            systemctl enable --now docker
-            echo -e "${GREEN}Docker 引擎部署成功。${NC}"
-        else
-            rm -f get-docker.sh
-            echo -e "${RED}Docker 安装执行失败，请检查网络或系统环境。${NC}"
-            read -p "按任意键继续..."
-            return
-        fi
-
-        # 动态安装 Docker Compose V2 (支持架构自适应)
-        echo -e "${BLUE}正在配置 Docker Compose ($ARCH)...${NC}"
-        local compose_base_url="https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$ARCH"
-        local compose_urls=("$compose_base_url")
-
-        if $IS_CN; then
-            # 国内多节点加速策略 (官方源优先)
-            compose_urls=(
-                "$compose_base_url"
-                "https://github.1231818.xyz/$compose_base_url"
-            )
-        fi
-        
-        mkdir -p /usr/local/lib/docker/cli-plugins
-        local download_success=false
-
-        for url in "${compose_urls[@]}"; do
-            echo -e "${YELLOW}尝试下载节点: $url ...${NC}"
-            # 设置连接超时5秒，最大传输时间60秒，显示进度条
-            if curl -SL --connect-timeout 5 --max-time 300 --retry 2 "$url" -o /usr/local/lib/docker/cli-plugins/docker-compose; then
-                # 简单验证文件大小是否正常 (大于 1MB)
-                local file_size=$(stat -c%s "/usr/local/lib/docker/cli-plugins/docker-compose" 2>/dev/null || echo 0)
-                if [ "$file_size" -gt 1048576 ]; then
-                    download_success=true
-                    echo -e "${GREEN}下载成功！${NC}"
-                    break
-                else
-                    echo -e "${RED}下载文件异常，尝试下一个节点...${NC}"
-                fi
-            else
-                echo -e "${RED}下载超时或失败，尝试下一个节点...${NC}"
-            fi
-        done
-
-        if $download_success; then
-            chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
-            echo -e "${GREEN}Docker Compose 部署成功。${NC}"
-        else
-            echo -e "${RED}Docker Compose 所有节点下载均失败，请检查网络或稍后重试。${NC}"
-        fi
+    if [[ ! "$confirm" =~ ^[yY]$ ]]; then
+        echo -e "${YELLOW}已取消${NC}"
+        read -p "按回车键继续..."
+        return
     fi
-    read -p "操作完成，按任意键继续..."
+
+    # 检测并处理 Snap 版冲突
+    if command -v snap &> /dev/null && snap list 2>/dev/null | grep -q docker; then
+        echo -e "${YELLOW}检测到冲突的 Snap 版 Docker，正在移除...${NC}"
+        snap remove docker &> /dev/null
+    fi
+
+    _docker_system_check_and_fix
+
+    echo -e "${BLUE}正在执行 LinuxMirrors 安装脚本...${NC}"
+    echo ""
+
+    bash <(curl -sSL https://linuxmirrors.cn/docker.sh)
+
+    if command -v docker &> /dev/null; then
+        systemctl enable --now docker &> /dev/null
+        echo ""
+        echo -e "${GREEN}Docker 安装/更新完成！${NC}"
+    else
+        echo ""
+        echo -e "${RED}Docker 安装失败，请检查网络或系统环境。${NC}"
+    fi
+    read -p "按回车键继续..."
 }
 
 # 修复 Docker 启动时的 iptables/nft 冲突问题
