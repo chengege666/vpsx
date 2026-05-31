@@ -26,6 +26,7 @@ function sys_tools_menu() {
         echo -e " ${GREEN}15.${NC} 进程管理工具（查看/终止）"
         echo -e " ${GREEN}16.${NC} 系统环境修复 (权限/磁盘/APT)"
         echo -e " ${GREEN}17.${NC} 配置中文语言支持 (Debian/Ubuntu)"
+        echo -e " ${GREEN}18.${NC} 开启系统 IPv6"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
@@ -82,6 +83,9 @@ function sys_tools_menu() {
                 ;;
             17)
                 configure_chinese_locale
+                ;;
+            18)
+                enable_ipv6_system
                 ;;
             0)
                 break
@@ -1924,4 +1928,88 @@ function btop_help_info() {
     echo -e "4. 支持鼠标操作和自定义配色。"
     echo -e "${CYAN}=========================================${NC}"
     read -p "按回车键继续..."
+}
+
+function enable_ipv6_system() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}           IPv6 启用管理${NC}"
+        echo -e "${CYAN}=========================================${NC}"
+
+        local current_status
+        current_status=$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null)
+        local status_text
+        if [ "$current_status" == "0" ]; then
+            status_text="${GREEN}已启用${NC}"
+        else
+            status_text="${RED}已禁用${NC}"
+        fi
+        echo -e "当前 IPv6 内核状态: $status_text"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${GREEN}1.${NC} 开启 IPv6（临时生效）"
+        echo -e " ${GREEN}2.${NC} 开启 IPv6 持久化（重启后仍生效）"
+        echo -e " ${GREEN}3.${NC} 重启网络服务"
+        echo -e " ${GREEN}4.${NC} 恢复默认（取消持久化配置）"
+        echo -e " ${RED}0.${NC} 返回上一级"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入选择: " choice
+
+        case $choice in
+            1)
+                echo -e "${YELLOW}正在启用 IPv6（临时）...${NC}"
+                sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null
+                sysctl -w net.ipv6.conf.default.disable_ipv6=0 >/dev/null
+                sysctl -w net.ipv6.conf.lo.disable_ipv6=0 >/dev/null
+                echo -e "${GREEN}✅ IPv6 已启用（临时，重启后失效）。${NC}"
+                sleep 2
+                ;;
+            2)
+                echo -e "${YELLOW}正在启用 IPv6 并写入持久化配置...${NC}"
+                sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null
+                sysctl -w net.ipv6.conf.default.disable_ipv6=0 >/dev/null
+                sysctl -w net.ipv6.conf.lo.disable_ipv6=0 >/dev/null
+                mkdir -p /etc/sysctl.d
+                cat > /etc/sysctl.d/99-ipv6-enable.conf <<EOF
+net.ipv6.conf.all.disable_ipv6=0
+net.ipv6.conf.default.disable_ipv6=0
+net.ipv6.conf.lo.disable_ipv6=0
+EOF
+                echo -e "${GREEN}✅ IPv6 已启用并已持久化（重启后仍生效）。${NC}"
+                sleep 2
+                ;;
+            3)
+                echo -e "${YELLOW}正在重启网络服务...${NC}"
+                if command -v systemctl &> /dev/null; then
+                    if systemctl list-units --type=service --state=running 2>/dev/null | grep -q "networking"; then
+                        systemctl restart networking
+                        echo -e "${GREEN}✅ 网络服务已重启（networking）。${NC}"
+                    elif systemctl list-units --type=service --state=running 2>/dev/null | grep -q "network"; then
+                        systemctl restart network
+                        echo -e "${GREEN}✅ 网络服务已重启（network）。${NC}"
+                    elif systemctl list-units --type=service --state=running 2>/dev/null | grep -q "NetworkManager"; then
+                        systemctl restart NetworkManager
+                        echo -e "${GREEN}✅ 网络服务已重启（NetworkManager）。${NC}"
+                    else
+                        echo -e "${RED}未检测到已知的网络服务。${NC}"
+                    fi
+                else
+                    echo -e "${RED}systemctl 不可用。${NC}"
+                fi
+                sleep 2
+                ;;
+            4)
+                if [ -f /etc/sysctl.d/99-ipv6-enable.conf ]; then
+                    rm -f /etc/sysctl.d/99-ipv6-enable.conf
+                    echo -e "${GREEN}✅ 已删除持久化配置文件 /etc/sysctl.d/99-ipv6-enable.conf${NC}"
+                    echo -e "${YELLOW}系统将恢复默认 IPv6 行为（通常为启用状态）。${NC}"
+                else
+                    echo -e "${YELLOW}未找到持久化配置文件，无需清理。${NC}"
+                fi
+                sleep 2
+                ;;
+            0) break ;;
+            *) echo -e "${RED}无效选择！${NC}"; sleep 1 ;;
+        esac
+    done
 }
