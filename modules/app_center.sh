@@ -61,6 +61,7 @@ function app_center_menu() {
         local c25=$(check_installed "docker" "beecount-cloud" && echo "$GREEN" || echo "$NC")
         local c26=$(check_installed "docker" "pairdrop" && echo "$GREEN" || echo "$NC")
         local c27=$(check_installed "docker" "rustdesk-hbbs" && echo "$GREEN" || echo "$NC")
+        local c28=$(check_installed "docker" "dstatus" && echo "$GREEN" || echo "$NC")
 
         echo -e "${CYAN}================================================================${NC}"
         echo -e "${GREEN}                        应用中心菜单${NC}"
@@ -78,11 +79,11 @@ function app_center_menu() {
         echo -e " ${GREEN}21.${NC} ${c21}MAME 街机模拟器${NC}                     ${GREEN}22.${NC} ${c22}MyIP 工具箱 (IP/网络工具)${NC}"
         echo -e " ${GREEN}23.${NC} ${c23}IT-Tools (万能工具箱)${NC}               ${GREEN}24.${NC} ${c24}Uptime Kuma (站点监控)${NC}"
         echo -e " ${GREEN}25.${NC} ${c25}蜜蜂记账 (个人记账系统)${NC}             ${GREEN}26.${NC} ${c26}PairDrop (局域网文件传输)${NC}"
-        echo -e " ${GREEN}27.${NC} ${c27}RustDesk (远程桌面服务端)${NC}"
+        echo -e " ${GREEN}27.${NC} ${c27}RustDesk (远程桌面服务端)${NC}           ${GREEN}28.${NC} ${c28}DStatus (服务器状态监控)${NC}"
         echo -e "${CYAN}----------------------------------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}================================================================${NC}"
-        read -p "请输入你的选择 (0-27) : " app_choice
+        read -p "请输入你的选择 (0-28) : " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
@@ -112,6 +113,7 @@ function app_center_menu() {
             25) beecount_management ;;
             26) pairdrop_management ;;
             27) rustdesk_management ;;
+            28) dstatus_management ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
@@ -8862,6 +8864,183 @@ function uninstall_rustdesk() {
         fi
     else
         echo -e "${YELLOW}已取消卸载。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function dstatus_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}           DStatus 服务器监控${NC}"
+
+        local status_text="${RED}未安装${NC}"
+        local host_port=""
+
+        if command -v docker &> /dev/null; then
+            if docker ps -a --format '{{.Names}}' | grep -q "^dstatus$"; then
+                if docker inspect --format='{{.State.Status}}' dstatus 2>/dev/null | grep -q "running"; then
+                    status_text="${GREEN}运行中${NC}"
+                    host_port=$(docker inspect dstatus --format='{{(index (index .NetworkSettings.Ports "5555/tcp") 0).HostPort}}' 2>/dev/null)
+                else
+                    status_text="${YELLOW}已停止${NC}"
+                fi
+            fi
+        fi
+
+        echo -e "          状态: ${status_text}"
+        if [ -n "$host_port" ]; then
+            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+            echo -e "${CYAN}-----------------------------------------${NC}"
+            [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+            [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+        fi
+
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "DStatus 是一个现代化的服务器状态监控系统，"
+        echo -e "支持 CPU、内存、硬盘、网络流量实时监控。"
+        echo -e "默认密码: dstatus，首次登录请立即修改。"
+        echo ""
+        echo -e " ${GREEN}1.${NC} 安装/更新 DStatus"
+        echo -e " ${GREEN}2.${NC} 启动 DStatus"
+        echo -e " ${GREEN}3.${NC} 停止 DStatus"
+        echo -e " ${GREEN}4.${NC} 重启 DStatus"
+        echo -e " ${GREEN}5.${NC} 查看容器日志"
+        echo -e " ${GREEN}6.${NC} 卸载 DStatus"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC} 返回上一级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 (0-6): " ds_choice
+
+        case "$ds_choice" in
+            1) install_dstatus ;;
+            2) manage_dstatus_container "start" ;;
+            3) manage_dstatus_container "stop" ;;
+            4) manage_dstatus_container "restart" ;;
+            5) docker logs --tail 50 dstatus; read -p "按回车键继续..." ;;
+            6) uninstall_dstatus ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+function install_dstatus() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}       安装/更新 DStatus ${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if ! command -v docker &> /dev/null; then
+        echo -e "${RED}❌ Docker 未安装。请先安装 Docker。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    local deploy_dir="/opt/dstatus"
+    mkdir -p "$deploy_dir/data"
+
+    local default_port=5555
+    if [ -f "$deploy_dir/docker-compose.yml" ]; then
+        local exist_port=$(grep -oP '^\s+-\s+"\K[0-9]+(?=:5555")' "$deploy_dir/docker-compose.yml" | head -1)
+        default_port=${exist_port:-5555}
+    fi
+
+    read -p "请输入宿主机映射端口 (默认 $default_port): " host_port
+    host_port=${host_port:-$default_port}
+
+    cat > "$deploy_dir/docker-compose.yml" << EOF
+services:
+  dstatus:
+    image: ghcr.io/fev125/dstatus:latest
+    container_name: dstatus
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "${host_port}:5555"
+    environment:
+      - TZ=Asia/Shanghai
+      - NODE_ENV=production
+EOF
+
+    echo -e "${BLUE}正在拉取最新的 DStatus 镜像...${NC}"
+    cd "$deploy_dir"
+
+    if docker compose version &> /dev/null; then
+        docker compose pull
+        docker compose up -d --remove-orphans
+    else
+        docker-compose pull
+        docker-compose up -d --remove-orphans
+    fi
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ DStatus 已成功安装/更新！${NC}"
+        echo -e "${YELLOW}默认密码: dstatus${NC}"
+        echo -e "${YELLOW}请登录后立即修改默认密码！${NC}"
+    else
+        echo -e "${RED}❌ 部署失败，请检查 Docker 状态。${NC}"
+    fi
+    cd - > /dev/null
+    read -p "按回车键继续..."
+}
+
+function manage_dstatus_container() {
+    local action=$1
+    local deploy_dir="/opt/dstatus"
+    if [ -d "$deploy_dir" ] && [ -f "$deploy_dir/docker-compose.yml" ]; then
+        cd "$deploy_dir"
+        if docker compose version &> /dev/null; then
+            docker compose "$action"
+        else
+            docker-compose "$action"
+        fi
+        echo -e "${GREEN}操作 ${action} 已执行。${NC}"
+        cd - > /dev/null
+    else
+        echo -e "${RED}未检测到安装目录 (/opt/dstatus)。${NC}"
+    fi
+    sleep 1
+}
+
+function uninstall_dstatus() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${RED}           卸载 DStatus${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    read -p "确定要彻底删除 DStatus 吗？(y/N): " confirm
+    if [[ "$confirm" =~ ^[yY]$ ]]; then
+        local deploy_dir="/opt/dstatus"
+
+        if [ -d "$deploy_dir" ]; then
+            echo -e "${BLUE}正在停止并移除容器...${NC}"
+            cd "$deploy_dir"
+            if docker compose version &> /dev/null; then
+                docker compose down
+            else
+                docker-compose down
+            fi
+            cd - > /dev/null
+
+            echo ""
+            read -p "是否同步删除所有监控数据 (data 目录)？(y/N): " del_data
+            if [[ "$del_data" =~ ^[yY]$ ]]; then
+                rm -rf "$deploy_dir"
+                echo -e "${GREEN}✅ 所有数据和配置文件已清理。${NC}"
+            else
+                rm -f "$deploy_dir/docker-compose.yml"
+                echo -e "${YELLOW}已保留数据目录 (/opt/dstatus/data)，仅移除容器。${NC}"
+            fi
+        else
+            docker stop dstatus &>/dev/null
+            docker rm dstatus &>/dev/null
+            echo -e "${GREEN}容器已移除。${NC}"
+        fi
+        echo -e "${GREEN}卸载流程完成。${NC}"
+    else
+        echo -e "${YELLOW}已取消卸载操作。${NC}"
     fi
     read -p "按回车键继续..."
 }
