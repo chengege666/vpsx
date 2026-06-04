@@ -8950,18 +8950,20 @@ function install_dstatus() {
     host_port=${host_port:-$default_port}
 
     cat > "$deploy_dir/docker-compose.yml" << EOF
+version: '3.8'
+
 services:
-  dstatus:
+  web:
     image: ghcr.io/fev125/dstatus:latest
     container_name: dstatus
-    restart: unless-stopped
-    volumes:
-      - ./data:/app/data
     ports:
       - "${host_port}:5555"
+    volumes:
+      - ./data:/app/data
     environment:
-      - TZ=Asia/Shanghai
       - NODE_ENV=production
+      - TZ=Asia/Shanghai
+    restart: unless-stopped
 EOF
 
     echo -e "${BLUE}正在拉取最新的 DStatus 镜像...${NC}"
@@ -8988,18 +8990,11 @@ EOF
 
 function manage_dstatus_container() {
     local action=$1
-    local deploy_dir="/opt/dstatus"
-    if [ -d "$deploy_dir" ] && [ -f "$deploy_dir/docker-compose.yml" ]; then
-        cd "$deploy_dir"
-        if docker compose version &> /dev/null; then
-            docker compose "$action"
-        else
-            docker-compose "$action"
-        fi
+    if docker ps -a --format '{{.Names}}' | grep -q "^dstatus$"; then
+        docker "$action" dstatus
         echo -e "${GREEN}操作 ${action} 已执行。${NC}"
-        cd - > /dev/null
     else
-        echo -e "${RED}未检测到安装目录 (/opt/dstatus)。${NC}"
+        echo -e "${RED}容器 dstatus 不存在，请先安装。${NC}"
     fi
     sleep 1
 }
@@ -9014,29 +9009,19 @@ function uninstall_dstatus() {
     if [[ "$confirm" =~ ^[yY]$ ]]; then
         local deploy_dir="/opt/dstatus"
 
-        if [ -d "$deploy_dir" ]; then
-            echo -e "${BLUE}正在停止并移除容器...${NC}"
-            cd "$deploy_dir"
-            if docker compose version &> /dev/null; then
-                docker compose down
-            else
-                docker-compose down
-            fi
-            cd - > /dev/null
+        echo -e "${BLUE}正在停止并移除容器...${NC}"
+        docker stop dstatus &>/dev/null
+        docker rm dstatus &>/dev/null
 
+        if [ -d "$deploy_dir" ]; then
             echo ""
             read -p "是否同步删除所有监控数据 (data 目录)？(y/N): " del_data
             if [[ "$del_data" =~ ^[yY]$ ]]; then
                 rm -rf "$deploy_dir"
                 echo -e "${GREEN}✅ 所有数据和配置文件已清理。${NC}"
             else
-                rm -f "$deploy_dir/docker-compose.yml"
-                echo -e "${YELLOW}已保留数据目录 (/opt/dstatus/data)，仅移除容器。${NC}"
+                echo -e "${YELLOW}已保留数据目录 (/opt/dstatus)，仅移除容器。${NC}"
             fi
-        else
-            docker stop dstatus &>/dev/null
-            docker rm dstatus &>/dev/null
-            echo -e "${GREEN}容器已移除。${NC}"
         fi
         echo -e "${GREEN}卸载流程完成。${NC}"
     else
