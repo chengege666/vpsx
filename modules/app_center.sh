@@ -1944,7 +1944,7 @@ EOF
 function start_watchtower() {
     local deploy_dir="/opt/watchtower"
     if [ -d "$deploy_dir" ]; then
-        cd "$deploy_dir" && (docker compose start || docker-compose start)
+        cd "$deploy_dir" && (docker compose up -d || docker-compose up -d)
         echo -e "${GREEN}✅ Watchtower 已启动${NC}"
     else
         docker start watchtower 2>/dev/null && echo -e "${GREEN}✅ Watchtower 已启动${NC}"
@@ -1969,6 +1969,15 @@ function restart_watchtower() {
     else
         docker restart watchtower 2>/dev/null && echo -e "${GREEN}✅ Watchtower 已重启${NC}"
     fi
+}
+
+# 辅助函数：获取当前 Watchtower 容器的 WATCHTOWER_ 环境变量（用于非 Compose 模式重建时保留配置）
+function _get_watchtower_env_flags() {
+    local flags=""
+    if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^watchtower$"; then
+        flags=$(docker inspect watchtower --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep "^WATCHTOWER_" | sed 's/^/-e /' | tr '\n' ' ')
+    fi
+    echo "$flags"
 }
 
 function configure_watchtower() {
@@ -2005,13 +2014,14 @@ function configure_watchtower() {
             read -p "新的检查间隔（如 24h、12h、30m）: " new_interval
             if [ -n "$new_interval" ]; then
                 if [ "$use_compose" = true ]; then
-                    sed -i "s/WATCHTOWER_POLL_INTERVAL=.*/WATCHTOWER_POLL_INTERVAL=${new_interval}/" "$deploy_dir/.env"
+                    grep -q "WATCHTOWER_POLL_INTERVAL" "$deploy_dir/.env" && sed -i "s/WATCHTOWER_POLL_INTERVAL=.*/WATCHTOWER_POLL_INTERVAL=${new_interval}/" "$deploy_dir/.env" || echo "WATCHTOWER_POLL_INTERVAL=${new_interval}" >> "$deploy_dir/.env"
                     cd "$deploy_dir" && (docker compose up -d || docker-compose up -d)
                 else
                     echo "停止并重新创建容器..."
+                    local wt_env=$(_get_watchtower_env_flags)
                     docker stop watchtower >/dev/null 2>&1
                     docker rm watchtower >/dev/null 2>&1
-                    docker run -d --name watchtower --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower --interval $new_interval
+                    docker run -d --name watchtower --restart unless-stopped $wt_env -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower --interval $new_interval
                 fi
                 echo -e "${GREEN}✅ 检查间隔已更新为 ${new_interval}${NC}"
             fi
@@ -2033,13 +2043,14 @@ function configure_watchtower() {
                 fi
                 cd "$deploy_dir" && (docker compose up -d || docker-compose up -d)
             else
+                local wt_env=$(_get_watchtower_env_flags)
                 docker stop watchtower >/dev/null 2>&1
                 docker rm watchtower >/dev/null 2>&1
                 if [ -z "$notify_url" ]; then
-                    docker run -d --name watchtower --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower
+                    docker run -d --name watchtower --restart unless-stopped $wt_env -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower
                     echo -e "${GREEN}✅ 已禁用通知${NC}"
                 else
-                    docker run -d --name watchtower --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock -e WATCHTOWER_NOTIFICATIONS=shoutrrr -e WATCHTOWER_NOTIFICATION_URL="$notify_url" containrrr/watchtower
+                    docker run -d --name watchtower --restart unless-stopped $wt_env -v /var/run/docker.sock:/var/run/docker.sock -e WATCHTOWER_NOTIFICATIONS=shoutrrr -e WATCHTOWER_NOTIFICATION_URL="$notify_url" containrrr/watchtower
                     echo -e "${GREEN}✅ 通知配置已更新${NC}"
                 fi
             fi
@@ -2063,17 +2074,18 @@ function configure_watchtower() {
                 fi
                 cd "$deploy_dir" && (docker compose up -d || docker-compose up -d)
             else
+                local wt_env=$(_get_watchtower_env_flags)
                 docker stop watchtower >/dev/null 2>&1
                 docker rm watchtower >/dev/null 2>&1
                 if [ "$monitor_mode" = "1" ]; then
-                    docker run -d --name watchtower --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower
+                    docker run -d --name watchtower --restart unless-stopped $wt_env -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower
                     echo -e "${GREEN}✅ 已切换为监控所有容器${NC}"
                 else
                     echo "可监控的容器列表："
                     docker ps --format "{{.Names}}" | grep -v "watchtower" | nl
                     echo ""
                     read -p "输入要监控的容器名称（多个用空格分隔）: " containers
-                    docker run -d --name watchtower --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower $containers
+                    docker run -d --name watchtower --restart unless-stopped $wt_env -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower $containers
                     echo -e "${GREEN}✅ 已设置为监控指定容器${NC}"
                 fi
             fi
@@ -2085,9 +2097,10 @@ function configure_watchtower() {
                     grep -q "WATCHTOWER_CLEANUP" "$deploy_dir/.env" && sed -i "s/WATCHTOWER_CLEANUP=.*/WATCHTOWER_CLEANUP=true/" "$deploy_dir/.env" || echo "WATCHTOWER_CLEANUP=true" >> "$deploy_dir/.env"
                     cd "$deploy_dir" && (docker compose up -d || docker-compose up -d)
                 else
+                    local wt_env=$(_get_watchtower_env_flags)
                     docker stop watchtower >/dev/null 2>&1
                     docker rm watchtower >/dev/null 2>&1
-                    docker run -d --name watchtower --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower --cleanup
+                    docker run -d --name watchtower --restart unless-stopped $wt_env -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower --cleanup
                 fi
                 echo -e "${GREEN}✅ 已启用自动清理旧镜像${NC}"
             fi
@@ -2112,9 +2125,7 @@ function check_updates_now() {
     
     if [[ ! "$confirm" =~ ^[nN]$ ]]; then
         echo "正在执行更新检查..."
-        # 修复点：添加环境变量强制使用 1.44 版本的 API
         docker run --rm \
-            -e DOCKER_API_VERSION=1.44 \
             -v /var/run/docker.sock:/var/run/docker.sock \
             containrrr/watchtower \
             --run-once \
