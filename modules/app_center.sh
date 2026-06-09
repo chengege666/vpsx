@@ -1848,6 +1848,7 @@ function install_watchtower() {
     
     # 初始化环境变量文件
     echo "TZ=$(timedatectl | grep "Time zone" | awk '{print $3}' || echo "Asia/Shanghai")" > "$env_file"
+    echo "DOCKER_API_VERSION=1.40" >> "$env_file"
     
     case $mode in
         1)
@@ -2021,7 +2022,7 @@ function configure_watchtower() {
                     local wt_env=$(_get_watchtower_env_flags)
                     docker stop watchtower >/dev/null 2>&1
                     docker rm watchtower >/dev/null 2>&1
-                    docker run -d --name watchtower --restart unless-stopped $wt_env -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower --interval $new_interval
+                    docker run -d --name watchtower --restart unless-stopped $wt_env -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_API_VERSION=1.40 containrrr/watchtower --interval $new_interval
                 fi
                 echo -e "${GREEN}✅ 检查间隔已更新为 ${new_interval}${NC}"
             fi
@@ -2047,10 +2048,10 @@ function configure_watchtower() {
                 docker stop watchtower >/dev/null 2>&1
                 docker rm watchtower >/dev/null 2>&1
                 if [ -z "$notify_url" ]; then
-                    docker run -d --name watchtower --restart unless-stopped $wt_env -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower
+                    docker run -d --name watchtower --restart unless-stopped $wt_env -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_API_VERSION=1.40 containrrr/watchtower
                     echo -e "${GREEN}✅ 已禁用通知${NC}"
                 else
-                    docker run -d --name watchtower --restart unless-stopped $wt_env -v /var/run/docker.sock:/var/run/docker.sock -e WATCHTOWER_NOTIFICATIONS=shoutrrr -e WATCHTOWER_NOTIFICATION_URL="$notify_url" containrrr/watchtower
+                    docker run -d --name watchtower --restart unless-stopped $wt_env -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_API_VERSION=1.40 -e WATCHTOWER_NOTIFICATIONS=shoutrrr -e WATCHTOWER_NOTIFICATION_URL="$notify_url" containrrr/watchtower
                     echo -e "${GREEN}✅ 通知配置已更新${NC}"
                 fi
             fi
@@ -2078,14 +2079,14 @@ function configure_watchtower() {
                 docker stop watchtower >/dev/null 2>&1
                 docker rm watchtower >/dev/null 2>&1
                 if [ "$monitor_mode" = "1" ]; then
-                    docker run -d --name watchtower --restart unless-stopped $wt_env -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower
+                    docker run -d --name watchtower --restart unless-stopped $wt_env -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_API_VERSION=1.40 containrrr/watchtower
                     echo -e "${GREEN}✅ 已切换为监控所有容器${NC}"
                 else
                     echo "可监控的容器列表："
                     docker ps --format "{{.Names}}" | grep -v "watchtower" | nl
                     echo ""
                     read -p "输入要监控的容器名称（多个用空格分隔）: " containers
-                    docker run -d --name watchtower --restart unless-stopped $wt_env -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower $containers
+                    docker run -d --name watchtower --restart unless-stopped $wt_env -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_API_VERSION=1.40 containrrr/watchtower $containers
                     echo -e "${GREEN}✅ 已设置为监控指定容器${NC}"
                 fi
             fi
@@ -2100,7 +2101,7 @@ function configure_watchtower() {
                     local wt_env=$(_get_watchtower_env_flags)
                     docker stop watchtower >/dev/null 2>&1
                     docker rm watchtower >/dev/null 2>&1
-                    docker run -d --name watchtower --restart unless-stopped $wt_env -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower --cleanup
+                    docker run -d --name watchtower --restart unless-stopped $wt_env -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_API_VERSION=1.40 containrrr/watchtower --cleanup
                 fi
                 echo -e "${GREEN}✅ 已启用自动清理旧镜像${NC}"
             fi
@@ -2127,6 +2128,7 @@ function check_updates_now() {
         echo "正在执行更新检查..."
         docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
+            -e DOCKER_API_VERSION=1.40 \
             containrrr/watchtower \
             --run-once \
             --cleanup
