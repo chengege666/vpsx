@@ -179,7 +179,7 @@ function install_update_docker_env() {
     echo -e "${BLUE}正在执行 LinuxMirrors 安装脚本...${NC}"
     echo ""
 
-    bash <(curl -sSL https://linuxmirrors.cn/docker.sh)
+    bash <(curl -sSL https://linuxmirrors.cn/main.sh)
 
     if command -v docker &> /dev/null; then
         systemctl enable --now docker &> /dev/null
