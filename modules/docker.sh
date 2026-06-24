@@ -176,10 +176,10 @@ function install_update_docker_env() {
 
     _docker_system_check_and_fix
 
-    echo -e "${BLUE}正在执行 LinuxMirrors 安装脚本...${NC}"
+    echo -e "${BLUE}正在从 Docker 官方仓库安装...${NC}"
     echo ""
 
-    bash <(curl -sSL https://linuxmirrors.cn/docker.sh)
+    apt-get update -y && apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
     if command -v docker &> /dev/null; then
         systemctl enable --now docker &> /dev/null
