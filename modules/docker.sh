@@ -850,29 +850,30 @@ function _docker_fix_sources() {
     local docker_suite=""
     local repo_url=""
 
-    # 1. 检测系统发行版
+    # 1. 检测系统发行版（不使用 grep -oP 提高兼容性）
     if [ -f /etc/os-release ]; then
-        os_id=$(grep -oP '^ID=\K.*' /etc/os-release 2>/dev/null | tr -d '"')
-        codename=$(grep -oP 'VERSION_CODENAME=\K.*' /etc/os-release 2>/dev/null || echo "")
+        os_id=$(grep '^ID=' /etc/os-release | head -1 | cut -d= -f2 | tr -d '"')
+        codename=$(grep '^VERSION_CODENAME=' /etc/os-release | head -1 | cut -d= -f2 | tr -d '"')
     fi
-    [ -z "$codename" ] && codename=$(grep -oP 'VERSION_ID=\K.*' /etc/os-release 2>/dev/null || echo "unknown")
+    [ -z "$codename" ] && codename=$(grep '^VERSION_ID=' /etc/os-release | head -1 | cut -d= -f2 | tr -d '"' || echo "unknown")
+    [ -z "$codename" ] && codename="unknown"
 
     # 2. 根据 OS 类型设置仓库地址和 suite
     case "$os_id" in
         ubuntu)
             repo_url="https://download.docker.com/linux/ubuntu"
-            # Ubuntu 非 LTS 或已 EOL 版本降级为 jammy
+            # 白名单：只保留 Docker 官方明确支持的 Ubuntu LTS，其余降级到 jammy
             case "$codename" in
-                plucky|oracular|kinetic|lunar|groovy|eoan|disco|cosmic|artful|zesty|yakkety|xenial|trusty|precise)
+                noble|jammy|focal)
+                    docker_suite="$codename"
+                    ;;
+                *)
                     docker_suite="jammy"
                     echo -e "${YELLOW}  ! 当前系统为 Ubuntu $codename (Docker 未正式支持)，自动使用 Ubuntu 22.04 (jammy) 的 Docker 包${NC}"
                     ;;
-                *)
-                    docker_suite="$codename"
-                    ;;
             esac
             ;;
-        debian|*)
+        debian)
             repo_url="https://download.docker.com/linux/debian"
             # Debian testing/unstable 降级为 bookworm
             case "$codename" in
@@ -906,8 +907,8 @@ function _docker_fix_sources() {
     if [ ! -f "$sources_file" ]; then
         need_write=true
     else
-        local current_suite=$(grep -oP 'Suites:\s*\K.*' "$sources_file" 2>/dev/null | tr -d ' ')
-        local current_uris=$(grep -oP 'URIs:\s*\K.*' "$sources_file" 2>/dev/null | tr -d ' ')
+        local current_suite=$(grep '^Suites:' "$sources_file" | head -1 | cut -d: -f2- | tr -d ' ')
+        local current_uris=$(grep '^URIs:' "$sources_file" | head -1 | cut -d: -f2- | tr -d ' ')
         if [ "$current_suite" != "$docker_suite" ] || ! echo "$current_uris" | grep -q "download.docker.com"; then
             need_write=true
         fi
