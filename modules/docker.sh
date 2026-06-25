@@ -176,10 +176,20 @@ function install_update_docker_env() {
 
     _docker_system_check_and_fix
 
+    # 自动修复 Docker 源配置（处理 trixie/forky/sid 等无官方包的情况）
+    _docker_fix_sources
+
     echo -e "${BLUE}正在从 Docker 官方仓库安装...${NC}"
     echo ""
 
-    apt-get update -y && apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    if ! (apt-get update -y && apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin); then
+        echo -e "${YELLOW}安装失败，正在尝试自动修复并重试...${NC}"
+        _docker_fix_sources
+        if ! (apt-get update -y && apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin); then
+            echo -e "${YELLOW}apt 安装失败，尝试官方 get-docker.sh 脚本...${NC}"
+            curl -fsSL https://get.docker.com | sh
+        fi
+    fi
 
     if command -v docker &> /dev/null; then
         systemctl enable --now docker &> /dev/null
@@ -827,6 +837,73 @@ function docker_volume_management() {
             *) echo -e "${RED}无效操作${NC}"; sleep 1 ;;
         esac
     done
+}
+
+# --- 自动修复 Docker 源配置 ---
+# 处理 Debian testing/unstable 无官方 Docker 包的问题
+function _docker_fix_sources() {
+    local sources_file="/etc/apt/sources.list.d/docker.sources"
+    local keyring_dir="/etc/apt/keyrings"
+    local key_file="$keyring_dir/docker.asc"
+    local codename=""
+    local docker_suite=""
+
+    # 1. 检测系统发行版
+    if [ -f /etc/os-release ]; then
+        codename=$(grep -oP 'VERSION_CODENAME=\K.*' /etc/os-release 2>/dev/null || echo "")
+    fi
+    [ -z "$codename" ] && codename=$(grep -oP 'VERSION_ID=\K.*' /etc/os-release 2>/dev/null || echo "unknown")
+
+    # 2. testing/unstable 自动降级为 bookworm
+    case "$codename" in
+        trixie|forky|sid|testing|unstable)
+            docker_suite="bookworm"
+            echo -e "${YELLOW}  ! 当前系统为 $codename (Docker 未正式支持)，自动使用 Debian 12 (bookworm) 的 Docker 包${NC}"
+            ;;
+        *)
+            docker_suite="$codename"
+            ;;
+    esac
+
+    # 3. 确保 keyrings 目录存在
+    mkdir -p "$keyring_dir"
+
+    # 4. 检查并下载 GPG 密钥
+    if [ ! -f "$key_file" ]; then
+        echo -e "${BLUE}  - 正在下载 Docker GPG 密钥...${NC}"
+        curl -fsSL https://download.docker.com/linux/debian/gpg -o "$key_file" 2>/dev/null || {
+            echo -e "${RED}  ✗ GPG 密钥下载失败${NC}"
+            return 1
+        }
+        chmod a+r "$key_file"
+        echo -e "${GREEN}  ✔ GPG 密钥下载完成${NC}"
+    fi
+
+    # 5. 检查 docker.sources 是否存在且配置正确
+    local need_write=false
+    if [ ! -f "$sources_file" ]; then
+        need_write=true
+    else
+        # 检查 suite 是否正确
+        local current_suite=$(grep -oP 'Suites:\s*\K.*' "$sources_file" 2>/dev/null | tr -d ' ')
+        local current_uris=$(grep -oP 'URIs:\s*\K.*' "$sources_file" 2>/dev/null | tr -d ' ')
+        if [ "$current_suite" != "$docker_suite" ] || ! echo "$current_uris" | grep -q "download.docker.com"; then
+            need_write=true
+        fi
+    fi
+
+    if [ "$need_write" = true ]; then
+        echo -e "${BLUE}  - 正在写入 Docker 官方源配置 (suite: $docker_suite)...${NC}"
+        cat > "$sources_file" << EOF
+Types: deb
+URIs: https://download.docker.com/linux/debian
+Suites: $docker_suite
+Components: stable
+Architectures: amd64
+Signed-By: $key_file
+EOF
+        echo -e "${GREEN}  ✔ 源配置写入完成${NC}"
+    fi
 }
 
 # --- 菜单主入口 ---
