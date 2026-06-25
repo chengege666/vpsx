@@ -840,28 +840,50 @@ function docker_volume_management() {
 }
 
 # --- 自动修复 Docker 源配置 ---
-# 处理 Debian testing/unstable 无官方 Docker 包的问题
+# 处理 Debian testing/unstable 及 Ubuntu 无官方 Docker 包的问题
 function _docker_fix_sources() {
     local sources_file="/etc/apt/sources.list.d/docker.sources"
     local keyring_dir="/etc/apt/keyrings"
     local key_file="$keyring_dir/docker.asc"
+    local os_id=""
     local codename=""
     local docker_suite=""
+    local repo_url=""
 
     # 1. 检测系统发行版
     if [ -f /etc/os-release ]; then
+        os_id=$(grep -oP '^ID=\K.*' /etc/os-release 2>/dev/null | tr -d '"')
         codename=$(grep -oP 'VERSION_CODENAME=\K.*' /etc/os-release 2>/dev/null || echo "")
     fi
     [ -z "$codename" ] && codename=$(grep -oP 'VERSION_ID=\K.*' /etc/os-release 2>/dev/null || echo "unknown")
 
-    # 2. testing/unstable 自动降级为 bookworm
-    case "$codename" in
-        trixie|forky|sid|testing|unstable)
-            docker_suite="bookworm"
-            echo -e "${YELLOW}  ! 当前系统为 $codename (Docker 未正式支持)，自动使用 Debian 12 (bookworm) 的 Docker 包${NC}"
+    # 2. 根据 OS 类型设置仓库地址和 suite
+    case "$os_id" in
+        ubuntu)
+            repo_url="https://download.docker.com/linux/ubuntu"
+            # Ubuntu 非 LTS 或已 EOL 版本降级为 jammy
+            case "$codename" in
+                plucky|oracular|kinetic|lunar|groovy|eoan|disco|cosmic|artful|zesty|yakkety|xenial|trusty|precise)
+                    docker_suite="jammy"
+                    echo -e "${YELLOW}  ! 当前系统为 Ubuntu $codename (Docker 未正式支持)，自动使用 Ubuntu 22.04 (jammy) 的 Docker 包${NC}"
+                    ;;
+                *)
+                    docker_suite="$codename"
+                    ;;
+            esac
             ;;
-        *)
-            docker_suite="$codename"
+        debian|*)
+            repo_url="https://download.docker.com/linux/debian"
+            # Debian testing/unstable 降级为 bookworm
+            case "$codename" in
+                trixie|forky|sid|testing|unstable)
+                    docker_suite="bookworm"
+                    echo -e "${YELLOW}  ! 当前系统为 Debian $codename (Docker 未正式支持)，自动使用 Debian 12 (bookworm) 的 Docker 包${NC}"
+                    ;;
+                *)
+                    docker_suite="$codename"
+                    ;;
+            esac
             ;;
     esac
 
@@ -884,7 +906,6 @@ function _docker_fix_sources() {
     if [ ! -f "$sources_file" ]; then
         need_write=true
     else
-        # 检查 suite 是否正确
         local current_suite=$(grep -oP 'Suites:\s*\K.*' "$sources_file" 2>/dev/null | tr -d ' ')
         local current_uris=$(grep -oP 'URIs:\s*\K.*' "$sources_file" 2>/dev/null | tr -d ' ')
         if [ "$current_suite" != "$docker_suite" ] || ! echo "$current_uris" | grep -q "download.docker.com"; then
@@ -893,10 +914,10 @@ function _docker_fix_sources() {
     fi
 
     if [ "$need_write" = true ]; then
-        echo -e "${BLUE}  - 正在写入 Docker 官方源配置 (suite: $docker_suite)...${NC}"
+        echo -e "${BLUE}  - 正在写入 Docker 官方源配置 (repo: $repo_url, suite: $docker_suite)...${NC}"
         cat > "$sources_file" << EOF
 Types: deb
-URIs: https://download.docker.com/linux/debian
+URIs: $repo_url
 Suites: $docker_suite
 Components: stable
 Architectures: amd64
