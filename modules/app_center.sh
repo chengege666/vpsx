@@ -9163,17 +9163,11 @@ function add_nginx_proxy() {
 
     # 交互输入
     read -p "请输入域名（留空则使用IP访问）: " server_name
-    read -p "请输入监听端口（默认 80）: " listen_port
-    listen_port=${listen_port:-80}
     read -p "请输入需要代理的目标端口（如 3000）: " target_port
     target_port=${target_port:-3000}
+    local listen_port=80
 
     # 校验端口
-    if ! [[ "$listen_port" =~ ^[0-9]+$ ]] || [ "$listen_port" -lt 1 ] || [ "$listen_port" -gt 65535 ]; then
-        echo -e "${RED}❌ 监听端口不合法${NC}"
-        read -p "按回车键继续..."
-        return
-    fi
     if ! [[ "$target_port" =~ ^[0-9]+$ ]] || [ "$target_port" -lt 1 ] || [ "$target_port" -gt 65535 ]; then
         echo -e "${RED}❌ 目标端口不合法${NC}"
         read -p "按回车键继续..."
