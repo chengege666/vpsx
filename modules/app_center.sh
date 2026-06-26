@@ -61,6 +61,7 @@ function app_center_menu() {
         local c25=$(check_installed "docker" "beecount-cloud" && echo "$GREEN" || echo "$NC")
         local c26=$(check_installed "docker" "pairdrop" && echo "$GREEN" || echo "$NC")
         local c27=$(check_installed "docker" "rustdesk-hbbs" && echo "$GREEN" || echo "$NC")
+        local c28=$(check_installed "cmd" "nginx" && echo "$GREEN" || echo "$NC")
 
         echo -e "${CYAN}================================================================${NC}"
         echo -e "${GREEN}                        应用中心菜单${NC}"
@@ -79,10 +80,11 @@ function app_center_menu() {
         echo -e " ${GREEN}23.${NC} ${c23}IT-Tools (万能工具箱)${NC}               ${GREEN}24.${NC} ${c24}Uptime Kuma (站点监控)${NC}"
         echo -e " ${GREEN}25.${NC} ${c25}蜜蜂记账 (个人记账系统)${NC}             ${GREEN}26.${NC} ${c26}PairDrop (局域网文件传输)${NC}"
         echo -e " ${GREEN}27.${NC} ${c27}RustDesk (远程桌面服务端)${NC}"
+        echo -e " ${GREEN}28.${NC} ${c28}NGINX 反向代理${NC}"
         echo -e "${CYAN}----------------------------------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}================================================================${NC}"
-        read -p "请输入你的选择 (0-27) : " app_choice
+        read -p "请输入你的选择 (0-28) : " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
@@ -112,6 +114,7 @@ function app_center_menu() {
             25) beecount_management ;;
             26) pairdrop_management ;;
             27) rustdesk_management ;;
+            28) nginx_management ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
@@ -8875,6 +8878,376 @@ function uninstall_rustdesk() {
         fi
     else
         echo -e "${YELLOW}已取消卸载。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+# ========== NGINX 管理函数 ==========
+
+# NGINX 管理菜单
+function nginx_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}          NGINX 反向代理${NC}"
+
+        local status_text="${RED}未安装${NC}"
+        local nginx_version=""
+
+        if command -v nginx &> /dev/null; then
+            nginx_version=$(nginx -v 2>&1 | awk -F/ '{print $2}' | awk '{print $1}')
+            if systemctl is-active --quiet nginx 2>/dev/null; then
+                status_text="${GREEN}运行中${NC}"
+            else
+                status_text="${YELLOW}已停止${NC}"
+            fi
+        fi
+
+        echo -e "          版本: ${YELLOW}${nginx_version:-未知}${NC}"
+        echo -e "          状态: ${status_text}"
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e " ${GREEN}1.${NC}  安装 NGINX（官方源）"
+        echo -e " ${GREEN}2.${NC}  启动 NGINX"
+        echo -e " ${GREEN}3.${NC}  停止 NGINX"
+        echo -e " ${GREEN}4.${NC}  重启 NGINX"
+        echo -e " ${GREEN}5.${NC}  重载配置"
+        echo -e " ${GREEN}6.${NC}  检查配置"
+        echo -e " ${GREEN}7.${NC}  查看状态"
+        echo -e " ${GREEN}8.${NC}  卸载 NGINX"
+        echo -e " ${GREEN}9.${NC}  快速创建反向代理"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC}  返回上一级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 (0-9): " nginx_choice
+
+        case "$nginx_choice" in
+            1) install_nginx ;;
+            2) start_nginx ;;
+            3) stop_nginx ;;
+            4) restart_nginx ;;
+            5) reload_nginx ;;
+            6) check_nginx_config ;;
+            7) view_nginx_status ;;
+            8) uninstall_nginx ;;
+            9) add_nginx_proxy ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+# 安装 NGINX（官方源）
+function install_nginx() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          安装 NGINX（官方源）${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if command -v nginx &> /dev/null; then
+        echo -e "${YELLOW}NGINX 已安装，当前版本: $(nginx -v 2>&1)${NC}"
+        read -p "是否重新安装？(y/N): " confirm
+        [[ ! "$confirm" =~ ^[yY]$ ]] && echo "取消安装。" && return
+    fi
+
+    # 检测系统类型
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        local os_id="${ID:-unknown}"
+    else
+        echo -e "${RED}无法检测系统类型${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    case "$os_id" in
+        ubuntu|debian)
+            echo -e "${BLUE}检测到 Debian/Ubuntu 系统，使用 apt 安装...${NC}"
+            sudo apt-get update -y
+            sudo apt-get install -y nginx
+            ;;
+        centos|rhel|fedora|rocky|almalinux)
+            echo -e "${BLUE}检测到 RHEL/CentOS 系统，使用 yum/dnf 安装...${NC}"
+            if command -v dnf &> /dev/null; then
+                sudo dnf install -y nginx
+            else
+                sudo yum install -y nginx
+            fi
+            ;;
+        *)
+            echo -e "${RED}不支持的系统类型: ${os_id}${NC}"
+            echo -e "${YELLOW}尝试使用系统包管理器安装...${NC}"
+            if command -v apt-get &> /dev/null; then
+                sudo apt-get install -y nginx
+            elif command -v dnf &> /dev/null; then
+                sudo dnf install -y nginx
+            elif command -v yum &> /dev/null; then
+                sudo yum install -y nginx
+            else
+                echo -e "${RED}未找到支持的包管理器${NC}"
+                read -p "按回车键继续..."
+                return
+            fi
+            ;;
+    esac
+
+    if command -v nginx &> /dev/null; then
+        echo -e "${GREEN}NGINX 安装成功！版本: $(nginx -v 2>&1)${NC}"
+        sudo systemctl enable nginx 2>/dev/null
+        sudo systemctl start nginx 2>/dev/null
+        echo -e "${GREEN}NGINX 已启动并设置为开机自启${NC}"
+    else
+        echo -e "${RED}NGINX 安装失败，请检查日志${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function start_nginx() {
+    echo -e "${BLUE}启动 NGINX...${NC}"
+    if ! command -v nginx &> /dev/null; then
+        echo -e "${RED}NGINX 未安装，请先安装${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+    sudo systemctl start nginx 2>/dev/null || sudo nginx 2>/dev/null
+    if systemctl is-active --quiet nginx 2>/dev/null; then
+        echo -e "${GREEN}NGINX 已启动${NC}"
+    else
+        echo -e "${RED}启动失败，请检查配置${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function stop_nginx() {
+    echo -e "${BLUE}停止 NGINX...${NC}"
+    sudo systemctl stop nginx 2>/dev/null || sudo nginx -s stop 2>/dev/null
+    echo -e "${GREEN}NGINX 已停止${NC}"
+    read -p "按回车键继续..."
+}
+
+function restart_nginx() {
+    echo -e "${BLUE}重启 NGINX...${NC}"
+    sudo systemctl restart nginx 2>/dev/null || (sudo nginx -s stop && sudo nginx)
+    echo -e "${GREEN}NGINX 已重启${NC}"
+    read -p "按回车键继续..."
+}
+
+function reload_nginx() {
+    echo -e "${BLUE}重载 NGINX 配置...${NC}"
+    if ! command -v nginx &> /dev/null; then
+        echo -e "${RED}NGINX 未安装${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+    sudo nginx -s reload 2>/dev/null
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}配置已重载${NC}"
+    else
+        echo -e "${RED}重载失败，请检查配置${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function check_nginx_config() {
+    echo -e "${BLUE}检查 NGINX 配置语法...${NC}"
+    if ! command -v nginx &> /dev/null; then
+        echo -e "${RED}NGINX 未安装${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+    sudo nginx -t
+    read -p "按回车键继续..."
+}
+
+function view_nginx_status() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          NGINX 状态信息${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if ! command -v nginx &> /dev/null; then
+        echo -e "${RED}NGINX 未安装${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "版本: $(nginx -v 2>&1)"
+    echo -e ""
+    if systemctl is-active --quiet nginx 2>/dev/null; then
+        echo -e "运行状态: ${GREEN}运行中${NC}"
+    else
+        echo -e "运行状态: ${RED}已停止${NC}"
+    fi
+    echo -e ""
+    echo -e "进程信息:"
+    ps aux | grep nginx | grep -v grep
+    echo -e ""
+    echo -e "监听端口:"
+    sudo ss -tlnp 2>/dev/null | grep nginx || sudo netstat -tlnp 2>/dev/null | grep nginx
+    echo -e ""
+    echo -e "配置文件: /etc/nginx/nginx.conf"
+    echo -e "网站目录: /var/www/html"
+    echo -e "日志目录: /var/log/nginx"
+    read -p "按回车键继续..."
+}
+
+# 卸载 NGINX
+function uninstall_nginx() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${RED}          卸载 NGINX${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if ! command -v nginx &> /dev/null; then
+        echo -e "${RED}NGINX 未安装${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${YELLOW}⚠️  警告：卸载将删除 NGINX 及其配置！${NC}"
+    read -p "确认卸载？(y/N): " confirm
+    [[ ! "$confirm" =~ ^[yY]$ ]] && echo "取消卸载。" && return
+
+    sudo systemctl stop nginx 2>/dev/null
+    sudo systemctl disable nginx 2>/dev/null
+
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        case "${ID}" in
+            ubuntu|debian)
+                sudo apt-get remove -y nginx nginx-common
+                sudo apt-get purge -y nginx nginx-common
+                ;;
+            centos|rhel|fedora|rocky|almalinux)
+                if command -v dnf &> /dev/null; then
+                    sudo dnf remove -y nginx
+                else
+                    sudo yum remove -y nginx
+                fi
+                ;;
+            *)
+                if command -v apt-get &> /dev/null; then
+                    sudo apt-get remove -y nginx
+                elif command -v dnf &> /dev/null; then
+                    sudo dnf remove -y nginx
+                elif command -v yum &> /dev/null; then
+                    sudo yum remove -y nginx
+                fi
+                ;;
+        esac
+    fi
+
+    # 询问是否删除配置目录
+    read -p "是否删除配置目录 /etc/nginx？(y/N): " del_conf
+    [[ "$del_conf" =~ ^[yY]$ ]] && sudo rm -rf /etc/nginx && echo -e "${GREEN}配置目录已删除${NC}"
+
+    if ! command -v nginx &> /dev/null; then
+        echo -e "${GREEN}NGINX 已成功卸载${NC}"
+    else
+        echo -e "${YELLOW}NGINX 可能未完全卸载，请手动检查${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+# 快速创建反向代理
+function add_nginx_proxy() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          快速创建反向代理${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if ! command -v nginx &> /dev/null; then
+        echo -e "${RED}NGINX 未安装，请先安装${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    # 交互输入
+    read -p "请输入域名（留空则使用IP访问）: " server_name
+    read -p "请输入监听端口（默认 80）: " listen_port
+    listen_port=${listen_port:-80}
+    read -p "请输入需要代理的目标端口（如 3000）: " target_port
+    target_port=${target_port:-3000}
+
+    # 校验端口
+    if ! [[ "$listen_port" =~ ^[0-9]+$ ]] || [ "$listen_port" -lt 1 ] || [ "$listen_port" -gt 65535 ]; then
+        echo -e "${RED}❌ 监听端口不合法${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+    if ! [[ "$target_port" =~ ^[0-9]+$ ]] || [ "$target_port" -lt 1 ] || [ "$target_port" -gt 65535 ]; then
+        echo -e "${RED}❌ 目标端口不合法${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    # 检查端口占用
+    if command -v ss &> /dev/null; then
+        if ss -tlnp 2>/dev/null | grep -q ":$listen_port "; then
+            echo -e "${RED}❌ 端口 ${listen_port} 已被占用，请选择其他端口${NC}"
+            read -p "按回车键继续..."
+            return
+        fi
+    fi
+
+    # 备用名称防重名
+    local config_name
+    if [ -n "$server_name" ]; then
+        config_name=$(echo "$server_name" | sed 's/[^a-zA-Z0-9.-]/_/g')
+    else
+        config_name="proxy_${listen_port}"
+    fi
+    local config_file="/etc/nginx/conf.d/${config_name}.conf"
+
+    if [ -f "$config_file" ]; then
+        echo -e "${YELLOW}⚠️  配置文件 ${config_file} 已存在${NC}"
+        read -p "是否覆盖？(y/N): " overwrite
+        [[ ! "$overwrite" =~ ^[yY]$ ]] && echo "取消操作。" && return
+    fi
+
+    # 生成配置
+    local server_name_directive=""
+    if [ -n "$server_name" ]; then
+        server_name_directive="server_name ${server_name};"
+    else
+        server_name_directive="server_name _;"
+    fi
+
+    cat > "$config_file" << EOF
+server {
+    listen ${listen_port};
+    ${server_name_directive}
+
+    location / {
+        proxy_pass http://127.0.0.1:${target_port};
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOF
+
+    echo -e "${GREEN}✅ 配置已生成: ${config_file}${NC}"
+
+    # 检查语法
+    echo -e "${BLUE}正在检查配置语法...${NC}"
+    if sudo nginx -t 2>&1; then
+        echo -e "${GREEN}✅ 配置语法正确，正在重载 NGINX...${NC}"
+        sudo nginx -s reload 2>/dev/null
+        echo -e "${GREEN}✅ 反向代理已生效！${NC}"
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        echo -e ""
+        echo -e "${CYAN}访问方式:${NC}"
+        if [ -n "$server_name" ]; then
+            echo -e "  ${YELLOW}http://${server_name}:${listen_port}${NC}"
+        fi
+        [ -n "$ipv4" ] && echo -e "  ${YELLOW}http://${ipv4}:${listen_port}${NC}"
+        [ -n "$ipv6" ] && echo -e "  ${YELLOW}http://[${ipv6}]:${listen_port}${NC}"
+        echo -e ""
+        echo -e "${GREEN}→ 代理到本地 127.0.0.1:${target_port}${NC}"
+    else
+        echo -e "${RED}❌ 配置语法错误，请检查${NC}"
+        sudo rm -f "$config_file"
     fi
     read -p "按回车键继续..."
 }
