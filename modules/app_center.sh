@@ -9509,6 +9509,8 @@ function nginx_delete_proxy() {
         ((i++))
     done
 
+    echo -e " ${RED}0.${NC}  返回上一级"
+
     if [ ${#conf_files[@]} -eq 0 ]; then
         echo -e "${YELLOW}没有找到反向代理配置${NC}"
         read -p "按回车键继续..."
@@ -9516,12 +9518,13 @@ function nginx_delete_proxy() {
     fi
 
     echo ""
-    read -p "请选择要删除的配置 (1-${#conf_files[@]}): " del_choice
-    if ! [[ "$del_choice" =~ ^[0-9]+$ ]] || [ "$del_choice" -lt 1 ] || [ "$del_choice" -gt ${#conf_files[@]} ]; then
+    read -p "请选择要删除的配置 (0-${#conf_files[@]}): " del_choice
+    if ! [[ "$del_choice" =~ ^[0-9]+$ ]] || [ "$del_choice" -lt 0 ] || [ "$del_choice" -gt ${#conf_files[@]} ]; then
         echo -e "${RED}❌ 无效选择${NC}"
         read -p "按回车键继续..."
         return
     fi
+    [ "$del_choice" -eq 0 ] && echo "返回。" && return
 
     local selected_conf="${conf_files[$((del_choice-1))]}"
     local selected_domain
