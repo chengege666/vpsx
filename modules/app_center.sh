@@ -8930,6 +8930,7 @@ function nginx_management() {
             7) view_nginx_status ;;
             8) uninstall_nginx ;;
             9) add_nginx_proxy ;;
+            10) nginx_ssl_cert ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
@@ -9230,9 +9231,236 @@ EOF
         [ -n "$ipv6" ] && echo -e "  ${YELLOW}http://[${ipv6}]:${listen_port}${NC}"
         echo -e ""
         echo -e "${GREEN}→ 代理到本地 127.0.0.1:${target_port}${NC}"
+
+        # 如果填了域名，询问是否申请 SSL 证书
+        if [ -n "$server_name" ]; then
+            echo ""
+            read -p "是否为此域名申请 SSL 证书并开启 HTTPS？(y/N): " ssl_confirm
+            if [[ "$ssl_confirm" =~ ^[yY]$ ]]; then
+                apply_ssl_cert "$server_name" "$config_file" "$target_port"
+            fi
+        fi
     else
         echo -e "${RED}❌ 配置语法错误，请检查${NC}"
         sudo rm -f "$config_file"
     fi
+    read -p "按回车键继续..."
+}
+
+# 申请 SSL 证书并修改配置开启 HTTPS
+# 参数: $1=域名 $2=配置文件路径 $3=目标端口
+function apply_ssl_cert() {
+    local domain="$1"
+    local config_file="$2"
+    local target_port="$3"
+
+    if [ -z "$domain" ]; then
+        echo -e "${RED}❌ 域名不能为空${NC}"
+        return
+    fi
+
+    # 检查域名是否已解析到本机
+    echo -e "${BLUE}检查域名解析...${NC}"
+    local domain_ip
+    domain_ip=$(dig +short "$domain" 2>/dev/null | head -1)
+    if [ -z "$domain_ip" ]; then
+        domain_ip=$(nslookup "$domain" 2>/dev/null | grep -A1 "Name:" | grep -v "Name:" | awk '{print $NF}')
+    fi
+    local local_ip
+    local_ip=$(curl -s http://ip.sb 2>/dev/null || curl -s https://api.ip.sb/ip 2>/dev/null || curl -s https://checkip.amazonaws.com 2>/dev/null)
+    if [ -n "$domain_ip" ] && [ -n "$local_ip" ] && [ "$domain_ip" != "$local_ip" ]; then
+        echo -e "${YELLOW}⚠️  域名 ${domain} 解析到 ${domain_ip}，本机 IP 为 ${local_ip}${NC}"
+        echo -e "${YELLOW}证书申请可能失败，是否继续？(y/N): ${NC}"
+        read -r force_ssl
+        [[ ! "$force_ssl" =~ ^[yY]$ ]] && echo "取消证书申请。" && return
+    fi
+
+    # 安装 acme.sh
+    if ! command -v acme.sh &> /dev/null && [ ! -f ~/.acme.sh/acme.sh ]; then
+        echo -e "${BLUE}安装 acme.sh...${NC}"
+        curl -sL https://get.acme.sh | sh -s email="admin@${domain}" 2>/dev/null
+        if [ -f ~/.acme.sh/acme.sh ]; then
+            echo -e "${GREEN}✅ acme.sh 安装成功${NC}"
+        else
+            echo -e "${RED}❌ acme.sh 安装失败，可手动安装: curl -sL https://get.acme.sh | sh${NC}"
+            return
+        fi
+    fi
+
+    local acme_cmd
+    if command -v acme.sh &> /dev/null; then
+        acme_cmd="acme.sh"
+    else
+        acme_cmd=~/.acme.sh/acme.sh
+    fi
+
+    # 申请证书（使用 webroot 模式，nginx 默认根目录）
+    echo -e "${BLUE}正在为 ${domain} 申请 SSL 证书...${NC}"
+    local webroot="/var/www/html"
+    mkdir -p "$webroot"
+
+    # 先用 webroot 模式
+    $acme_cmd --issue -d "$domain" --webroot "$webroot" --force 2>&1
+    local acme_exit_code=$?
+
+    if [ $acme_exit_code -ne 0 ]; then
+        echo -e "${YELLOW}webroot 模式失败，尝试 standalone 模式...${NC}"
+        $acme_cmd --issue -d "$domain" --standalone --force 2>&1
+        acme_exit_code=$?
+    fi
+
+    if [ $acme_exit_code -ne 0 ]; then
+        echo -e "${RED}❌ 证书申请失败，请检查域名解析是否正确${NC}"
+        echo -e "${YELLOW}常见原因:${NC}"
+        echo -e "  1. 域名未解析到本机 IP"
+        echo -e "  2. 80 端口未开放（需放行 80 端口）"
+        echo -e "  3. DNS 缓存未生效（刚解析需等待）"
+        return
+    fi
+
+    echo -e "${GREEN}✅ 证书申请成功！${NC}"
+
+    # 证书安装路径
+    local ssl_dir="/etc/nginx/ssl/${domain}"
+    mkdir -p "$ssl_dir"
+
+    # 安装证书到指定目录
+    $acme_cmd --install-cert -d "$domain" \
+        --fullchain-file "${ssl_dir}/fullchain.pem" \
+        --key-file "${ssl_dir}/privkey.pem" \
+        --reloadcmd "systemctl reload nginx" 2>&1
+
+    # 备份原配置
+    local backup_file="${config_file}.bak"
+    cp "$config_file" "$backup_file"
+
+    # 读取原 server_name
+    local old_server_name
+    old_server_name=$(grep "server_name" "$config_file" | head -1 | sed 's/server_name//;s/;//;s/^[[:space:]]*//;s/^[[:space:]]*//')
+
+    # 生成带有 HTTPS 的新配置
+    cat > "$config_file" << HTTPSEOF
+# HTTP - 自动跳转 HTTPS
+server {
+    listen 80;
+    server_name ${old_server_name};
+    return 301 https://\$server_name\$request_uri;
+}
+
+# HTTPS
+server {
+    listen 443 ssl http2;
+    server_name ${old_server_name};
+
+    ssl_certificate ${ssl_dir}/fullchain.pem;
+    ssl_certificate_key ${ssl_dir}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    location / {
+        proxy_pass http://127.0.0.1:${target_port};
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+HTTPSEOF
+
+    # 检查语法
+    echo -e "${BLUE}检查新配置语法...${NC}"
+    if sudo nginx -t 2>&1; then
+        sudo nginx -s reload 2>/dev/null
+        echo -e "${GREEN}✅ SSL 证书已配置，HTTPS 已生效！${NC}"
+        echo -e "${CYAN}访问地址: ${YELLOW}https://${domain}${NC}"
+        echo -e "${GREEN}证书将每 60 天自动续期${NC}"
+        rm -f "$backup_file"
+    else
+        echo -e "${RED}❌ 配置语法错误，正在回滚...${NC}"
+        cp "$backup_file" "$config_file"
+        sudo nginx -s reload 2>/dev/null
+        echo -e "${YELLOW}已回滚到原配置${NC}"
+        rm -f "$backup_file"
+    fi
+}
+
+# 菜单 10 - 对已有配置申请 SSL 证书
+function nginx_ssl_cert() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          申请 SSL 证书并开启 HTTPS${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if ! command -v nginx &> /dev/null; then
+        echo -e "${RED}NGINX 未安装，请先安装${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    local conf_dir="/etc/nginx/conf.d"
+    if [ ! -d "$conf_dir" ]; then
+        echo -e "${RED}❌ 配置目录不存在${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    local conf_files=()
+    local i=1
+    echo -e "${CYAN}已有反向代理配置:${NC}"
+    for f in "$conf_dir"/*.conf; do
+        [ -f "$f" ] || continue
+        local fname
+        fname=$(basename "$f")
+        [[ "$fname" == "default.conf" ]] && continue
+        local srv_name
+        srv_name=$(grep "server_name" "$f" 2>/dev/null | head -1 | sed 's/server_name//;s/;//;s/^[[:space:]]*//;s/^[[:space:]]*//')
+        local has_ssl=""
+        if grep -q "listen.*443" "$f" 2>/dev/null; then
+            has_ssl=" ${GREEN}(已有 HTTPS)${NC}"
+        fi
+        echo -e " ${GREEN}$i.${NC} ${fname} → ${srv_name:-未知}${has_ssl}"
+        conf_files+=("$f")
+        ((i++))
+    done
+
+    if [ ${#conf_files[@]} -eq 0 ]; then
+        echo -e "${YELLOW}没有找到反向代理配置，请先使用第 9 项创建${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo ""
+    read -p "请选择要申请证书的配置 (1-${#conf_files[@]}): " conf_choice
+    if ! [[ "$conf_choice" =~ ^[0-9]+$ ]] || [ "$conf_choice" -lt 1 ] || [ "$conf_choice" -gt ${#conf_files[@]} ]; then
+        echo -e "${RED}❌ 无效选择${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    local selected_conf="${conf_files[$((conf_choice-1))]}"
+    local selected_domain
+    selected_domain=$(grep "server_name" "$selected_conf" 2>/dev/null | head -1 | sed 's/server_name//;s/;//;s/^[[:space:]]*//;s/^[[:space:]]*//' | tr -d '_;')
+
+    if [ -z "$selected_domain" ] || [ "$selected_domain" = "_" ]; then
+        echo -e "${RED}❌ 该配置使用 IP 访问（无域名），无法申请证书${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    local target_port
+    target_port=$(grep "proxy_pass" "$selected_conf" 2>/dev/null | head -1 | grep -oP ':\K\d+' | head -1)
+
+    echo -e "${BLUE}域名: ${selected_domain}${NC}"
+    echo -e "${BLUE}配置文件: ${selected_conf}${NC}"
+    [ -n "$target_port" ] && echo -e "${BLUE}目标端口: ${target_port}${NC}"
+    echo ""
+
+    if grep -q "listen.*443" "$selected_conf" 2>/dev/null; then
+        echo -e "${YELLOW}⚠️  该配置已有 HTTPS，是否重新申请证书？(y/N): ${NC}"
+        read -r reissue
+        [[ ! "$reissue" =~ ^[yY]$ ]] && echo "取消操作。" && return
+    fi
+
+    apply_ssl_cert "$selected_domain" "$selected_conf" "$target_port"
     read -p "按回车键继续..."
 }
