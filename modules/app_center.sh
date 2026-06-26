@@ -9174,15 +9174,6 @@ function add_nginx_proxy() {
         return
     fi
 
-    # 检查端口占用
-    if command -v ss &> /dev/null; then
-        if ss -tlnp 2>/dev/null | grep -q ":$listen_port "; then
-            echo -e "${RED}❌ 端口 ${listen_port} 已被占用，请选择其他端口${NC}"
-            read -p "按回车键继续..."
-            return
-        fi
-    fi
-
     # 备用名称防重名
     local config_name
     if [ -n "$server_name" ]; then
