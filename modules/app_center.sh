@@ -9552,8 +9552,18 @@ function nginx_delete_proxy() {
             local acme_cmd
             acme_cmd=$(command -v acme.sh || echo ~/.acme.sh/acme.sh)
             $acme_cmd --remove -d "$selected_domain" 2>/dev/null
-            echo -e "${GREEN}✅ acme.sh 证书记录已移除${NC}"
+            echo -e "${GREEN}✅ acme.sh 续期任务已移除${NC}"
         fi
+
+        # 删除 acme.sh 证书目录（--remove 不会删除文件）
+        local acme_dirs
+        acme_dirs=("$HOME/.acme.sh/${selected_domain}" "$HOME/.acme.sh/${selected_domain}_ecc")
+        for d in "${acme_dirs[@]}"; do
+            if [ -d "$d" ]; then
+                rm -rf "$d"
+                echo -e "${GREEN}✅ 已删除: ${d}${NC}"
+            fi
+        done
     fi
 
     # 重载 NGINX
