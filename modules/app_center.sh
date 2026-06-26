@@ -9299,22 +9299,26 @@ function apply_ssl_cert() {
     local webroot="/var/www/html"
     mkdir -p "$webroot"
 
-    # 先用 webroot 模式
+    # 在反代配置中插入验证路径，绕过反代
+    local acme_location="    location /.well-known/ { root ${webroot}; }"
+    # 在 server 块的第一个 location 前插入
+    sed -i "0,/location \//s|location /|${acme_location}\n\n    location /|" "$config_file"
+    sudo nginx -s reload 2>/dev/null
+
+    # 使用 webroot 模式申请
     $acme_cmd --issue -d "$domain" --webroot "$webroot" --force 2>&1
     local acme_exit_code=$?
 
-    if [ $acme_exit_code -ne 0 ]; then
-        echo -e "${YELLOW}webroot 模式失败，尝试 standalone 模式...${NC}"
-        $acme_cmd --issue -d "$domain" --standalone --force 2>&1
-        acme_exit_code=$?
-    fi
+    # 恢复配置（移除临时插入的 location 块）
+    sed -i "/location \/.well-known\/ { root ${webroot//\//\\/}; }/d" "$config_file"
+    sudo nginx -s reload 2>/dev/null
 
     if [ $acme_exit_code -ne 0 ]; then
         echo -e "${RED}❌ 证书申请失败，请检查域名解析是否正确${NC}"
         echo -e "${YELLOW}常见原因:${NC}"
-        echo -e "  1. 域名未解析到本机 IP"
-        echo -e "  2. 80 端口未开放（需放行 80 端口）"
-        echo -e "  3. DNS 缓存未生效（刚解析需等待）"
+        echo -e "  1. 域名未正确解析到本机 IP"
+        echo -e "  2. 80 端口未开放（需在 VPS 控制面板放行）"
+        echo -e "  3. 使用了 Cloudflare 小黄云（需关闭代理或使用 Full 模式）"
         return
     fi
 
