@@ -8915,10 +8915,11 @@ function nginx_management() {
         echo -e " ${GREEN}7.${NC}  查看状态"
         echo -e " ${GREEN}8.${NC}  卸载 NGINX"
         echo -e " ${GREEN}9.${NC}  快速创建反向代理"
+        echo -e " ${GREEN}10.${NC} 删除反向代理配置"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回上一级菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-9): " nginx_choice
+        read -p "请输入你的选择 (0-10): " nginx_choice
 
         case "$nginx_choice" in
             1) install_nginx ;;
@@ -8930,7 +8931,7 @@ function nginx_management() {
             7) view_nginx_status ;;
             8) uninstall_nginx ;;
             9) add_nginx_proxy ;;
-            10) nginx_ssl_cert ;;
+            10) nginx_delete_proxy ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
@@ -9466,5 +9467,102 @@ function nginx_ssl_cert() {
     fi
 
     apply_ssl_cert "$selected_domain" "$selected_conf" "$target_port"
+    read -p "按回车键继续..."
+}
+
+# 删除反向代理配置（含 SSL 证书）
+function nginx_delete_proxy() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${RED}          删除反向代理配置${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if ! command -v nginx &> /dev/null; then
+        echo -e "${RED}NGINX 未安装${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    local conf_dir="/etc/nginx/conf.d"
+    if [ ! -d "$conf_dir" ]; then
+        echo -e "${RED}❌ 配置目录不存在${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    local conf_files=()
+    local i=1
+    echo -e "${CYAN}已有反向代理配置:${NC}"
+    for f in "$conf_dir"/*.conf; do
+        [ -f "$f" ] || continue
+        local fname
+        fname=$(basename "$f")
+        [[ "$fname" == "default.conf" ]] && continue
+        local srv_name
+        srv_name=$(grep "server_name" "$f" 2>/dev/null | head -1 | sed 's/server_name//;s/;//;s/^[[:space:]]*//;s/^[[:space:]]*//')
+        local has_ssl=""
+        if grep -q "listen.*443" "$f" 2>/dev/null; then
+            has_ssl=" ${GREEN}(HTTPS)${NC}"
+        fi
+        echo -e " ${GREEN}$i.${NC} ${fname} → ${srv_name:-未知}${has_ssl}"
+        conf_files+=("$f")
+        ((i++))
+    done
+
+    if [ ${#conf_files[@]} -eq 0 ]; then
+        echo -e "${YELLOW}没有找到反向代理配置${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo ""
+    read -p "请选择要删除的配置 (1-${#conf_files[@]}): " del_choice
+    if ! [[ "$del_choice" =~ ^[0-9]+$ ]] || [ "$del_choice" -lt 1 ] || [ "$del_choice" -gt ${#conf_files[@]} ]; then
+        echo -e "${RED}❌ 无效选择${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    local selected_conf="${conf_files[$((del_choice-1))]}"
+    local selected_domain
+    selected_domain=$(grep "server_name" "$selected_conf" 2>/dev/null | head -1 | sed 's/server_name//;s/;//;s/^[[:space:]]*//;s/^[[:space:]]*//' | tr -d '_;')
+
+    echo ""
+    echo -e "${RED}将删除以下内容:${NC}"
+    echo -e "  配置: ${selected_conf}"
+    [ -n "$selected_domain" ] && [ "$selected_domain" != "_" ] && echo -e "  证书: /etc/nginx/ssl/${selected_domain}"
+    echo ""
+    read -p "确认删除？(y/N): " confirm
+    [[ ! "$confirm" =~ ^[yY]$ ]] && echo "取消操作。" && return
+
+    # 删除配置文件
+    sudo rm -f "$selected_conf"
+    echo -e "${GREEN}✅ 配置文件已删除${NC}"
+
+    # 删除 SSL 证书目录
+    if [ -n "$selected_domain" ] && [ "$selected_domain" != "_" ] && [ -d "/etc/nginx/ssl/${selected_domain}" ]; then
+        sudo rm -rf "/etc/nginx/ssl/${selected_domain}"
+        echo -e "${GREEN}✅ SSL 证书已删除${NC}"
+
+        # 从 acme.sh 移除
+        if command -v acme.sh &> /dev/null || [ -f ~/.acme.sh/acme.sh ]; then
+            local acme_cmd
+            acme_cmd=$(command -v acme.sh || echo ~/.acme.sh/acme.sh)
+            $acme_cmd --remove -d "$selected_domain" 2>/dev/null
+            echo -e "${GREEN}✅ acme.sh 证书记录已移除${NC}"
+        fi
+    fi
+
+    # 重载 NGINX
+    sudo nginx -s reload 2>/dev/null
+    echo -e "${GREEN}✅ NGINX 已重载${NC}"
+
+    IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+    if [ -n "$ipv4" ] || [ -n "$ipv6" ]; then
+        echo -e ""
+        echo -e "${CYAN}如果有其他配置仍在运行:${NC}"
+        [ -n "$ipv4" ] && echo -e "  ${YELLOW}http://${ipv4}${NC}"
+        [ -n "$ipv6" ] && echo -e "  ${YELLOW}http://[${ipv6}]${NC}"
+    fi
     read -p "按回车键继续..."
 }
