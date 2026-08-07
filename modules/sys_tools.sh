@@ -334,6 +334,7 @@ function ssl_certificate_management() {
         echo -e " ${GREEN}4.${NC}  查看已申请的证书列表"
         echo -e " ${GREEN}5.${NC}  手动续签现有证书"
         echo -e " ${GREEN}6.${NC}  卸载 acme.sh"
+        echo -e " ${GREEN}7.${NC}  删除已申请的证书"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回上一级菜单"
         echo -e "${CYAN}=========================================${NC}"
@@ -396,6 +397,25 @@ function ssl_certificate_management() {
                 ~/.acme.sh/acme.sh --uninstall
                 rm -rf ~/.acme.sh
                 echo -e "${GREEN}acme.sh 已卸载。${NC}"
+                read -p "按任意键继续..."
+                ;;
+            7)
+                echo -e "${YELLOW}以下为当前已申请的证书：${NC}"
+                ~/.acme.sh/acme.sh --list
+                read -p "请输入要删除的证书域名 (例如 example.com, 输入 0 取消): " del_domain
+                if [ -z "$del_domain" ] || [ "$del_domain" == "0" ]; then
+                    echo -e "${YELLOW}已取消。${NC}"
+                else
+                    read -p "确认删除 $del_domain 的证书？(y/N): " del_confirm
+                    if [[ "$del_confirm" == "y" || "$del_confirm" == "Y" ]]; then
+                        ~/.acme.sh/acme.sh --remove -d "$del_domain"
+                        # 同时清理证书文件目录（如 *_ecc 目录）
+                        rm -rf ~/.acme.sh/"${del_domain}_ecc" ~/.acme.sh/"$del_domain"
+                        echo -e "${GREEN}证书 $del_domain 已删除。${NC}"
+                    else
+                        echo -e "${YELLOW}已取消。${NC}"
+                    fi
+                fi
                 read -p "按任意键继续..."
                 ;;
             0)
