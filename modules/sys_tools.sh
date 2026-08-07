@@ -343,9 +343,38 @@ function ssl_certificate_management() {
         case "$ssl_choice" in
             1)
                 echo -e "${YELLOW}正在安装 acme.sh...${NC}"
-                curl https://get.acme.sh | sh
-                alias acme.sh=~/.acme.sh/acme.sh
-                echo -e "${GREEN}acme.sh 安装完成。请重新连接 SSH 或运行 'source ~/.bashrc' 以使 alias 生效。${NC}"
+                # 预检查: acme.sh 安装依赖 crontab 创建自动续期任务, 缺失会导致预检查失败
+                if ! command -v crontab &> /dev/null; then
+                    echo -e "${YELLOW}未检测到 crontab, 正在安装 cron...${NC}"
+                    if command -v apt &> /dev/null; then
+                        apt update -y && apt install -y cron
+                    elif command -v yum &> /dev/null; then
+                        yum install -y cronie
+                    elif command -v dnf &> /dev/null; then
+                        dnf install -y cronie
+                    else
+                        echo -e "${RED}未识别的包管理器, 请手动安装 cron 后重试。${NC}"
+                        read -p "按任意键继续..."
+                        continue
+                    fi
+                fi
+                if command -v crontab &> /dev/null; then
+                    echo -e "${GREEN}crontab 已就绪。${NC}"
+                else
+                    echo -e "${RED}cron 安装失败, acme.sh 需要 crontab 才能自动续期, 已中止。${NC}"
+                    read -p "按任意键继续..."
+                    continue
+                fi
+                # 安装 acme.sh (中国大陆网络失败时可改用 gitee 镜像, 见 wiki/Install-in-China)
+                if curl https://get.acme.sh | sh; then
+                    if [ -f ~/.acme.sh/acme.sh ]; then
+                        echo -e "${GREEN}acme.sh 安装完成。请重新连接 SSH 或运行 'source ~/.bashrc' 以使 alias 生效。${NC}"
+                    else
+                        echo -e "${RED}acme.sh 安装失败, 请检查网络后重试。${NC}"
+                    fi
+                else
+                    echo -e "${RED}acme.sh 下载/安装失败, 请检查网络后重试。${NC}"
+                fi
                 read -p "按任意键继续..."
                 ;;
             2)
