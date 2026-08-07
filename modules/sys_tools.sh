@@ -354,7 +354,7 @@ function ssl_certificate_management() {
                 read -p "按任意键继续..."
                 ;;
             3)
-                echo -e "${YELLOW}DNS 验证需要先注册 ZeroSSL 账号，并配置 DNS 提供商 API Key。${NC}"
+                echo -e "${YELLOW}DNS 验证 - 支持泛域名 (默认 DNS 提供商: Cloudflare)。${NC}"
                 # 检查并注册 ZeroSSL 账号（仅首次需要）
                 if [ ! -f ~/.acme.sh/account.conf ] || ! grep -q "^ACCOUNT_EMAIL=" ~/.acme.sh/account.conf 2>/dev/null; then
                     echo -e "${YELLOW}首次使用 ZeroSSL，需要先注册账号。${NC}"
@@ -373,7 +373,8 @@ function ssl_certificate_management() {
                     fi
                 fi
                 read -p "请输入要申请证书的域名 (例如 *.example.com): " domain
-                read -p "请输入 DNS 提供商 (例如 dns_cf, dns_ali): " dns_provider
+                read -p "请输入 DNS 提供商 (回车默认 dns_cf): " dns_provider
+                dns_provider=${dns_provider:-dns_cf}
                 # 配置 DNS API Key（已配置则自动跳过）
                 if ! configure_dns_api_key "$dns_provider"; then
                     read -p "按任意键继续..."
@@ -2042,20 +2043,18 @@ function configure_dns_api_key() {
     local dns_provider="$1"
     case "$dns_provider" in
         dns_cf)
-            # Cloudflare: 需要 CF_Token 和 CF_Email
-            if grep -q "^CF_Token=" ~/.acme.sh/account.conf 2>/dev/null && grep -q "^CF_Email=" ~/.acme.sh/account.conf 2>/dev/null; then
+            # Cloudflare: API Token 方式只需 CF_Token 一个变量
+            if grep -q "^CF_Token=" ~/.acme.sh/account.conf 2>/dev/null; then
                 echo -e "${GREEN}已检测到 Cloudflare API Key，跳过配置。${NC}"
                 return 0
             fi
             echo -e "${YELLOW}请配置 Cloudflare API Token（需具备 DNS 编辑权限）。${NC}"
             read -p "请输入 CF_Token: " cf_token
-            read -p "请输入 CF_Email: " cf_email
-            if [ -z "$cf_token" ] || [ -z "$cf_email" ]; then
-                echo -e "${RED}CF_Token 和 CF_Email 不能为空。${NC}"
+            if [ -z "$cf_token" ]; then
+                echo -e "${RED}CF_Token 不能为空。${NC}"
                 return 1
             fi
             export CF_Token="$cf_token"
-            export CF_Email="$cf_email"
             ;;
         dns_ali)
             # 阿里云: 需要 Ali_Key 和 Ali_Secret
