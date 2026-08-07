@@ -19,7 +19,7 @@ function sys_tools_menu() {
         echo -e " ${GREEN}8.${NC}  内存加速清理（释放缓存）"
         echo -e " ${GREEN}9.${NC}  修改DNS服务器（手动/自动）"
         echo -e " ${GREEN}10.${NC} Fail2ban配置（SSH防护）"
-        echo -e " ${GREEN}11.${NC} SSL证书管理（Let's Encrypt）"
+        echo -e " ${GREEN}11.${NC} SSL 证书管理 (acme.sh)"
         echo -e " ${GREEN}12.${NC} 磁盘空间分析"
         echo -e " ${GREEN}13.${NC} BTOP系统监控工具"
         echo -e " ${GREEN}14.${NC} TCP窗口调优"
@@ -354,9 +354,31 @@ function ssl_certificate_management() {
                 read -p "按任意键继续..."
                 ;;
             3)
-                echo -e "${YELLOW}DNS 验证需要配置 API Key，请确保已设置环境变量。${NC}"
+                echo -e "${YELLOW}DNS 验证需要先注册 ZeroSSL 账号，并配置 DNS 提供商 API Key。${NC}"
+                # 检查并注册 ZeroSSL 账号（仅首次需要）
+                if [ ! -f ~/.acme.sh/account.conf ] || ! grep -q "^ACCOUNT_EMAIL=" ~/.acme.sh/account.conf 2>/dev/null; then
+                    echo -e "${YELLOW}首次使用 ZeroSSL，需要先注册账号。${NC}"
+                    read -p "请输入你的邮箱 (用于 ZeroSSL 账号注册): " acme_email
+                    if [ -z "$acme_email" ]; then
+                        echo -e "${RED}邮箱不能为空，已取消。${NC}"
+                        read -p "按任意键继续..."
+                        continue
+                    fi
+                    if ~/.acme.sh/acme.sh --register-account -m "$acme_email" --server zerossl; then
+                        echo -e "${GREEN}ZeroSSL 账号注册成功。${NC}"
+                    else
+                        echo -e "${RED}账号注册失败，请检查网络或邮箱后重试。${NC}"
+                        read -p "按任意键继续..."
+                        continue
+                    fi
+                fi
                 read -p "请输入要申请证书的域名 (例如 *.example.com): " domain
                 read -p "请输入 DNS 提供商 (例如 dns_cf, dns_ali): " dns_provider
+                # 配置 DNS API Key（已配置则自动跳过）
+                if ! configure_dns_api_key "$dns_provider"; then
+                    read -p "按任意键继续..."
+                    continue
+                fi
                 ~/.acme.sh/acme.sh --issue -d "$domain" --dns "$dns_provider"
                 read -p "按任意键继续..."
                 ;;
@@ -2012,4 +2034,50 @@ EOF
             *) echo -e "${RED}无效选择！${NC}"; sleep 1 ;;
         esac
     done
+}
+
+# 配置 DNS 验证所需的 API Key（自动保存到 acme.sh account.conf）
+# 支持: dns_cf (Cloudflare), dns_ali (阿里云)
+function configure_dns_api_key() {
+    local dns_provider="$1"
+    case "$dns_provider" in
+        dns_cf)
+            # Cloudflare: 需要 CF_Token 和 CF_Email
+            if grep -q "^CF_Token=" ~/.acme.sh/account.conf 2>/dev/null && grep -q "^CF_Email=" ~/.acme.sh/account.conf 2>/dev/null; then
+                echo -e "${GREEN}已检测到 Cloudflare API Key，跳过配置。${NC}"
+                return 0
+            fi
+            echo -e "${YELLOW}请配置 Cloudflare API Token（需具备 DNS 编辑权限）。${NC}"
+            read -p "请输入 CF_Token: " cf_token
+            read -p "请输入 CF_Email: " cf_email
+            if [ -z "$cf_token" ] || [ -z "$cf_email" ]; then
+                echo -e "${RED}CF_Token 和 CF_Email 不能为空。${NC}"
+                return 1
+            fi
+            export CF_Token="$cf_token"
+            export CF_Email="$cf_email"
+            ;;
+        dns_ali)
+            # 阿里云: 需要 Ali_Key 和 Ali_Secret
+            if grep -q "^Ali_Key=" ~/.acme.sh/account.conf 2>/dev/null && grep -q "^Ali_Secret=" ~/.acme.sh/account.conf 2>/dev/null; then
+                echo -e "${GREEN}已检测到阿里云 API Key，跳过配置。${NC}"
+                return 0
+            fi
+            echo -e "${YELLOW}请配置阿里云 AccessKey（需具备 DNS 解析权限）。${NC}"
+            read -p "请输入 Ali_Key (AccessKey ID): " ali_key
+            read -p "请输入 Ali_Secret (AccessKey Secret): " ali_secret
+            if [ -z "$ali_key" ] || [ -z "$ali_secret" ]; then
+                echo -e "${RED}Ali_Key 和 Ali_Secret 不能为空。${NC}"
+                return 1
+            fi
+            export Ali_Key="$ali_key"
+            export Ali_Secret="$ali_secret"
+            ;;
+        *)
+            echo -e "${YELLOW}未内置 $dns_provider 的 API Key 配置，请自行设置环境变量后重试。${NC}"
+            return 1
+            ;;
+    esac
+    echo -e "${GREEN}API Key 配置完成，申请时将由 acme.sh 自动保存。${NC}"
+    return 0
 }
