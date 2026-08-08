@@ -17,11 +17,40 @@ function bbr_speed_test() {
         fi
     else
         echo -e "${YELLOW}正在进行 测速BBR，请稍候...${NC}"
+        # 静默测速（捕获全部输出，避免英文进度条直接刷屏）
         if command -v speedtest >/dev/null 2>&1; then
-            speedtest
+            speedtest_output=$(speedtest 2>/dev/null)
         else
-            speedtest-cli
+            speedtest_output=$(speedtest-cli 2>/dev/null)
         fi
+        echo ""
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        if [ -n "$speedtest_output" ]; then
+            # 解析测速结果（兼容 sivel speedtest-cli 与 Ookla speedtest 两种输出格式）
+            isp_info=$(echo "$speedtest_output" | grep "Testing from" | sed -E 's/.*Testing from ([^(]+) \(([^)]+)\).*/\1 (\2)/' | head -n 1)
+            server_info=$(echo "$speedtest_output" | grep "Hosted by" | sed -E 's/.*Hosted by ([^(]+) \(([^)]+)\).*/\1 (\2)/' | head -n 1)
+            ping_ms=$(echo "$speedtest_output" | grep -E "Hosted by|Latency:" | grep -oE "[0-9.]+ ms" | head -n 1)
+            download=$(echo "$speedtest_output" | grep -iE "Download:" | grep -oE "[0-9.]+ Mbit/s" | head -n 1)
+            upload=$(echo "$speedtest_output" | grep -iE "Upload:" | grep -oE "[0-9.]+ Mbit/s" | head -n 1)
+
+            echo -e " ${GREEN}测试结果：${NC}"
+            [ -n "$isp_info" ] && echo -e "   机房：    ${YELLOW}${isp_info}${NC}"
+            [ -n "$server_info" ] && echo -e "   测速服务器：${YELLOW}${server_info}${NC}"
+            [ -n "$ping_ms" ] && echo -e "   延迟：    ${YELLOW}${ping_ms}${NC}"
+            if [ -n "$download" ]; then
+                echo -e "   下载速度：${YELLOW}${download}${NC}"
+            else
+                echo -e "   下载速度：${RED}测速失败${NC}"
+            fi
+            if [ -n "$upload" ]; then
+                echo -e "   上传速度：${YELLOW}${upload}${NC}"
+            else
+                echo -e "   上传速度：${RED}测速失败${NC}"
+            fi
+        else
+            echo -e "${RED}测速失败，请检查网络后重试。${NC}"
+        fi
+        echo -e "${CYAN}-----------------------------------------${NC}"
     fi
     echo ""
     read -p "按任意键返回..."
