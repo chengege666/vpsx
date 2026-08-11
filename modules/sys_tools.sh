@@ -28,6 +28,7 @@ function sys_tools_menu() {
         echo -e " ${GREEN}17.${NC} 配置中文语言支持 (Debian/Ubuntu)"
         echo -e " ${GREEN}18.${NC} 开启系统 IPv6"
         echo -e " ${GREEN}19.${NC} VPS安全入侵检测"
+        echo -e " ${GREEN}20.${NC} SSH公钥登录配置"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
@@ -90,6 +91,9 @@ function sys_tools_menu() {
                 ;;
             19)
                 security_check
+                ;;
+            20)
+                ssh_pubkey_login
                 ;;
             0)
                 break
@@ -2422,4 +2426,239 @@ function security_check() {
     echo -e "${YELLOW}提示: 如确认被入侵，请先断网隔离，修改所有账号密码与 SSH 密钥，再清理恶意进程与定时任务。${NC}"
     echo -e "${CYAN}=========================================${NC}"
     read -p "按任意键返回菜单..."
+}
+
+# ==================== SSH 公钥登录配置 ====================
+
+# SSH 公钥登录配置菜单
+function ssh_pubkey_login() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}          SSH 公钥登录配置${NC}"
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e " ${GREEN}1.${NC} 添加公钥登录（粘贴公钥）"
+        echo -e " ${GREEN}2.${NC} 查看已授权公钥"
+        echo -e " ${GREEN}3.${NC} 删除指定公钥"
+        echo -e " ${GREEN}4.${NC} 启用/禁用密码登录"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC} 返回上级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择: " pubkey_choice
+
+        case "$pubkey_choice" in
+            1) ssh_pubkey_add ;;
+            2) ssh_pubkey_list ;;
+            3) ssh_pubkey_remove ;;
+            4) ssh_password_auth_toggle ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+# 添加公钥登录
+function ssh_pubkey_add() {
+    clear
+    local auth_keys="/root/.ssh/authorized_keys"
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          添加 SSH 公钥登录${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${YELLOW}说明: 在本地电脑执行 ssh-keygen -t ed25519 生成密钥对，${NC}"
+    echo -e "${YELLOW}然后查看 id_ed25519.pub 文件内容，粘贴到此处。${NC}"
+    echo ""
+    echo -e "请输入公钥内容 (格式如: ssh-ed25519 AAAA... 用户注释):"
+    read -r new_pubkey
+
+    if [ -z "$new_pubkey" ]; then
+        echo -e "${RED}公钥内容不能为空。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+
+    # 校验公钥格式
+    if ! [[ "$new_pubkey" =~ ^(ssh-rsa|ssh-ed25519|ecdsa-sha2-[a-z0-9]+|sk-ssh-ed25519|sk-ecdsa-sha2-[a-z0-9]+)[[:space:]]+[A-Za-z0-9+/=]+ ]]; then
+        echo -e "${RED}公钥格式不正确，请检查后重试。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+
+    # 确保 .ssh 目录存在且权限正确
+    mkdir -p /root/.ssh
+    chmod 700 /root/.ssh
+
+    # 检查公钥是否已存在
+    if [ -f "$auth_keys" ] && grep -Fqx "$new_pubkey" "$auth_keys"; then
+        echo -e "${YELLOW}该公钥已存在于 authorized_keys 中，无需重复添加。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+
+    echo "$new_pubkey" >> "$auth_keys"
+    chmod 600 "$auth_keys"
+
+    echo -e "${GREEN}公钥添加成功，密钥登录已即时生效。${NC}"
+    echo -e "${YELLOW}请务必另开一个终端测试密钥登录成功后，再考虑关闭密码登录。${NC}"
+    read -p "按任意键继续..."
+}
+
+# 查看已授权公钥
+function ssh_pubkey_list() {
+    clear
+    local auth_keys="/root/.ssh/authorized_keys"
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}         已授权 SSH 公钥${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    if [ -f "$auth_keys" ]; then
+        local total
+        total=$(grep -cE '^(ssh-rsa|ssh-ed25519|ecdsa-sha2-|sk-)' "$auth_keys" 2>/dev/null)
+        echo -e "公钥数量: ${YELLOW}${total:-0}${NC}"
+        echo ""
+        nl -ba "$auth_keys" | sed 's/^/  /'
+    else
+        echo -e "${RED}未找到 authorized_keys 文件，请先添加公钥。${NC}"
+    fi
+    echo -e "${CYAN}=========================================${NC}"
+    read -p "按任意键继续..."
+}
+
+# 删除指定公钥
+function ssh_pubkey_remove() {
+    clear
+    local auth_keys="/root/.ssh/authorized_keys"
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          删除 SSH 公钥${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    if [ ! -f "$auth_keys" ]; then
+        echo -e "${RED}未找到 authorized_keys 文件，无需删除。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+
+    local total
+    total=$(grep -cE '^(ssh-rsa|ssh-ed25519|ecdsa-sha2-|sk-)' "$auth_keys")
+    if [ "$total" -eq 0 ]; then
+        echo -e "${YELLOW}authorized_keys 为空或没有有效公钥。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+
+    echo -e "当前已授权公钥:"
+    echo ""
+    nl -ba "$auth_keys" | sed 's/^/  /'
+    echo ""
+    read -p "请输入要删除的公钥行号: " del_line
+
+    if ! [[ "$del_line" =~ ^[0-9]+$ ]] || [ "$del_line" -lt 1 ]; then
+        echo -e "${RED}无效的行号。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+
+    local max_line
+    max_line=$(wc -l < "$auth_keys")
+    if [ "$del_line" -gt "$max_line" ]; then
+        echo -e "${RED}行号超出范围。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+
+    read -p "确认删除第 $del_line 行公钥? (y/N): " confirm
+    case "$confirm" in
+        y|Y)
+            sed -i "${del_line}d" "$auth_keys"
+            echo -e "${GREEN}公钥已删除。${NC}"
+            ;;
+        *)
+            echo -e "${YELLOW}已取消删除。${NC}"
+            ;;
+    esac
+    read -p "按任意键继续..."
+}
+
+# 启用/禁用 SSH 密码登录
+function ssh_password_auth_toggle() {
+    clear
+    local sshd_cfg="/etc/ssh/sshd_config"
+    local auth_keys="/root/.ssh/authorized_keys"
+    local cur_val new_val
+
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}         SSH 密码登录开关${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    # 获取当前有效配置
+    cur_val=$(grep -E '^[[:space:]]*PasswordAuthentication' "$sshd_cfg" 2>/dev/null | tail -n1 | awk '{print $2}')
+    [ -z "$cur_val" ] && cur_val="yes"
+
+    echo -e "当前状态: PasswordAuthentication ${YELLOW}$cur_val${NC}"
+    echo ""
+    if [ "$cur_val" = "yes" ]; then
+        echo -e "即将 ${RED}关闭${NC} 密码登录 (仅允许密钥登录)"
+        read -p "确认关闭密码登录? (y/N): " confirm
+        case "$confirm" in
+            y|Y) ;;
+            *) echo -e "${YELLOW}已取消。${NC}"; read -p "按任意键继续..."; return ;;
+        esac
+
+        # 安全校验: authorized_keys 必须存在且包含有效公钥，防止锁死自己
+        local key_count=0
+        [ -f "$auth_keys" ] && key_count=$(grep -cE '^(ssh-rsa|ssh-ed25519|ecdsa-sha2-|sk-)' "$auth_keys" 2>/dev/null)
+        if [ "$key_count" -lt 1 ]; then
+            echo -e "${RED}检测到 authorized_keys 中没有有效公钥，拒绝关闭密码登录，以免锁死自己。${NC}"
+            read -p "按任意键继续..."
+            return
+        fi
+
+        echo -e "${YELLOW}警告: 请确保已在【另一个终端】用密钥成功登录，再继续关闭密码登录。${NC}"
+        read -p "确认已另行验证密钥登录成功? (y/N): " confirm2
+        case "$confirm2" in
+            y|Y) ;;
+            *) echo -e "${YELLOW}已取消。${NC}"; read -p "按任意键继续..."; return ;;
+        esac
+        new_val="no"
+    else
+        echo -e "即将 ${GREEN}启用${NC} 密码登录"
+        read -p "确认启用密码登录? (y/N): " confirm
+        case "$confirm" in
+            y|Y) ;;
+            *) echo -e "${YELLOW}已取消。${NC}"; read -p "按任意键继续..."; return ;;
+        esac
+        new_val="yes"
+    fi
+
+    # 修改配置
+    if grep -qE '^[[:space:]]*#*[[:space:]]*PasswordAuthentication' "$sshd_cfg" 2>/dev/null; then
+        sed -i "s/^[[:space:]]*#*[[:space:]]*PasswordAuthentication.*/PasswordAuthentication $new_val/" "$sshd_cfg"
+    else
+        echo "PasswordAuthentication $new_val" >> "$sshd_cfg"
+    fi
+
+    # 校验配置语法，失败则还原
+    if command -v sshd >/dev/null 2>&1; then
+        if ! sshd -t 2>/dev/null; then
+            echo -e "${RED}sshd 配置语法检查失败，正在还原配置...${NC}"
+            sed -i "s/^[[:space:]]*#*[[:space:]]*PasswordAuthentication.*/PasswordAuthentication $cur_val/" "$sshd_cfg"
+            read -p "按任意键继续..."
+            return
+        fi
+    fi
+
+    # 重启 SSH 服务
+    echo -e "${YELLOW}正在重启 SSH 服务...${NC}"
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl restart sshd
+    elif command -v service >/dev/null 2>&1; then
+        service ssh restart
+    else
+        echo -e "${RED}无法识别系统服务管理工具，请手动重启 SSH 服务。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+
+    echo -e "${GREEN}PasswordAuthentication 已设置为 $new_val。${NC}"
+    if [ "$new_val" = "no" ]; then
+        echo -e "${YELLOW}请保持当前连接，另开终端验证密钥登录是否正常。${NC}"
+    fi
+    read -p "按任意键继续..."
 }
