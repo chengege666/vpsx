@@ -27,6 +27,7 @@ function sys_tools_menu() {
         echo -e " ${GREEN}16.${NC} 系统环境修复 (权限/磁盘/APT)"
         echo -e " ${GREEN}17.${NC} 配置中文语言支持 (Debian/Ubuntu)"
         echo -e " ${GREEN}18.${NC} 开启系统 IPv6"
+        echo -e " ${GREEN}19.${NC} VPS安全入侵检测"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
@@ -86,6 +87,9 @@ function sys_tools_menu() {
                 ;;
             18)
                 enable_ipv6_system
+                ;;
+            19)
+                security_check
                 ;;
             0)
                 break
@@ -2128,4 +2132,294 @@ function configure_dns_api_key() {
     esac
     echo -e "${GREEN}API Key 配置完成，申请时将由 acme.sh 自动保存。${NC}"
     return 0
+}
+
+# VPS 安全入侵检测
+function security_check() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}           VPS 安全入侵检测${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    local is_root=0
+    [ "$(id -u)" -eq 0 ] && is_root=1
+    SEC_RISK_SCORE=0
+
+    if [ "$is_root" -ne 1 ]; then
+        echo -e "${YELLOW}提示: 非 root 运行，登录审计等部分项目将跳过。${NC}"
+        echo -e "${YELLOW}建议以 root 执行以获得完整检测结果。${NC}"
+    fi
+
+    # 检测结果输出辅助函数: $1=级别(high/warn/info) $2=消息
+    sec_result() {
+        local level="$1"
+        local msg="$2"
+        case "$level" in
+            high)
+                echo -e "  ${RED}[高危]${NC} $msg"
+                SEC_RISK_SCORE=$((SEC_RISK_SCORE + 2))
+                ;;
+            warn)
+                echo -e "  ${YELLOW}[警告]${NC} $msg"
+                SEC_RISK_SCORE=$((SEC_RISK_SCORE + 1))
+                ;;
+            *)
+                echo -e "  ${GREEN}[正常]${NC} $msg"
+                ;;
+        esac
+    }
+
+    # 0. 系统基本信息
+    echo -e "${BLUE}=== [0/9] 系统基本信息 ===${NC}"
+    local os_info="未知"
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        os_info="$PRETTY_NAME"
+    fi
+    echo -e "  主机名: $(hostname)"
+    echo -e "  系统: $os_info"
+    echo -e "  内核: $(uname -r)"
+    echo -e "  当前时间: $(date '+%Y-%m-%d %H:%M:%S')"
+    echo -e "  开机时间: $(uptime -s 2>/dev/null || echo '未知')"
+    echo ""
+
+    # 1. 用户账号安全检查
+    echo -e "${BLUE}=== [1/9] 用户账号安全 ===${NC}"
+    # 1.1 UID=0 特权账号
+    local uid0_users
+    uid0_users=$(awk -F: '$3==0{print $1}' /etc/passwd)
+    if echo "$uid0_users" | grep -vq '^root$'; then
+        sec_result high "存在非 root 的 UID=0 特权账号: $(echo "$uid0_users" | grep -v '^root$' | tr '\n' ' ')"
+    else
+        sec_result info "未发现非 root 的特权账号"
+    fi
+    # 1.2 空密码账号
+    if [ "$is_root" -eq 1 ] && [ -r /etc/shadow ]; then
+        local no_pass
+        no_pass=$(awk -F: '$2==""{print $1}' /etc/shadow 2>/dev/null)
+        if [ -n "$no_pass" ]; then
+            sec_result high "存在空密码账号: $(echo "$no_pass" | tr '\n' ' ')"
+        else
+            sec_result info "未发现空密码账号"
+        fi
+    fi
+    # 1.3 可登录的普通账号
+    local login_users
+    login_users=$(awk -F: '$3>=1000 && $7!="/usr/sbin/nologin" && $7!="/bin/false" && $7!="/sbin/nologin" {print $1}' /etc/passwd)
+    if [ -n "$login_users" ]; then
+        echo -e "  可登录普通账号: $(echo "$login_users" | tr '\n' ' ')"
+    fi
+    # 1.4 /etc/passwd 最后修改时间
+    echo -e "  /etc/passwd 最后修改时间: $(stat -c '%y' /etc/passwd 2>/dev/null | cut -d. -f1)"
+    echo ""
+
+    # 2. 登录记录审计
+    echo -e "${BLUE}=== [2/9] 登录记录审计 ===${NC}"
+    echo -e "  当前在线用户:"
+    who 2>/dev/null || echo "    (无法读取)"
+    echo -e "  最近 10 次成功登录:"
+    last -n 10 2>/dev/null || echo "    (无法读取 last 记录)"
+    if [ "$is_root" -eq 1 ]; then
+        local fail_ips
+        fail_ips=""
+        if [ -f /var/log/auth.log ]; then
+            fail_ips=$(grep 'Failed password' /var/log/auth.log 2>/dev/null | awk '{print $(NF-3)}' | grep -E '^[0-9]' | sort | uniq -c | sort -rn | head -n 10)
+        fi
+        if [ -z "$fail_ips" ]; then
+            fail_ips=$(lastb 2>/dev/null | grep -v 'btmp begins' | awk '{print $3}' | grep -E '^[0-9]' | sort | uniq -c | sort -rn | head -n 10)
+        fi
+        if [ -n "$fail_ips" ]; then
+            sec_result warn "失败登录来源 IP TOP10:"
+            echo "$fail_ips" | sed 's/^/    /'
+        else
+            sec_result info "未发现明显的失败登录记录"
+        fi
+    fi
+    echo ""
+
+    # 3. 异常进程检测
+    echo -e "${BLUE}=== [3/9] 异常进程检测 ===${NC}"
+    echo -e "  CPU 占用 Top 10:"
+    local cpu_top
+    cpu_top=$(ps aux --sort=-%cpu 2>/dev/null | head -n 11)
+    if [ -z "$cpu_top" ]; then
+        cpu_top=$(ps aux 2>/dev/null | sort -k3 -rn | head -n 11)
+    fi
+    echo "$cpu_top"
+    echo ""
+    # 3.1 挖矿/木马特征进程
+    local mal_keywords='xmrig|minerd|kdevtmpfsi|kinsing|watchdogs|cronb|ppl|sustes|httpdns|kthreaddi|networkd|ddgs|billgates|ksoftirqds|sysupdate|stratum'
+    local mal_proc
+    mal_proc=$(ps aux 2>/dev/null | grep -E "$mal_keywords" | grep -v grep)
+    if [ -n "$mal_proc" ]; then
+        sec_result high "发现疑似挖矿/木马进程，详情如下:"
+        echo "$mal_proc"
+    else
+        sec_result info "未发现疑似挖矿/木马进程"
+    fi
+    # 3.2 反向 shell 特征
+    local rev_proc
+    rev_proc=$(ps aux 2>/dev/null | grep -E 'bash -i|sh -i|nc -e|ncat -e|socat |python.*exec|python.*socket|perl -e' | grep -v grep)
+    if [ -n "$rev_proc" ]; then
+        sec_result high "发现疑似反向 shell 进程，详情如下:"
+        echo "$rev_proc"
+    else
+        sec_result info "未发现疑似反向 shell 进程"
+    fi
+    echo ""
+
+    # 4. 网络连接检测
+    echo -e "${BLUE}=== [4/9] 网络连接检测 ===${NC}"
+    echo -e "  当前监听端口:"
+    if command -v ss >/dev/null 2>&1; then
+        ss -tulnp 2>/dev/null
+    elif command -v netstat >/dev/null 2>&1; then
+        netstat -tulnp 2>/dev/null
+    else
+        echo "    (ss/netstat 均不可用)"
+    fi
+    echo ""
+    # 4.1 异常外连检测
+    local odd_conn
+    if command -v ss >/dev/null 2>&1; then
+        odd_conn=$(ss -tnp 2>/dev/null | grep ESTAB | grep -E '"(bash|sh|nc|ncat|python|perl|socat)"')
+    elif command -v netstat >/dev/null 2>&1; then
+        odd_conn=$(netstat -tnp 2>/dev/null | grep ESTABLISHED | grep -E 'bash|sh|nc|python|perl|socat')
+    fi
+    if [ -n "$odd_conn" ]; then
+        sec_result high "发现可疑外连(常见于被控/数据外传)，详情如下:"
+        echo "$odd_conn"
+    else
+        sec_result info "未发现可疑的外连连接"
+    fi
+    echo ""
+
+    # 5. 定时任务检查
+    echo -e "${BLUE}=== [5/9] 定时任务检查 ===${NC}"
+    local cron_susp
+    cron_susp=$(cat /var/spool/cron/crontabs/* /etc/cron.d/* /etc/crontab 2>/dev/null | grep -E 'curl|wget|/tmp/|/dev/shm/|base64' )
+    if [ -n "$cron_susp" ]; then
+        sec_result warn "定时任务中存在可疑下载/执行命令，请人工确认:"
+        echo "$cron_susp"
+    else
+        sec_result info "定时任务中未发现可疑命令"
+    fi
+    echo -e "  root 用户的 crontab:"
+    crontab -l 2>/dev/null || echo "    (无)"
+    echo -e "  /etc/crontab 及 /etc/cron.d 内容:"
+    cat /etc/crontab /etc/cron.d/* 2>/dev/null | grep -v '^#' | grep -v '^$' || echo "    (无)"
+    if command -v systemctl >/dev/null 2>&1; then
+        echo -e "  systemd 定时器:"
+        systemctl list-timers --all --no-pager 2>/dev/null | head -n 15 || echo "    (无法读取)"
+    fi
+    echo ""
+
+    # 6. 启动项检查
+    echo -e "${BLUE}=== [6/9] 启动项检查 ===${NC}"
+    if [ -f /etc/rc.local ] && [ -s /etc/rc.local ]; then
+        echo -e "  /etc/rc.local 内容:"
+        cat /etc/rc.local | grep -v '^#' | grep -v '^$'
+        if grep -qE 'curl|wget|/tmp/|/dev/shm/|base64' /etc/rc.local 2>/dev/null; then
+            sec_result warn "rc.local 中存在可疑命令"
+        fi
+    else
+        sec_result info "未发现 rc.local 异常(不存在或为空)"
+    fi
+    local new_svc
+    new_svc=$(find /etc/systemd/system -maxdepth 2 -name '*.service' -mtime -7 2>/dev/null)
+    if [ -n "$new_svc" ]; then
+        sec_result warn "最近 7 天新增的 systemd 服务(请人工确认是否正常):"
+        echo "$new_svc"
+    else
+        sec_result info "未发现最近新增的 systemd 服务"
+    fi
+    if [ -f /etc/ld.so.preload ] && [ -s /etc/ld.so.preload ]; then
+        sec_result high "发现 ld.so.preload 劫持文件，内容如下:"
+        cat /etc/ld.so.preload
+    else
+        sec_result info "未发现 ld.so.preload 劫持"
+    fi
+    echo ""
+
+    # 7. 文件系统检查
+    echo -e "${BLUE}=== [7/9] 文件系统检查 ===${NC}"
+    local tmp_susp
+    tmp_susp=$(find /tmp /var/tmp /dev/shm -maxdepth 2 -type f \( -perm -111 -o -name '*.sh' -o -name '*.out' \) 2>/dev/null | head -n 30)
+    if [ -n "$tmp_susp" ]; then
+        sec_result warn "临时目录存在可疑可执行文件(请人工确认):"
+        echo "$tmp_susp"
+    else
+        sec_result info "临时目录未发现可疑可执行文件"
+    fi
+    echo -e "  ${BLUE}setuid/setgid 文件列表(可能耗时):${NC}"
+    timeout 20 find / -xdev -type f \( -perm -4000 -o -perm -2000 \) 2>/dev/null | head -n 30 || echo "    (查找超时或不可用)"
+    echo ""
+    local mod_bins
+    mod_bins=$(find /bin /sbin /usr/bin /usr/sbin -type f -mtime -7 2>/dev/null)
+    if [ -n "$mod_bins" ]; then
+        sec_result warn "最近 7 天被修改的系统二进制文件(请人工确认):"
+        echo "$mod_bins"
+    else
+        sec_result info "系统二进制未发现近期修改"
+    fi
+    echo ""
+
+    # 8. SSH 安全检查
+    echo -e "${BLUE}=== [8/9] SSH 安全检查 ===${NC}"
+    local sshd_cfg="/etc/ssh/sshd_config"
+    if [ -f "$sshd_cfg" ]; then
+        local perm_root pass_auth
+        perm_root=$(grep -E '^PermitRootLogin' "$sshd_cfg" | tail -n1 | awk '{print $2}')
+        pass_auth=$(grep -E '^PasswordAuthentication' "$sshd_cfg" | tail -n1 | awk '{print $2}')
+        [ -z "$perm_root" ] && perm_root="yes(未配置，默认)"
+        [ -z "$pass_auth" ] && pass_auth="yes(未配置，默认)"
+        echo -e "  PermitRootLogin: $perm_root"
+        echo -e "  PasswordAuthentication: $pass_auth"
+        case "$perm_root" in
+            yes|prohibit-password)
+                sec_result warn "SSH 允许 root 直接登录，建议改为 no 并使用密钥登录" ;;
+            *)
+                sec_result info "SSH root 直接登录已受限" ;;
+        esac
+        case "$pass_auth" in
+            yes)
+                sec_result warn "SSH 允许密码登录，建议开启 fail2ban 或改用密钥" ;;
+            *)
+                sec_result info "SSH 密码登录已禁用" ;;
+        esac
+        echo -e "  sshd_config 最后修改时间: $(stat -c '%y' "$sshd_cfg" 2>/dev/null | cut -d. -f1)"
+    fi
+    # 8.1 authorized_keys 检查
+    local key_files kf kc
+    key_files=$(find /root /home -maxdepth 3 -name authorized_keys -type f 2>/dev/null)
+    if [ -n "$key_files" ]; then
+        for kf in $key_files; do
+            [ -f "$kf" ] || continue
+            kc=$(wc -l < "$kf" 2>/dev/null)
+            echo -e "  $kf: $kc 个公钥"
+            if [ -n "$kc" ] && [ "$kc" -gt 0 ]; then
+                cat "$kf" | sed 's/^/    /'
+            fi
+        done
+    else
+        sec_result info "未发现 authorized_keys 文件"
+    fi
+    echo ""
+
+    # 9. 综合评分
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}           检测结果汇总${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    if [ "$SEC_RISK_SCORE" -eq 0 ]; then
+        echo -e " ${GREEN}[正常] 未发现明显入侵迹象。${NC}"
+    elif [ "$SEC_RISK_SCORE" -le 5 ]; then
+        echo -e " ${YELLOW}[警告] 发现少量可疑项(评分 $SEC_RISK_SCORE)，请结合上文人工确认。${NC}"
+    elif [ "$SEC_RISK_SCORE" -le 15 ]; then
+        echo -e " ${RED}[高危] 发现较多可疑项(评分 $SEC_RISK_SCORE)，建议立即排查!${NC}"
+    else
+        echo -e " ${RED}[严重] 发现大量高风险项(评分 $SEC_RISK_SCORE)，疑似已被入侵，请立即处理!${NC}"
+    fi
+    echo -e "${YELLOW}提示: 如确认被入侵，请先断网隔离，修改所有账号密码与 SSH 密钥，再清理恶意进程与定时任务。${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    read -p "按任意键返回菜单..."
 }
