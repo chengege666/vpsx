@@ -12,7 +12,7 @@ function node_tools_menu() {
         echo -e " ${GREEN}1.${NC}  安装 3x-ui 面板 (启动x-ui)"
         echo -e " ${GREEN}2.${NC}  安装 八合一脚本 (Mack-a)"
         echo -e " ${GREEN}3.${NC}  安装 Argo X (X-UI)"
-        echo -e " ${GREEN}4.${NC}  Cloudflare Argo 隧道管理"
+        echo -e " ${GREEN}4.${NC}  cgg-Argo 隧道管理"
         echo -e " ${GREEN}5.${NC}  Hi Hysteria （启动sb）"
         echo -e " ${GREEN}6.${NC}  Sing-box 全家桶（启动sb）"
         echo -e " ${GREEN}7.${NC}  233boysing-box（启动sb）"
