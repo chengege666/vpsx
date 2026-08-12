@@ -17,7 +17,7 @@ function system_cleanup() {
 
     clear
     echo -e "${CYAN}==========================================${NC}"
-    echo -e "${CYAN}          系统深度清理工具 (增强版)        ${NC}"
+    echo -e "${CYAN}             系统清理工具         ${NC}"
     echo -e "${CYAN}==========================================${NC}"
     
     echo -e "${YELLOW}⚠️  警告：此操作将清理系统缓存、旧内核和残留配置。${NC}"
@@ -31,7 +31,7 @@ function system_cleanup() {
     OLD_DISK_SPACE=$(df / | tail -1 | awk '{print $4}')
 
     if [ -f /etc/debian_version ]; then
-        echo -e "${BLUE}[1/2] 检测到 Debian/Ubuntu 系统，开始深度清理...${NC}"
+        echo -e "${BLUE}[1/2] 检测到 Debian/Ubuntu 系统，开始清理...${NC}"
         
         # 1. 修复可能损坏的列表 (保留原逻辑)
         if [ -f /etc/apt/sources.list.d/docker.list ]; then
