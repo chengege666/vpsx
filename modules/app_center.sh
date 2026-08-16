@@ -82,7 +82,7 @@ function app_center_menu() {
         echo -e " ${GREEN}23.${NC} ${c23}IT-Tools (万能工具箱)${NC}               ${GREEN}24.${NC} ${c24}Uptime Kuma (站点监控)${NC}"
         echo -e " ${GREEN}25.${NC} ${c25}蜜蜂记账 (个人记账系统)${NC}             ${GREEN}26.${NC} ${c26}PairDrop (局域网文件传输)${NC}"
         echo -e " ${GREEN}27.${NC} ${c27}RustDesk (远程桌面服务端)${NC}           ${GREEN}28.${NC} ${c28}NGINX 反向代理${NC}"
-        echo -e " ${GREEN}29.${NC} ${c29}Arcane (Docker管理面板)${NC}              ${GREEN}30.${NC} ${c30}subconverter订阅转换${NC}"
+        echo -e " ${GREEN}29.${NC} ${c29}Arcane (Docker管理面板)${NC}             ${GREEN}30.${NC} ${c30}subconverter订阅转换${NC}"
         echo -e "${CYAN}----------------------------------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}================================================================${NC}"
