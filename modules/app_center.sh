@@ -63,6 +63,7 @@ function app_center_menu() {
         local c27=$(check_installed "docker" "rustdesk-hbbs" && echo "$GREEN" || echo "$NC")
         local c28=$(check_installed "cmd" "nginx" && echo "$GREEN" || echo "$NC")
         local c29=$(check_installed "docker" "arcane" && echo "$GREEN" || echo "$NC")
+        local c30=$(check_installed "docker" "subconverter" && echo "$GREEN" || echo "$NC")
 
         echo -e "${CYAN}================================================================${NC}"
         echo -e "${GREEN}                        应用中心菜单${NC}"
@@ -81,11 +82,11 @@ function app_center_menu() {
         echo -e " ${GREEN}23.${NC} ${c23}IT-Tools (万能工具箱)${NC}               ${GREEN}24.${NC} ${c24}Uptime Kuma (站点监控)${NC}"
         echo -e " ${GREEN}25.${NC} ${c25}蜜蜂记账 (个人记账系统)${NC}             ${GREEN}26.${NC} ${c26}PairDrop (局域网文件传输)${NC}"
         echo -e " ${GREEN}27.${NC} ${c27}RustDesk (远程桌面服务端)${NC}           ${GREEN}28.${NC} ${c28}NGINX 反向代理${NC}"
-        echo -e " ${GREEN}29.${NC} ${c29}Arcane (Docker管理面板)${NC}"
+        echo -e " ${GREEN}29.${NC} ${c29}Arcane (Docker管理面板)${NC}              ${GREEN}30.${NC} ${c30}subconverter订阅转换${NC}"
         echo -e "${CYAN}----------------------------------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}================================================================${NC}"
-        read -p "请输入你的选择 (0-29) : " app_choice
+        read -p "请输入你的选择 (0-30) : " app_choice
 
         case "$app_choice" in
             1) one_panel_management ;;
@@ -117,6 +118,7 @@ function app_center_menu() {
             27) rustdesk_management ;;
             28) nginx_management ;;
             29) arcane_management ;;
+            30) subconverter_management ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
@@ -9881,5 +9883,274 @@ function uninstall_arcane() {
     fi
     cd - > /dev/null
     echo -e "${GREEN}✅ Arcane 卸载完成！${NC}"
+    read -p "按回车键继续..."
+}
+
+# subconverter 管理菜单
+function subconverter_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}          subconverter 管理${NC}"
+
+        local status_text="${RED}未安装${NC}"
+        local host_port=""
+
+        if command -v docker &> /dev/null; then
+            if docker ps -a --format '{{.Names}}' | grep -q "^subconverter$"; then
+                if docker inspect --format='{{.State.Status}}' subconverter 2>/dev/null | grep -q "running"; then
+                    status_text="${GREEN}运行中${NC}"
+                    host_port=$(docker inspect subconverter --format='{{(index (index .NetworkSettings.Ports "25500/tcp") 0).HostPort}}' 2>/dev/null)
+                else
+                    status_text="${YELLOW}已停止${NC}"
+                fi
+            fi
+        fi
+
+        echo -e "          状态: ${status_text}"
+        if [ -n "$host_port" ]; then
+            IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+            echo -e "${CYAN}-----------------------------------------${NC}"
+            [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+            [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+        fi
+
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "subconverter 是一款订阅转换工具，支持在"
+        echo -e "Clash/Surge/Quantumult/V2Ray/Singbox 等"
+        echo -e "多种代理订阅格式之间相互转换。"
+        echo ""
+        echo -e " ${GREEN}1.${NC}  安装/更新 subconverter"
+        echo -e " ${GREEN}2.${NC}  启动 subconverter"
+        echo -e " ${GREEN}3.${NC}  停止 subconverter"
+        echo -e " ${GREEN}4.${NC}  重启 subconverter"
+        echo -e " ${GREEN}5.${NC}  修改访问端口"
+        echo -e " ${GREEN}6.${NC}  查看容器日志"
+        echo -e " ${GREEN}7.${NC}  卸载 subconverter"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${RED}0.${NC}  返回上一级菜单"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入你的选择 (0-7): " subconverter_choice
+
+        case "$subconverter_choice" in
+            1) install_subconverter ;;
+            2) manage_subconverter_container "start" ;;
+            3) manage_subconverter_container "stop" ;;
+            4) manage_subconverter_container "restart" ;;
+            5) change_subconverter_port ;;
+            6) docker logs --tail 50 -f subconverter; read -p "按回车键继续..." ;;
+            7) uninstall_subconverter ;;
+            0) break ;;
+            *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+# 安装/更新 subconverter
+function install_subconverter() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          安装/更新 subconverter${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if ! command -v docker &> /dev/null; then
+        echo -e "${RED}❌ Docker 服务未运行或未安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    if ! docker compose version &> /dev/null && ! command -v docker-compose &> /dev/null; then
+        echo -e "${RED}❌ 未检测到 Docker Compose。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    local deploy_dir="/opt/subconverter"
+    mkdir -p "$deploy_dir"
+
+    # 已安装时确认重新部署
+    if docker ps -a --format '{{.Names}}' | grep -q "^subconverter$"; then
+        echo -e "${YELLOW}检测到 subconverter 已安装。${NC}"
+        read -p "是否重新安装？(y/N): " reinstall
+        [[ ! "$reinstall" =~ ^[yY]$ ]] && return
+        docker stop subconverter &>/dev/null
+        docker rm subconverter &>/dev/null
+    fi
+
+    local default_port=25500
+    if [ -f "$deploy_dir/docker-compose.yml" ]; then
+        local exist_port=$(grep -oP '^\s+-\s+"\K[0-9]+(?=:25500")' "$deploy_dir/docker-compose.yml" | head -1)
+        default_port=${exist_port:-25500}
+    fi
+
+    read -p "请输入宿主机映射端口 (默认 $default_port): " host_port
+    host_port=${host_port:-$default_port}
+
+    # 校验端口
+    if ! [[ "$host_port" =~ ^[0-9]+$ ]] || [ "$host_port" -lt 1 ] || [ "$host_port" -gt 65535 ]; then
+        echo -e "${RED}❌ 端口号无效，请输入 1-65535 之间的数字。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    if command -v ss &> /dev/null; then
+        if ss -tuln | grep -q ":${host_port} "; then
+            echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
+            read -p "按回车键继续..."
+            return
+        fi
+    fi
+
+    cat > "$deploy_dir/docker-compose.yml" << EOF
+services:
+  subconverter:
+    image: asdlokj1qpi23/subconverter:latest
+    container_name: subconverter
+    restart: unless-stopped
+    ports:
+      - "${host_port}:25500"
+    environment:
+      - TZ=Asia/Shanghai
+EOF
+
+    echo -e "${BLUE}正在拉取镜像并部署 (可能需要几分钟)...${NC}"
+    cd "$deploy_dir"
+
+    if docker compose version &> /dev/null; then
+        docker compose pull && docker compose up -d --remove-orphans
+    else
+        docker-compose pull && docker-compose up -d --remove-orphans
+    fi
+
+    if [ $? -eq 0 ]; then
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        echo -e "${GREEN}✅ subconverter 安装/更新成功！${NC}"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+        [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+        echo -e "版本接口: ${YELLOW}http://${ipv4:-127.0.0.1}:${host_port}/version${NC}"
+        echo -e "订阅转换: ${YELLOW}http://${ipv4:-127.0.0.1}:${host_port}/sub?target=clash&url=<订阅地址URL编码>${NC}"
+        echo -e "${RED}⚠️  请勿公网裸奔，建议配合反向代理并加访问控制。${NC}"
+    else
+        echo -e "${RED}❌ 部署失败，请检查网络或 Docker 日志。${NC}"
+    fi
+    cd - > /dev/null
+    read -p "按回车键继续..."
+}
+
+# 通用生命周期管理
+function manage_subconverter_container() {
+    local action=$1
+    local deploy_dir="/opt/subconverter"
+    if [ -d "$deploy_dir" ] && [ -f "$deploy_dir/docker-compose.yml" ]; then
+        cd "$deploy_dir"
+        echo -e "${BLUE}正在对 subconverter 执行 ${action} 操作...${NC}"
+        if docker compose version &> /dev/null; then
+            docker compose "$action"
+        else
+            docker-compose "$action"
+        fi
+        echo -e "${GREEN}操作完成。${NC}"
+        cd - > /dev/null
+    else
+        echo -e "${RED}❌ 未检测到安装目录，请先安装。${NC}"
+    fi
+    sleep 1
+}
+
+# 修改 subconverter 访问端口
+function change_subconverter_port() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}          修改 subconverter 访问端口${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    local deploy_dir="/opt/subconverter"
+    if [ ! -f "$deploy_dir/docker-compose.yml" ]; then
+        echo -e "${RED}❌ 未检测到安装目录，请先安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    local current_port=$(grep -oP '^\s+-\s+"\K[0-9]+(?=:25500")' "$deploy_dir/docker-compose.yml" | head -1)
+    current_port=${current_port:-25500}
+    echo -e "当前访问端口: ${YELLOW}${current_port}${NC}"
+
+    read -p "请输入新的宿主机端口: " new_port
+    if ! [[ "$new_port" =~ ^[0-9]+$ ]] || [ "$new_port" -lt 1 ] || [ "$new_port" -gt 65535 ]; then
+        echo -e "${RED}❌ 端口号无效，请输入 1-65535 之间的数字。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    if command -v ss &> /dev/null; then
+        if ss -tuln | grep -q ":${new_port} "; then
+            echo -e "${RED}❌ 端口 ${new_port} 已被占用，请选择其他端口。${NC}"
+            read -p "按回车键继续..."
+            return
+        fi
+    fi
+
+    cd "$deploy_dir"
+    sed -i "s/- \"[0-9]*:25500\"/- \"${new_port}:25500\"/" docker-compose.yml
+
+    echo -e "${BLUE}正在应用新端口并重建容器...${NC}"
+    if docker compose version &> /dev/null; then
+        docker compose up -d
+    else
+        docker-compose up -d
+    fi
+
+    if [ $? -eq 0 ]; then
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        echo -e "${GREEN}✅ 端口修改成功！${NC}"
+        [ -n "$ipv4" ] && echo -e "新 IPv4 访问地址: ${YELLOW}http://${ipv4}:${new_port}${NC}"
+        [ -n "$ipv6" ] && echo -e "新 IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${new_port}${NC}"
+    else
+        echo -e "${RED}❌ 端口修改失败，请检查错误信息。${NC}"
+    fi
+    cd - > /dev/null
+    read -p "按回车键继续..."
+}
+
+# 卸载 subconverter
+function uninstall_subconverter() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${RED}           卸载 subconverter${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    local deploy_dir="/opt/subconverter"
+    if [ ! -f "$deploy_dir/docker-compose.yml" ]; then
+        echo -e "${YELLOW}未检测到安装目录。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${RED}⚠️  警告：此操作将停止并删除 subconverter 容器！${NC}"
+    read -p "确定要卸载 subconverter 吗？(y/N): " confirm
+    if [[ ! "$confirm" =~ ^[yY]$ ]]; then
+        echo -e "${YELLOW}卸载已取消。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    cd "$deploy_dir"
+    if docker compose version &> /dev/null; then
+        docker compose down
+    else
+        docker-compose down
+    fi
+
+    read -p "是否同时删除目录 /opt/subconverter？(y/N): " del_data
+    if [[ "$del_data" =~ ^[yY]$ ]]; then
+        cd / && rm -rf "$deploy_dir"
+        echo -e "${GREEN}✅ 目录已清理。${NC}"
+    else
+        rm -f "$deploy_dir/docker-compose.yml"
+        echo -e "${YELLOW}已保留目录，仅移除容器与配置。${NC}"
+    fi
+    cd - > /dev/null
+    echo -e "${GREEN}✅ subconverter 卸载完成！${NC}"
     read -p "按回车键继续..."
 }
