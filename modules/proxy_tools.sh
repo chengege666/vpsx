@@ -26,7 +26,7 @@ function node_tools_menu() {
                 read -p "按任意键继续..."
                 ;;
             2)
-                echo -e "${BLUE}正在启动 Cloudflare Argo 隧道管理脚本...${NC}"
+                echo -e "${BLUE}正在启动 cgg-Argo 隧道管理脚本...${NC}"
                 bash <(curl -L -s 'https://raw.githubusercontent.com/chengege666/cggargo/main/argo.sh')
                 read -p "按任意键继续..."
                 ;;

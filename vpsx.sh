@@ -47,7 +47,7 @@ show_menu() {
     echo -e " ${GREEN}8.${NC}   重启服务器"
     echo -e " ${GREEN}9.${NC}   VPS测试脚本"
     echo -e " ${GREEN}10.${NC}  一键配置启动快捷键"
-    echo -e " ${GREEN}11.${NC}  搭建节点工具"
+    echo -e " ${GREEN}11.${NC}  工具菜单"
     echo -e " ${GREEN}12.${NC}  应用中心"
     echo -e "${CYAN}------------------------------------------------${NC}"
     echo -e " ${YELLOW}000.${NC} 脚本更新"
