@@ -2679,13 +2679,14 @@ function cpu_limit_management() {
         fi
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${GREEN}1.${NC} 安装 cpulimit"
-        echo -e " ${GREEN}2.${NC} 限制指定进程（按 PID）"
-        echo -e " ${GREEN}3.${NC} 限制指定进程（按进程名）"
-        echo -e " ${GREEN}4.${NC} 整机 CPU 限制（systemd）"
-        echo -e " ${GREEN}5.${NC} 取消整机 CPU 限制"
-        echo -e " ${GREEN}6.${NC} 查看当前限制状态"
-        echo -e " ${GREEN}7.${NC} 停止指定限制"
-        echo -e " ${GREEN}8.${NC} 停止所有限制"
+        echo -e " ${GREEN}2.${NC} 卸载 cpulimit"
+        echo -e " ${GREEN}3.${NC} 限制指定进程（按 PID）"
+        echo -e " ${GREEN}4.${NC} 限制指定进程（按进程名）"
+        echo -e " ${GREEN}5.${NC} 整机 CPU 限制（systemd）"
+        echo -e " ${GREEN}6.${NC} 取消整机 CPU 限制"
+        echo -e " ${GREEN}7.${NC} 查看当前限制状态"
+        echo -e " ${GREEN}8.${NC} 停止指定限制"
+        echo -e " ${GREEN}9.${NC} 停止所有限制"
         echo -e " ${RED}0.${NC} 返回上一级"
         echo -e "${CYAN}=========================================${NC}"
         read -p "请输入选择: " cpu_limit_choice
@@ -2695,24 +2696,27 @@ function cpu_limit_management() {
                 install_cpulimit
                 ;;
             2)
-                limit_cpu_by_pid
+                uninstall_cpulimit
                 ;;
             3)
-                limit_cpu_by_name
+                limit_cpu_by_pid
                 ;;
             4)
-                limit_cpu_whole_system
+                limit_cpu_by_name
                 ;;
             5)
-                remove_cpu_whole_limit
+                limit_cpu_whole_system
                 ;;
             6)
-                view_cpu_limits
+                remove_cpu_whole_limit
                 ;;
             7)
-                stop_one_cpu_limit
+                view_cpu_limits
                 ;;
             8)
+                stop_one_cpu_limit
+                ;;
+            9)
                 stop_all_cpu_limits
                 ;;
             0)
@@ -2749,6 +2753,46 @@ function install_cpulimit() {
         echo -e "${GREEN}✅ cpulimit 安装成功。${NC}"
     else
         echo -e "${RED}❌ cpulimit 安装失败，请检查网络或软件源。${NC}"
+    fi
+    read -p "按任意键继续..."
+}
+
+# 卸载 cpulimit（自动终止运行中的限制任务）
+function uninstall_cpulimit() {
+    if ! command -v cpulimit &> /dev/null; then
+        echo -e "${YELLOW}cpulimit 未安装，无需卸载。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+    if pgrep -x cpulimit &> /dev/null; then
+        echo -e "${YELLOW}检测到正在运行的 CPU 限制任务，卸载将同时终止它们。${NC}"
+    fi
+    read -p "确认卸载 cpulimit? (y/N): " confirm
+    case "$confirm" in
+        y|Y) ;;
+        *)
+            echo -e "${YELLOW}已取消。${NC}"
+            read -p "按任意键继续..."
+            return
+            ;;
+    esac
+    pkill -x cpulimit 2>/dev/null
+    echo -e "${YELLOW}正在卸载 cpulimit...${NC}"
+    if command -v apt-get &> /dev/null; then
+        apt-get remove -y cpulimit
+    elif command -v dnf &> /dev/null; then
+        dnf remove -y cpulimit
+    elif command -v yum &> /dev/null; then
+        yum remove -y cpulimit
+    else
+        echo -e "${RED}未识别的包管理器，请手动卸载 cpulimit。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+    if ! command -v cpulimit &> /dev/null; then
+        echo -e "${GREEN}✅ cpulimit 卸载完成。${NC}"
+    else
+        echo -e "${RED}❌ cpulimit 卸载失败，请检查软件源或手动卸载。${NC}"
     fi
     read -p "按任意键继续..."
 }
