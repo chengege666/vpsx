@@ -19,6 +19,7 @@ function sys_tools_menu() {
         echo -e " ${GREEN}8.${NC}  内存加速清理（释放缓存）          ${GREEN}18.${NC} 开启系统 IPv6"
         echo -e " ${GREEN}9.${NC}  修改DNS服务器（手动/自动）        ${GREEN}19.${NC} VPS安全入侵检测"
         echo -e " ${GREEN}10.${NC} Fail2ban配置（SSH防护）           ${GREEN}20.${NC} SSH公钥登录配置"
+        echo -e " ${GREEN}21.${NC} 限制CPU使用率 (cpulimit)"
         echo -e "${CYAN}----------------------------------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}================================================================${NC}"
@@ -84,6 +85,9 @@ function sys_tools_menu() {
                 ;;
             20)
                 ssh_pubkey_login
+                ;;
+            21)
+                cpu_limit_management
                 ;;
             0)
                 break
@@ -2650,5 +2654,283 @@ function ssh_password_auth_toggle() {
     if [ "$new_val" = "no" ]; then
         echo -e "${YELLOW}请保持当前连接，另开终端验证密钥登录是否正常。${NC}"
     fi
+    read -p "按任意键继续..."
+}
+
+# ==================== 限制CPU使用率 (cpulimit) ====================
+function cpu_limit_management() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}        限制CPU使用率 (cpulimit)${NC}"
+        echo -e "${CYAN}=========================================${NC}"
+
+        if command -v cpulimit &> /dev/null; then
+            echo -e "cpulimit 状态: ${GREEN}已安装${NC}"
+        else
+            echo -e "cpulimit 状态: ${RED}未安装${NC}"
+        fi
+        local limit_count=0
+        if pgrep -x cpulimit &> /dev/null; then
+            limit_count=$(pgrep -cx cpulimit 2>/dev/null)
+            echo -e "当前限制中的进程数: ${YELLOW}$limit_count${NC}"
+        else
+            echo -e "当前限制中的进程数: 0"
+        fi
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e " ${GREEN}1.${NC} 安装 cpulimit"
+        echo -e " ${GREEN}2.${NC} 限制指定进程（按 PID）"
+        echo -e " ${GREEN}3.${NC} 限制指定进程（按进程名）"
+        echo -e " ${GREEN}4.${NC} 整机 CPU 限制（systemd）"
+        echo -e " ${GREEN}5.${NC} 取消整机 CPU 限制"
+        echo -e " ${GREEN}6.${NC} 查看当前限制状态"
+        echo -e " ${GREEN}7.${NC} 停止指定限制"
+        echo -e " ${GREEN}8.${NC} 停止所有限制"
+        echo -e " ${RED}0.${NC} 返回上一级"
+        echo -e "${CYAN}=========================================${NC}"
+        read -p "请输入选择: " cpu_limit_choice
+
+        case $cpu_limit_choice in
+            1)
+                install_cpulimit
+                ;;
+            2)
+                limit_cpu_by_pid
+                ;;
+            3)
+                limit_cpu_by_name
+                ;;
+            4)
+                limit_cpu_whole_system
+                ;;
+            5)
+                remove_cpu_whole_limit
+                ;;
+            6)
+                view_cpu_limits
+                ;;
+            7)
+                stop_one_cpu_limit
+                ;;
+            8)
+                stop_all_cpu_limits
+                ;;
+            0)
+                break
+                ;;
+            *)
+                echo -e "${RED}无效选择！${NC}"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+# 安装 cpulimit
+function install_cpulimit() {
+    if command -v cpulimit &> /dev/null; then
+        echo -e "${GREEN}✅ cpulimit 已安装，无需重复安装。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+    echo -e "${YELLOW}正在安装 cpulimit...${NC}"
+    if command -v apt-get &> /dev/null; then
+        apt-get update -y && apt-get install -y cpulimit
+    elif command -v dnf &> /dev/null; then
+        dnf install -y cpulimit
+    elif command -v yum &> /dev/null; then
+        yum install -y cpulimit --enablerepo=epel
+    else
+        echo -e "${RED}未识别的包管理器，请手动安装 cpulimit。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+    if command -v cpulimit &> /dev/null; then
+        echo -e "${GREEN}✅ cpulimit 安装成功。${NC}"
+    else
+        echo -e "${RED}❌ cpulimit 安装失败，请检查网络或软件源。${NC}"
+    fi
+    read -p "按任意键继续..."
+}
+
+# 校验 CPU 上限百分比输入 (1-99)
+function validate_cpu_percent() {
+    local input="$1"
+    if ! [[ "$input" =~ ^[0-9]+$ ]] || [ "$input" -lt 1 ] || [ "$input" -gt 99 ]; then
+        echo -e "${RED}无效的百分比，请输入 1-99 之间的整数。${NC}"
+        return 1
+    fi
+    return 0
+}
+
+# 按 PID 限制指定进程 CPU
+function limit_cpu_by_pid() {
+    if ! command -v cpulimit &> /dev/null; then
+        echo -e "${RED}cpulimit 未安装，请先安装（选项 1）。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+    read -p "请输入要限制的进程 PID: " target_pid
+    if ! [[ "$target_pid" =~ ^[0-9]+$ ]] || ! [ -d "/proc/$target_pid" ]; then
+        echo -e "${RED}无效的 PID 或进程不存在。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+    local proc_name
+    proc_name=$(cat /proc/$target_pid/comm 2>/dev/null)
+    read -p "请输入 CPU 上限百分比 (1-99): " cpu_percent
+    if ! validate_cpu_percent "$cpu_percent"; then
+        read -p "按任意键继续..."
+        return
+    fi
+    nohup cpulimit -p "$target_pid" -l "$cpu_percent" >/dev/null 2>&1 &
+    echo -e "${GREEN}✅ 已开始限制进程 $target_pid ($proc_name)，CPU 上限 ${cpu_percent}%。${NC}"
+    echo -e "${YELLOW}提示：进程重启后 PID 会变化，建议用选项 3 按进程名限制。${NC}"
+    read -p "按任意键继续..."
+}
+
+# 按进程名限制指定进程 CPU
+function limit_cpu_by_name() {
+    if ! command -v cpulimit &> /dev/null; then
+        echo -e "${RED}cpulimit 未安装，请先安装（选项 1）。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+    read -p "请输入要限制的进程名 (如 nginx): " target_name
+    if [ -z "$target_name" ]; then
+        echo -e "${RED}进程名不能为空。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+    if ! pgrep -x "$target_name" &> /dev/null; then
+        echo -e "${RED}未找到名为 $target_name 的进程。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+    read -p "请输入 CPU 上限百分比 (1-99): " cpu_percent
+    if ! validate_cpu_percent "$cpu_percent"; then
+        read -p "按任意键继续..."
+        return
+    fi
+    nohup cpulimit -e "$target_name" -l "$cpu_percent" >/dev/null 2>&1 &
+    echo -e "${GREEN}✅ 已开始限制进程 $target_name，CPU 上限 ${cpu_percent}%。${NC}"
+    read -p "按任意键继续..."
+}
+
+# 查看当前限制状态（整机限制 + cpulimit 任务）
+function view_cpu_limits() {
+    # 整机 CPU 限制状态（systemd）
+    local whole_limit
+    if command -v systemctl &> /dev/null; then
+        whole_limit=$(grep -h "^CPUQuota=" /etc/systemd/system.control/system.slice.d/*.conf 2>/dev/null | tail -1)
+        if [ -n "$whole_limit" ]; then
+            echo -e "整机 CPU 限制: ${YELLOW}${whole_limit}${NC}"
+        else
+            echo -e "整机 CPU 限制: 未设置"
+        fi
+    fi
+    echo -e "${CYAN}-----------------------------------------${NC}"
+    if pgrep -x cpulimit &> /dev/null; then
+        echo -e "${GREEN}当前正在运行的 CPU 限制任务:${NC}"
+        ps -eo pid,etime,cmd | grep "[c]pulimit -"
+    else
+        echo -e "${YELLOW}当前没有任何 cpulimit 限制任务。${NC}"
+    fi
+    read -p "按任意键继续..."
+}
+
+# 停止指定限制
+function stop_one_cpu_limit() {
+    if ! pgrep -x cpulimit &> /dev/null; then
+        echo -e "${YELLOW}当前没有任何 CPU 限制任务。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+    ps -eo pid,cmd | grep "[c]pulimit -"
+    read -p "请输入要停止的 cpulimit 任务 PID: " limit_pid
+    if [[ "$limit_pid" =~ ^[0-9]+$ ]] && pgrep -x cpulimit | grep -qx "$limit_pid"; then
+        kill "$limit_pid" && echo -e "${GREEN}✅ 已停止限制任务 ($limit_pid)。${NC}"
+    else
+        echo -e "${RED}无效的 PID 或该 PID 不在限制任务列表中。${NC}"
+    fi
+    read -p "按任意键继续..."
+}
+
+# 停止所有限制
+function stop_all_cpu_limits() {
+    if ! pgrep -x cpulimit &> /dev/null; then
+        echo -e "${YELLOW}当前没有任何 CPU 限制任务。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+    read -p "确认停止所有 CPU 限制? (y/N): " confirm
+    case "$confirm" in
+        y|Y)
+            pkill -x cpulimit
+            echo -e "${GREEN}✅ 已停止所有 CPU 限制。${NC}"
+            ;;
+        *)
+            echo -e "${YELLOW}已取消。${NC}"
+            ;;
+    esac
+    read -p "按任意键继续..."
+}
+
+# 整机 CPU 限制（systemd CPUQuota，对 systemd 管理的所有服务生效）
+function limit_cpu_whole_system() {
+    if ! command -v systemctl &> /dev/null; then
+        echo -e "${RED}未检测到 systemctl（系统未使用 systemd），无法设置整机 CPU 限制。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+    if ! systemctl show system.slice -p CPUQuotaPerSecUSec &> /dev/null; then
+        echo -e "${RED}无法访问 systemd cgroup（常见于 LXC/LXD 容器或无权限环境），无法设置整机 CPU 限制。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+    read -p "请输入整机 CPU 上限百分比 (1-99，100% 为 1 个核心): " cpu_percent
+    if ! validate_cpu_percent "$cpu_percent"; then
+        read -p "按任意键继续..."
+        return
+    fi
+    echo -e "${YELLOW}正在设置整机 CPU 限制为 ${cpu_percent}%（持久化，重启后仍生效）...${NC}"
+    local err_msg
+    if err_msg=$(systemctl set-property system.slice CPUQuota="${cpu_percent}%" 2>&1); then
+        echo -e "${GREEN}✅ 已设置整机 CPU 限制为 ${cpu_percent}%。${NC}"
+        echo -e "提示：仅对 systemd 管理的服务生效（x-ui、cloudflared 等通常包含在内）。"
+    else
+        echo -e "${RED}❌ 设置失败：${err_msg}${NC}"
+        echo -e "${YELLOW}常见原因：LXC/LXD 容器未开放 cgroup 权限，需在宿主机上操作。${NC}"
+    fi
+    read -p "按任意键继续..."
+}
+
+# 取消整机 CPU 限制
+function remove_cpu_whole_limit() {
+    if ! command -v systemctl &> /dev/null; then
+        echo -e "${RED}未检测到 systemctl，无法操作。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+    local cur_limit
+    cur_limit=$(grep -h "^CPUQuota=" /etc/systemd/system.control/system.slice.d/*.conf 2>/dev/null | tail -1)
+    if [ -z "$cur_limit" ]; then
+        echo -e "${YELLOW}当前未设置整机 CPU 限制，无需取消。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+    read -p "确认取消整机 CPU 限制 (当前: $cur_limit)? (y/N): " confirm
+    case "$confirm" in
+        y|Y)
+            if systemctl revert system.slice 2>&1; then
+                echo -e "${GREEN}✅ 已取消整机 CPU 限制，恢复系统默认。${NC}"
+            else
+                echo -e "${RED}❌ 取消失败，请手动执行: systemctl revert system.slice${NC}"
+            fi
+            ;;
+        *)
+            echo -e "${YELLOW}已取消操作。${NC}"
+            ;;
+    esac
     read -p "按任意键继续..."
 }
