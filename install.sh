@@ -27,25 +27,29 @@ echo -e "${CYAN}================================================${NC}"
 echo -e "${GREEN}            vpsx 一键安装工具            ${NC}"
 echo -e "${CYAN}================================================${NC}"
 
-# 检测包管理器并安装必要依赖
-install_dependencies() {
-    echo -e "${BLUE}[1/3] 正在检查并安装必要依赖...${NC}"
-    
+# 按需检测并安装 git（已安装则静默跳过）
+ensure_git() {
+    if command -v git >/dev/null 2>&1; then
+        return 0
+    fi
+
+    echo -e "${BLUE}检测到 git 未安装，正在安装...${NC}"
+
     if command -v apt >/dev/null 2>&1; then
-        apt update && apt install -y git curl
+        apt update && apt install -y git
     elif command -v yum >/dev/null 2>&1; then
-        yum install -y git curl
+        yum install -y git
     elif command -v dnf >/dev/null 2>&1; then
-        dnf install -y git curl
+        dnf install -y git
     else
-        echo -e "${RED}错误: 无法识别包管理器，请手动安装 git 和 curl。${NC}"
+        echo -e "${RED}错误: 无法识别包管理器，请手动安装 git。${NC}"
         exit 1
     fi
 }
 
 # 下载或更新项目
 download_project() {
-    echo -e "${BLUE}[2/3] 正在获取最新项目文件...${NC}"
+    echo -e "${BLUE}[1/2] 正在获取最新项目文件...${NC}"
     
     if [ -d "$INSTALL_PATH" ]; then
         echo -e "${YELLOW}检测到已安装，正在尝试更新...${NC}"
@@ -63,7 +67,7 @@ download_project() {
 
 # 配置环境
 setup_environment() {
-    echo -e "${BLUE}[3/3] 正在配置运行环境...${NC}"
+    echo -e "${BLUE}[2/2] 正在配置运行环境...${NC}"
     
     # 赋予执行权限
     chmod +x "$INSTALL_PATH/vpsx.sh"
@@ -77,7 +81,7 @@ setup_environment() {
 }
 
 # 执行安装流程
-install_dependencies
+ensure_git
 download_project
 setup_environment
 
