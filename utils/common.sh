@@ -14,6 +14,8 @@ install_package() {
             sudo yum install -y "$pkg"
         elif command -v dnf >/dev/null 2>&1; then
             sudo dnf install -y "$pkg"
+        elif command -v apk >/dev/null 2>&1; then
+            apk update && apk add "$pkg"
         else
             echo -e "${RED}[错误]${NC} 未能识别包管理器，请手动安装 $pkg。"
             return 1
@@ -44,6 +46,10 @@ function get_access_ips() {
     # 若公网获取失败，则获取内网 IPv4
     if [ -z "$ipv4" ]; then
         ipv4=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
+    fi
+    # BusyBox 的 hostname 不支持 -I (Alpine)，改用 ip 命令回退
+    if [ -z "$ipv4" ]; then
+        ipv4=$(ip -4 addr show 2>/dev/null | grep -oE 'inet [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | awk '{print $2}' | grep -vE '^(127\.|169\.254\.)' | head -n1)
     fi
     
     # 2. 获取 IPv6

@@ -76,7 +76,7 @@ function system_cleanup() {
 
     elif [ -f /etc/redhat-release ]; then
         echo -e "${BLUE}[1/2] 检测到 CentOS/RHEL 系统，开始深度清理...${NC}"
-        
+
         if command -v dnf >/dev/null 2>&1; then
             dnf clean all
             dnf autoremove -y
@@ -85,10 +85,19 @@ function system_cleanup() {
             package-cleanup --oldkernels --count=1 -y
             package-cleanup --leaves -y
         fi
-        
+
         journalctl --rotate
         journalctl --vacuum-time=1d
         journalctl --vacuum-size=50M
+
+    elif grep -qi alpine /etc/os-release 2>/dev/null; then
+        echo -e "${BLUE}[1/2] 检测到 Alpine 系统，开始清理...${NC}"
+
+        # 1. apk 缓存清理 (Alpine 无 autoremove 机制，孤立包由卸载时自动处理)
+        echo -e "${YELLOW}-> 正在清理 apk 缓存...${NC}"
+        apk cache clean 2>/dev/null || rm -rf /var/cache/apk/* 2>/dev/null
+
+        # 2. Alpine 无 journalctl，/var/log 旧日志由下方通用步骤清理
     fi
 
     # 通用清理步骤 (所有系统)

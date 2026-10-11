@@ -134,6 +134,8 @@ function manage_speedtest_cli() {
                         sudo yum remove -y speedtest-cli
                     elif command -v dnf >/dev/null 2>&1; then
                         sudo dnf remove -y speedtest-cli
+                    elif command -v apk >/dev/null 2>&1; then
+                        apk del speedtest-cli
                     else
                         echo -e "${RED}未检测到支持的包管理器。请手动卸载。${NC}"
                     fi

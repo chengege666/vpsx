@@ -17,8 +17,11 @@ function system_update() {
     elif command -v dnf >/dev/null 2>&1; then
         echo -e "${BLUE}检测到 Fedora/RHEL 8+ 系统，使用 dnf 进行更新...${NC}"
         sudo dnf update -y
+    elif command -v apk >/dev/null 2>&1; then
+        echo -e "${BLUE}检测到 Alpine 系统，使用 apk 进行更新...${NC}"
+        apk update && apk upgrade
     else
-        echo -e "${RED}未检测到支持的包管理器 (apt, yum, dnf)。请手动更新系统。${NC}"
+        echo -e "${RED}未检测到支持的包管理器 (apt, yum, dnf, apk)。请手动更新系统。${NC}"
     fi
     echo ""
     echo -e "${GREEN}系统更新完成。${NC}"

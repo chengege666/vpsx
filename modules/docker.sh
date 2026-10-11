@@ -16,6 +16,33 @@ else
     BOLD='\033[1m'
 fi
 
+# 服务管理辅助：兼容 systemd 与 OpenRC (Alpine)
+function _svc_docker_active() {
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl is-active --quiet docker >/dev/null 2>&1
+    else
+        rc-service docker status >/dev/null 2>&1
+    fi
+}
+
+function _svc_docker_action() {
+    # 参数: $1 = start|stop|restart
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl "$1" docker
+    else
+        rc-service docker "$1"
+    fi
+}
+
+function _svc_docker_enable() {
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl enable --now docker &> /dev/null
+    else
+        rc-update add docker default &> /dev/null
+        rc-service docker start &> /dev/null
+    fi
+}
+
 # --- 内部辅助函数 (不直接在菜单显示) ---
 
 # 环境检测：架构、虚拟化、网络区域
@@ -43,6 +70,8 @@ function _docker_fix_deps() {
             apt-get update -y >/dev/null 2>&1 && apt-get install -y "${missing[@]}" >/dev/null 2>&1
         elif command -v yum >/dev/null 2>&1; then
             yum install -y "${missing[@]}" >/dev/null 2>&1
+        elif command -v apk >/dev/null 2>&1; then
+            apk update >/dev/null 2>&1 && apk add "${missing[@]}" >/dev/null 2>&1
         fi
     fi
 }
@@ -60,6 +89,9 @@ function _docker_system_check_and_fix() {
             # 持久化加载
             if [ -d /etc/modules-load.d ]; then
                 echo "$mod" > "/etc/modules-load.d/docker-${mod}.conf"
+            else
+                # OpenRC (Alpine) 无 modules-load.d 机制，写入 /etc/modules
+                grep -qx "$mod" /etc/modules 2>/dev/null || echo "$mod" >> /etc/modules
             fi
         fi
     done
@@ -67,8 +99,10 @@ function _docker_system_check_and_fix() {
     # 2. 开启 IPv4 转发 (Docker 网络必需)
     if [ "$(sysctl -n net.ipv4.ip_forward 2>/dev/null)" != "1" ]; then
         # echo -e "  - 自动开启 IPv4 转发"
+        mkdir -p /etc/sysctl.d
         echo "net.ipv4.ip_forward=1" > /etc/sysctl.d/99-docker.conf
-        sysctl --system >/dev/null 2>&1
+        # BusyBox sysctl 不支持 --system，改为应用单个配置文件 (两者均支持 -p)
+        sysctl -p /etc/sysctl.d/99-docker.conf >/dev/null 2>&1
     fi
 
     # 3. 低内存自动 Swap 补救 (防止 OOM)
@@ -118,7 +152,7 @@ function check_docker_status() {
         [[ -n "$docker_version" ]] && docker_is_functional=true
     fi
 
-    if systemctl is-active --quiet docker >/dev/null 2>&1; then
+    if _svc_docker_active; then
         docker_service_active=true
     fi
 
@@ -134,7 +168,11 @@ function check_docker_status() {
         echo -e " ● 资源概况: ${BLUE}${running_count}${NC} 容器正在运行 | ${BLUE}${image_count}${NC} 本地镜像"
     elif $docker_is_functional && ! $docker_service_active; then
         echo -e " ● Docker 服务: [ ${YELLOW}已安装但未运行${NC} ]"
-        echo -e " ● 故障定位: 服务未启动，建议执行 [ ${CYAN}systemctl start docker${NC} ]"
+        if command -v systemctl >/dev/null 2>&1; then
+            echo -e " ● 故障定位: 服务未启动，建议执行 [ ${CYAN}systemctl start docker${NC} ]"
+        else
+            echo -e " ● 故障定位: 服务未启动，建议执行 [ ${CYAN}rc-service docker start${NC} ]"
+        fi
     else
         echo -e " ● Docker 服务: [ ${RED}未安装或环境异常${NC} ]"
         if $docker_command_found && ! $docker_is_functional; then
@@ -182,7 +220,12 @@ function install_update_docker_env() {
     echo -e "${BLUE}正在从 Docker 官方仓库安装...${NC}"
     echo ""
 
-    if ! (apt-get update -y && apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin); then
+    if command -v apk >/dev/null 2>&1; then
+        # Alpine: 使用 apk 官方仓库安装 (get.docker.com 官方脚本不支持 Alpine)
+        if ! (apk update && apk add docker docker-cli-compose); then
+            echo -e "${RED}apk 安装 Docker 失败，请确认已启用 community 软件源。${NC}"
+        fi
+    elif ! (apt-get update -y && apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin); then
         echo -e "${YELLOW}安装失败，正在尝试自动修复并重试...${NC}"
         _docker_fix_sources
         if ! (apt-get update -y && apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin); then
@@ -192,7 +235,7 @@ function install_update_docker_env() {
     fi
 
     if command -v docker &> /dev/null; then
-        systemctl enable --now docker &> /dev/null
+        _svc_docker_enable
         echo ""
         echo -e "${GREEN}Docker 安装/更新完成！${NC}"
     else
@@ -218,17 +261,27 @@ function fix_docker_iptables() {
     modprobe overlay 2>/dev/null || echo -e "${YELLOW}⚠️  overlay 模块加载失败（非必需）${NC}"
     modprobe br_netfilter 2>/dev/null || echo -e "${YELLOW}⚠️  br_netfilter 模块加载失败${NC}"
 
+    mkdir -p /etc/modules-load.d
     cat <<EOF > /etc/modules-load.d/docker-fix.conf
 overlay
 br_netfilter
 EOF
 
+    # OpenRC (Alpine) 无 modules-load.d 机制，写入 /etc/modules 持久化
+    if ! command -v systemctl >/dev/null 2>&1; then
+        for m in overlay br_netfilter; do
+            grep -qx "$m" /etc/modules 2>/dev/null || echo "$m" >> /etc/modules
+        done
+    fi
+
+    mkdir -p /etc/sysctl.d
     cat <<EOF > /etc/sysctl.d/docker-fix.conf
 net.bridge.bridge-nf-call-iptables  = 1
 net.bridge.bridge-nf-call-ip6tables = 1
 net.ipv4.ip_forward                 = 1
 EOF
-    sysctl --system >/dev/null 2>&1
+    # BusyBox sysctl 不支持 --system，改为应用单个配置文件 (两者均支持 -p)
+    sysctl -p /etc/sysctl.d/docker-fix.conf >/dev/null 2>&1
 
     if command -v update-alternatives &> /dev/null && [ -f /usr/sbin/iptables-legacy ]; then
         echo -e "${BLUE}正在切换 iptables 模式为 legacy...${NC}"
@@ -236,8 +289,8 @@ EOF
         update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy 2>/dev/null
     fi
 
-    systemctl restart docker
-    if systemctl is-active --quiet docker; then
+    _svc_docker_action restart
+    if _svc_docker_active; then
         echo -e "${GREEN}✅ 修复成功！Docker 已恢复运行。${NC}"
     else
         echo -e "${RED}❌ 修复失败，可能涉及内核组件缺失。${NC}"
@@ -247,26 +300,26 @@ EOF
 
 # 重启 Docker 服务
 function restart_docker_service() {
-    if ! command -v docker &> /dev/null || ! command -v systemctl &> /dev/null; then
+    if ! command -v docker &> /dev/null; then
         echo -e "${RED}❌ Docker 未安装，无法重启。${NC}"
         sleep 1
         return
     fi
     echo -e "${BLUE}正在重启 Docker 服务...${NC}"
-    systemctl restart docker && echo -e "${GREEN}Docker 服务重启成功。${NC}" || echo -e "${RED}重启失败！${NC}"
+    _svc_docker_action restart && echo -e "${GREEN}Docker 服务重启成功。${NC}" || echo -e "${RED}重启失败！${NC}"
     sleep 1
 }
 
 # 停止 Docker 服务
 function stop_docker_service() {
-    if ! command -v docker &> /dev/null || ! command -v systemctl &> /dev/null; then
+    if ! command -v docker &> /dev/null; then
         echo -e "${RED}❌ Docker 未安装。${NC}"
         sleep 1
         return
     fi
     read -p "确定要停止 Docker 服务吗？(y/N): " confirm
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
-        systemctl stop docker && echo -e "${GREEN}Docker 服务已成功停止。${NC}" || echo -e "${RED}停止失败！${NC}"
+        _svc_docker_action stop && echo -e "${GREEN}Docker 服务已成功停止。${NC}" || echo -e "${RED}停止失败！${NC}"
     else
         echo -e "${YELLOW}已取消${NC}"
     fi
@@ -281,7 +334,7 @@ function view_docker_global_status() {
     echo -e "${GREEN}        Docker 全局状态查看${NC}"
     echo -e "${CYAN}=========================================${NC}"
 
-    if ! systemctl is-active --quiet docker; then
+    if ! _svc_docker_active; then
         echo -e "${RED}错误: Docker 服务未运行。${NC}"; read -p "按任意键继续..."; return
     fi
 
@@ -456,14 +509,14 @@ function change_docker_source() {
             1)
                 echo -e "${BLUE}正在配置阿里云镜像源...${NC}"
                 jq '. + {"registry-mirrors": ["https://registry.cn-hangzhou.aliyuncs.com"]}' "$daemon_file" > "${daemon_file}.tmp" && mv "${daemon_file}.tmp" "$daemon_file"
-                systemctl restart docker
+                _svc_docker_action restart
                 echo -e "${GREEN}配置成功！${NC}"
                 read -p "按任意键继续..."
                 ;;
             2)
                 echo -e "${BLUE}正在配置腾讯云镜像源...${NC}"
                 jq '. + {"registry-mirrors": ["https://mirror.ccs.tencentyun.com"]}' "$daemon_file" > "${daemon_file}.tmp" && mv "${daemon_file}.tmp" "$daemon_file"
-                systemctl restart docker
+                _svc_docker_action restart
                 echo -e "${GREEN}配置成功！${NC}"
                 read -p "按任意键继续..."
                 ;;
@@ -507,7 +560,7 @@ function docker_ipv6_config() {
         echo -e "           ${GREEN}Docker IPv6 访问控制${NC}"
         echo -e "${CYAN}================================================${NC}"
 
-        if ! command -v docker &> /dev/null || ! systemctl is-active --quiet docker 2>/dev/null; then
+        if ! command -v docker &> /dev/null || ! _svc_docker_active; then
             echo -e "${RED}❌ Docker 服务未运行，请先启动 Docker。${NC}"
             echo -e "${CYAN}================================================${NC}"
             echo -e "  ${RED}0.${NC} 返回"
@@ -545,14 +598,14 @@ function docker_ipv6_config() {
 
                 echo -e "${BLUE}正在配置 IPv6，使用 CIDR: ${fixed_cidr}${NC}"
                 jq ".ipv6 = true | .\"fixed-cidr-v6\" = \"$fixed_cidr\"" "$daemon_file" > "${daemon_file}.tmp" && mv "${daemon_file}.tmp" "$daemon_file"
-                systemctl restart docker
+                _svc_docker_action restart
                 echo -e "${GREEN}IPv6 访问已开启。${NC}"
                 read -p "按任意键继续..."
                 ;;
             2)
                 echo -e "${BLUE}正在关闭 IPv6...${NC}"
                 jq 'del(.ipv6) | del(."fixed-cidr-v6")' "$daemon_file" > "${daemon_file}.tmp" && mv "${daemon_file}.tmp" "$daemon_file"
-                systemctl restart docker
+                _svc_docker_action restart
                 echo -e "${YELLOW}IPv6 访问已关闭。${NC}"
                 read -p "按任意键继续..."
                 ;;
@@ -583,19 +636,19 @@ function backup_migrate_restore_docker() {
                 local backup_dir="/opt/docker-backup"
                 mkdir -p "$backup_dir"
                 local backup_file="$backup_dir/docker_backup_$(date +%F_%H%M%S).tar.gz"
-                systemctl stop docker
+                _svc_docker_action stop
                 tar -czvf "$backup_file" /var/lib/docker
-                systemctl start docker
+                _svc_docker_action start
                 echo -e "${GREEN}备份完成: $backup_file${NC}"; sleep 2 ;;
             2) 
                 read -p "输入备份包完整路径: " b_path
                 if [[ -f "$b_path" ]]; then
                     read -p "警告：还原将清空当前所有 Docker 数据！确定继续？(y/N): " confirm
                     if [[ "$confirm" =~ ^[Yy]$ ]]; then
-                        systemctl stop docker
+                        _svc_docker_action stop
                         rm -rf /var/lib/docker/*
                         tar -xzvf "$b_path" -C /
-                        systemctl start docker
+                        _svc_docker_action start
                         echo -e "${GREEN}还原成功${NC}"
                     else
                         echo -e "${YELLOW}已取消还原操作${NC}"
@@ -629,9 +682,12 @@ function uninstall_docker() {
     if command -v systemctl &> /dev/null; then
         systemctl stop docker &> /dev/null
         systemctl disable docker &> /dev/null
+    elif command -v rc-service &> /dev/null; then
+        rc-service docker stop &> /dev/null
+        rc-update del docker default &> /dev/null
     fi
 
-    # 卸载 Docker 包（支持 apt/yum/dnf）
+    # 卸载 Docker 包（支持 apt/yum/dnf/apk）
     if command -v apt-get &> /dev/null; then
         apt-get purge -y docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-buildx-plugin &> /dev/null
         apt-get autoremove -y &> /dev/null
@@ -639,6 +695,8 @@ function uninstall_docker() {
         dnf remove -y docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-buildx-plugin &> /dev/null
     elif command -v yum &> /dev/null; then
         yum remove -y docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-buildx-plugin &> /dev/null
+    elif command -v apk &> /dev/null; then
+        apk del docker docker-cli-compose &> /dev/null
     fi
 
     # 删除数据、配置和 Compose 插件
@@ -842,6 +900,11 @@ function docker_volume_management() {
 # --- 自动修复 Docker 源配置 ---
 # 处理 Debian testing/unstable 及 Ubuntu 无官方 Docker 包的问题
 function _docker_fix_sources() {
+    # Alpine 使用 apk 官方仓库，无需配置 Docker apt 源
+    if grep -qi alpine /etc/os-release 2>/dev/null; then
+        return 0
+    fi
+
     local sources_file="/etc/apt/sources.list.d/docker.sources"
     local keyring_dir="/etc/apt/keyrings"
     local key_file="$keyring_dir/docker.asc"
