@@ -369,6 +369,16 @@ function ssl_certificate_management() {
                     read -p "按任意键继续..."
                     continue
                 fi
+                # 预检查: acme.sh 依赖 openssl 生成密钥, Alpine 最小镜像默认不带 openssl 命令
+                if ! command -v openssl &> /dev/null; then
+                    echo -e "${YELLOW}未检测到 openssl, 正在安装...${NC}"
+                    install_package openssl
+                    if ! command -v openssl &> /dev/null; then
+                        echo -e "${RED}openssl 安装失败, acme.sh 需要 openssl 生成证书, 已中止。${NC}"
+                        read -p "按任意键继续..."
+                        continue
+                    fi
+                fi
                 # 安装 acme.sh (中国大陆网络失败时可改用 gitee 镜像, 见 wiki/Install-in-China)
                 if curl https://get.acme.sh | sh; then
                     if [ -f ~/.acme.sh/acme.sh ]; then
