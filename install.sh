@@ -2,24 +2,8 @@
 
 # ====================================================
 #  vpsx 一键安装脚本
-#  支持系统: Ubuntu, Debian, CentOS, AlmaLinux, Rocky, Alpine
+#  支持系统: Ubuntu, Debian, CentOS, AlmaLinux, Rocky
 # ====================================================
-
-# Alpine 引导：无 bash 时以 sh 运行本段，先装 bash/git 再切换 bash 执行
-if [ -f /etc/os-release ] && grep -qi alpine /etc/os-release 2>/dev/null && [ -z "$BASH_VERSION" ]; then
-    if [ "$(id -u)" -ne 0 ]; then
-        echo "错误: 必须使用 root 权限运行此脚本！"
-        exit 1
-    fi
-    echo "检测到 Alpine 系统，正在安装 bash 与 git..."
-    apk update && apk add --no-cache bash git
-    if [ $? -ne 0 ]; then
-        echo "错误: bash/git 安装失败，请检查网络连接或软件源。"
-        exit 1
-    fi
-    echo "安装完成，切换 bash 重新执行脚本..."
-    exec bash "$0"
-fi
 
 # 颜色定义
 RED='\033[0;31m'
@@ -57,8 +41,6 @@ ensure_git() {
         yum install -y git
     elif command -v dnf >/dev/null 2>&1; then
         dnf install -y git
-    elif command -v apk >/dev/null 2>&1; then
-        apk update && apk add --no-cache git
     else
         echo -e "${RED}错误: 无法识别包管理器，请手动安装 git。${NC}"
         exit 1

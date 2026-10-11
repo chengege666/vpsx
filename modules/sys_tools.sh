@@ -179,8 +179,6 @@ function open_specified_port() {
 
 # Fail2ban 配置管理
 function fail2ban_management() {
-    # Alpine 无 systemd，fail2ban 服务管理方式不同，暂不支持
-    if alpine_block; then read -p "按任意键返回..."; return; fi
     while true; do
         clear
         echo -e "${CYAN}=========================================${NC}"
@@ -369,16 +367,6 @@ function ssl_certificate_management() {
                     read -p "按任意键继续..."
                     continue
                 fi
-                # 预检查: acme.sh 依赖 openssl 生成密钥, Alpine 最小镜像默认不带 openssl 命令
-                if ! command -v openssl &> /dev/null; then
-                    echo -e "${YELLOW}未检测到 openssl, 正在安装...${NC}"
-                    install_package openssl
-                    if ! command -v openssl &> /dev/null; then
-                        echo -e "${RED}openssl 安装失败, acme.sh 需要 openssl 生成证书, 已中止。${NC}"
-                        read -p "按任意键继续..."
-                        continue
-                    fi
-                fi
                 # 安装 acme.sh (中国大陆网络失败时可改用 gitee 镜像, 见 wiki/Install-in-China)
                 if curl https://get.acme.sh | sh; then
                     if [ -f ~/.acme.sh/acme.sh ]; then
@@ -508,11 +496,6 @@ function process_management() {
                 read -p "按任意键继续..."
                 ;;
             3)
-                # Alpine 无 systemd，服务管理暂不支持
-                if alpine_block; then
-                    read -p "按任意键继续..."
-                    continue
-                fi
                 read -p "请输入服务名称 (例如 nginx, fail2ban): " service_name
                 echo -e "请选择操作: ${GREEN}1.启动 2.停止 3.重启 4.状态 5.启用自启 6.禁用自启${NC}"
                 read -p "操作选择: " svc_op
@@ -534,7 +517,7 @@ function process_management() {
                     pstree -p
                 else
                     echo -e "${RED}未安装 pstree，正在安装...${NC}"
-                    apt install -y psmisc || yum install -y psmisc || apk add psmisc
+                    apt install -y psmisc || yum install -y psmisc
                     pstree -p
                 fi
                 read -p "按任意键继续..."
@@ -632,14 +615,7 @@ function adjust_system_timezone() {
     echo -e "${CYAN}=========================================${NC}"
     echo -e "${GREEN}          系统时区调整${NC}"
     echo -e "${CYAN}=========================================${NC}"
-    if command -v timedatectl &> /dev/null; then
-        echo -e "当前时区: ${YELLOW}$(timedatectl show --property=Timezone --value)${NC}"
-    else
-        # Alpine 等无 systemd 环境通过 /etc/localtime 软链判断
-        local cur_tz=$(readlink /etc/localtime 2>/dev/null | sed 's|.*/zoneinfo/||')
-        [ -z "$cur_tz" ] && cur_tz="UTC (未设置)"
-        echo -e "当前时区: ${YELLOW}${cur_tz}${NC}"
-    fi
+    echo -e "当前时区: ${YELLOW}$(timedatectl show --property=Timezone --value)${NC}"
     echo ""
     echo -e "请选择一个常用时区或手动输入:"
     echo -e " ${GREEN}1.${NC} Asia/Shanghai (亚洲/上海)"
@@ -670,20 +646,7 @@ function adjust_system_timezone() {
     esac
 
     echo -e "${YELLOW}正在设置时区为 $new_timezone...${NC}"
-    if command -v timedatectl &> /dev/null; then
-        timedatectl set-timezone $new_timezone
-    else
-        # Alpine 等无 systemd 环境: 安装 tzdata 后写 /etc/localtime 软链
-        if [ ! -f "/usr/share/zoneinfo/$new_timezone" ]; then
-            install_package tzdata
-        fi
-        if [ ! -f "/usr/share/zoneinfo/$new_timezone" ]; then
-            echo -e "${RED}无效的时区名称: $new_timezone。${NC}"
-            read -p "按任意键继续..."
-            return
-        fi
-        ln -sf "/usr/share/zoneinfo/$new_timezone" /etc/localtime
-    fi
+    timedatectl set-timezone $new_timezone
 
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}时区已成功设置为 $new_timezone。${NC}"
@@ -1485,8 +1448,6 @@ function change_hostname() {
 }
 
 function configure_chinese_locale() {
-    # Alpine 无 locale-gen，中文环境配置方式不同，暂不支持
-    if alpine_block; then read -p "按任意键返回..."; return; fi
     while true; do
         clear
         echo -e "${CYAN}=========================================${NC}"
@@ -1518,8 +1479,6 @@ function configure_chinese_locale() {
 }
 
 function install_chinese_locale() {
-    # Alpine 无 locale-gen，暂不支持
-    if alpine_block; then read -p "按任意键返回..."; return; fi
     clear
     echo -e "${CYAN}=========================================${NC}"
     echo -e "${GREEN}          安装中文语言支持${NC}"
@@ -1581,8 +1540,6 @@ function install_chinese_locale() {
 }
 
 function restore_chinese_locale() {
-    # Alpine 无 locale-gen，暂不支持
-    if alpine_block; then read -p "按任意键返回..."; return; fi
     clear
     echo -e "${CYAN}=========================================${NC}"
     echo -e "${GREEN}          还原语言支持 (恢复英文)${NC}"
@@ -1711,8 +1668,7 @@ function restore_tcp_defaults() {
 
     if [ -f /etc/sysctl.d/99-vpsx-tcp-tuning.conf ]; then
         rm -f /etc/sysctl.d/99-vpsx-tcp-tuning.conf
-        # BusyBox sysctl 不支持 --system，失败时回退应用主配置
-        sysctl --system &> /dev/null || sysctl -p &> /dev/null
+        sysctl --system &> /dev/null
         echo -e "${GREEN}已移除 VPSX 优化配置文件。${NC}"
     else
         echo -e "${YELLOW}未发现优化配置文件，系统可能处于默认状态。${NC}"
@@ -2966,8 +2922,6 @@ function stop_all_cpu_limits() {
 
 # 整机 CPU 限制（systemd CPUQuota，对 systemd 管理的所有服务生效）
 function limit_cpu_whole_system() {
-    # 依赖 systemd CPUQuota，Alpine 暂不支持
-    if alpine_block; then read -p "按任意键返回..."; return; fi
     if ! command -v systemctl &> /dev/null; then
         echo -e "${RED}未检测到 systemctl（系统未使用 systemd），无法设置整机 CPU 限制。${NC}"
         read -p "按任意键继续..."
@@ -2997,8 +2951,6 @@ function limit_cpu_whole_system() {
 
 # 取消整机 CPU 限制
 function remove_cpu_whole_limit() {
-    # 依赖 systemd CPUQuota，Alpine 暂不支持
-    if alpine_block; then read -p "按任意键返回..."; return; fi
     if ! command -v systemctl &> /dev/null; then
         echo -e "${RED}未检测到 systemctl，无法操作。${NC}"
         read -p "按任意键继续..."

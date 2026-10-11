@@ -28,7 +28,7 @@ function system_cleanup() {
     fi
 
     # 记录初始磁盘空间
-    OLD_DISK_SPACE=$(df -k / | tail -1 | awk '{print $(NF-2)}')
+    OLD_DISK_SPACE=$(df / | tail -1 | awk '{print $4}')
 
     if [ -f /etc/debian_version ]; then
         echo -e "${BLUE}[1/2] 检测到 Debian/Ubuntu 系统，开始清理...${NC}"
@@ -76,7 +76,7 @@ function system_cleanup() {
 
     elif [ -f /etc/redhat-release ]; then
         echo -e "${BLUE}[1/2] 检测到 CentOS/RHEL 系统，开始深度清理...${NC}"
-
+        
         if command -v dnf >/dev/null 2>&1; then
             dnf clean all
             dnf autoremove -y
@@ -85,19 +85,10 @@ function system_cleanup() {
             package-cleanup --oldkernels --count=1 -y
             package-cleanup --leaves -y
         fi
-
+        
         journalctl --rotate
         journalctl --vacuum-time=1d
         journalctl --vacuum-size=50M
-
-    elif grep -qi alpine /etc/os-release 2>/dev/null; then
-        echo -e "${BLUE}[1/2] 检测到 Alpine 系统，开始清理...${NC}"
-
-        # 1. apk 缓存清理 (Alpine 无 autoremove 机制，孤立包由卸载时自动处理)
-        echo -e "${YELLOW}-> 正在清理 apk 缓存...${NC}"
-        apk cache clean 2>/dev/null || rm -rf /var/cache/apk/* 2>/dev/null
-
-        # 2. Alpine 无 journalctl，/var/log 旧日志由下方通用步骤清理
     fi
 
     # 通用清理步骤 (所有系统)
@@ -138,16 +129,10 @@ function system_cleanup() {
 
     # 5. 释放系统内存缓存 (Buffer/Cache)
     echo -e "${YELLOW}-> 释放系统内存缓存...${NC}"
-    sync
-    # 容器环境 (如 Alpine LXC) 的 /proc/sys 为只读，写入会失败，需跳过
-    if (echo 3 > /proc/sys/vm/drop_caches) 2>/dev/null; then
-        echo -e "${GREEN}   内存缓存已释放。${NC}"
-    else
-        echo -e "${CYAN}   当前环境限制 (只读 /proc)，已跳过内存缓存释放。${NC}"
-    fi
+    sync && echo 3 > /proc/sys/vm/drop_caches
 
     # 结果统计
-    NEW_DISK_SPACE=$(df -k / | tail -1 | awk '{print $(NF-2)}')
+    NEW_DISK_SPACE=$(df / | tail -1 | awk '{print $4}')
     FREED_SPACE=$(( (NEW_DISK_SPACE - OLD_DISK_SPACE) / 1024 ))
 
     echo ""
@@ -158,6 +143,6 @@ function system_cleanup() {
     else
         echo -e "${GREEN}磁盘已处于较好状态。${NC}"
     fi
-    df -h / | tail -1 | awk '{print "当前根分区可用空间: " $(NF-2)}'
+    df -h / | tail -1 | awk '{print "当前根分区可用空间: " $4}'
     echo -e "${GREEN}==========================================${NC}"
 }

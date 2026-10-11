@@ -16,13 +16,11 @@ function set_script_alias() {
         return 1
     fi
 
-    # 检查当前 Shell (Alpine 登录 shell 为 ash，读取 ~/.profile 而非 ~/.bashrc)
+    # 检查当前 Shell
     local current_shell=$(basename "$SHELL")
     local rc_file=""
-
-    if grep -qi alpine /etc/os-release 2>/dev/null; then
-        rc_file="$HOME/.profile"
-    elif [ "$current_shell" == "bash" ]; then
+    
+    if [ "$current_shell" == "bash" ]; then
         rc_file="$HOME/.bashrc"
     elif [ "$current_shell" == "zsh" ]; then
         rc_file="$HOME/.zshrc"
@@ -31,9 +29,7 @@ function set_script_alias() {
     fi
 
     # 检查是否已经存在该别名且是唯一的指向
-    local existing_count
-    existing_count=$(grep -c "alias .*='bash $script_path'" "$rc_file" 2>/dev/null)
-    [ -z "$existing_count" ] && existing_count=0
+    local existing_count=$(grep -c "alias .*='bash $script_path'" "$rc_file" 2>/dev/null || echo 0)
     if [ "$existing_count" -eq 1 ] && grep -q "alias ${alias_name}='bash $script_path'" "$rc_file"; then
         [ "$silent" != "true" ] && echo -e "${GREEN}快捷键 ${YELLOW}${alias_name}${GREEN} 已配置且是唯一的。${NC}"
         return 0
@@ -59,18 +55,6 @@ function set_script_alias() {
 
 # 自动配置默认快捷键 k
 function auto_set_default_shortcut() {
-    # 已存在指向本脚本的快捷键时不重复配置，避免覆盖自定义键
-    local script_path
-    script_path=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/vpsx.sh
-    local rc_file=""
-    if grep -qi alpine /etc/os-release 2>/dev/null; then
-        rc_file="$HOME/.profile"
-    else
-        rc_file="$HOME/.bashrc"
-    fi
-    if grep -q "alias .*='bash $script_path'" "$rc_file" 2>/dev/null; then
-        return 0
-    fi
     set_script_alias "k" "true"
 }
 
@@ -81,15 +65,8 @@ function clear_all_shortcuts() {
     
     local current_shell=$(basename "$SHELL")
     local rc_file=""
-    # Alpine 登录 shell 为 ash，读取 ~/.profile
-    if grep -qi alpine /etc/os-release 2>/dev/null; then
-        rc_file="$HOME/.profile"
-    elif [ "$current_shell" == "zsh" ]; then
-        rc_file="$HOME/.zshrc"
-    else
-        rc_file="$HOME/.bashrc"
-    fi
-
+    [ "$current_shell" == "zsh" ] && rc_file="$HOME/.zshrc" || rc_file="$HOME/.bashrc"
+    
     if [ -f "$rc_file" ]; then
         echo -e "正在清除所有指向该脚本的快捷键..."
         # 匹配任何指向该脚本路径的 alias 并删除 (使用 | 作为 sed 分隔符)
@@ -108,15 +85,8 @@ function get_current_shortcuts() {
     
     local current_shell=$(basename "$SHELL")
     local rc_file=""
-    # Alpine 登录 shell 为 ash，读取 ~/.profile
-    if grep -qi alpine /etc/os-release 2>/dev/null; then
-        rc_file="$HOME/.profile"
-    elif [ "$current_shell" == "zsh" ]; then
-        rc_file="$HOME/.zshrc"
-    else
-        rc_file="$HOME/.bashrc"
-    fi
-
+    [ "$current_shell" == "zsh" ] && rc_file="$HOME/.zshrc" || rc_file="$HOME/.bashrc"
+    
     if [ -f "$rc_file" ]; then
         local shortcuts=$(grep "alias .*='bash $script_path'" "$rc_file" | cut -d' ' -f2 | cut -d'=' -f1)
         if [ -n "$shortcuts" ]; then
