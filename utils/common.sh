@@ -67,3 +67,12 @@ function get_access_ips() {
     
     echo "$ipv4|$ipv6"
 }
+
+# Alpine 拦截辅助：Alpine (OpenRC) 下返回 0 并输出提示，用于拦截依赖 systemd 的功能
+function alpine_block() {
+    if grep -qi alpine /etc/os-release 2>/dev/null; then
+        echo -e "${RED}此功能依赖 systemd，Alpine 系统暂不支持。${NC}"
+        return 0
+    fi
+    return 1
+}

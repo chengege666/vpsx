@@ -4,6 +4,16 @@
 
 # 应用中心菜单
 function app_center_menu() {
+    # Alpine 提示：大部分应用以 systemd 服务方式安装运行
+    if grep -qi alpine /etc/os-release 2>/dev/null; then
+        clear
+        echo -e "${YELLOW}提示: 当前为 Alpine 系统，应用中心大部分应用依赖 systemd 服务，${NC}"
+        echo -e "${YELLOW}安装/运行可能失败 (仅 Docker 类应用可用)。${NC}"
+        read -p "是否仍要继续？(y/N): " alpine_app_confirm
+        if [[ ! "$alpine_app_confirm" =~ ^[yY]$ ]]; then
+            return
+        fi
+    fi
     while true; do
         clear
         

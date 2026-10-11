@@ -210,6 +210,8 @@ function uninstall_htop() {
                 pacman -R --noconfirm htop
             elif [[ "$package_manager" == "zypper" ]]; then
                 zypper remove -y htop
+            elif [[ "$package_manager" == "apk" ]]; then
+                apk del htop
             fi
             
             if [ $? -eq 0 ]; then
@@ -280,6 +282,8 @@ function uninstall_wget() {
                 pacman -R --noconfirm wget
             elif [[ "$package_manager" == "zypper" ]]; then
                 zypper remove -y wget
+            elif [[ "$package_manager" == "apk" ]]; then
+                apk del wget
             fi
             
             if [ $? -eq 0 ]; then
@@ -347,6 +351,8 @@ function uninstall_curl() {
                 pacman -R --noconfirm curl
             elif [[ "$package_manager" == "zypper" ]]; then
                 zypper remove -y curl
+            elif [[ "$package_manager" == "apk" ]]; then
+                apk del curl
             fi
             
             if [ $? -eq 0 ]; then
@@ -413,6 +419,8 @@ function uninstall_git() {
                 pacman -R --noconfirm git
             elif [[ "$package_manager" == "zypper" ]]; then
                 zypper remove -y git
+            elif [[ "$package_manager" == "apk" ]]; then
+                apk del git
             fi
             
             if [ $? -eq 0 ]; then
@@ -480,6 +488,8 @@ function uninstall_bzip2() {
                 pacman -R --noconfirm bzip2
             elif [[ "$package_manager" == "zypper" ]]; then
                 zypper remove -y bzip2
+            elif [[ "$package_manager" == "apk" ]]; then
+                apk del bzip2
             fi
             
             if [ $? -eq 0 ]; then
@@ -551,6 +561,8 @@ function uninstall_sudo() {
             pacman -R --noconfirm sudo
         elif [[ "$package_manager" == "zypper" ]]; then
             zypper remove -y sudo
+        elif [[ "$package_manager" == "apk" ]]; then
+            apk del sudo
         fi
         
         if [ $? -eq 0 ]; then
@@ -660,6 +672,8 @@ function uninstall_dig() {
                     pacman -R --noconfirm "$dig_package"
                 elif [[ "$package_manager" == "zypper" ]]; then
                     zypper remove -y "$dig_package"
+                elif [[ "$package_manager" == "apk" ]]; then
+                    apk del "$dig_package"
                 fi
             fi
             
@@ -813,6 +827,9 @@ function batch_uninstall() {
                     zypper)
                         zypper remove -y "$tool"
                         ;;
+                    apk)
+                        apk del "$tool"
+                        ;;
                 esac
                 
                 if [ $? -eq 0 ]; then
@@ -876,6 +893,8 @@ function install_bzip2() {
         pacman -S --noconfirm bzip2
     elif [[ "$package_manager" == "zypper" ]]; then
         zypper install -y bzip2
+    elif [[ "$package_manager" == "apk" ]]; then
+        apk add bzip2
     else
         echo -e "${RED}无法识别的包管理器，请手动安装 bzip2${NC}"
         return 1
@@ -924,6 +943,8 @@ function install_sudo() {
         pacman -S --noconfirm sudo
     elif [[ "$package_manager" == "zypper" ]]; then
         zypper install -y sudo
+    elif [[ "$package_manager" == "apk" ]]; then
+        apk add sudo
     else
         echo -e "${RED}无法识别的包管理器，请手动安装 sudo${NC}"
         return 1
@@ -985,6 +1006,8 @@ if ! declare -f install_package >/dev/null; then
             pacman -S --noconfirm "$package_name"
         elif [[ "$package_manager" == "zypper" ]]; then
             zypper install -y "$package_name"
+        elif [[ "$package_manager" == "apk" ]]; then
+            apk add "$package_name"
         else
             echo -e "${RED}无法识别的包管理器，请手动安装 $package_name${NC}"
             return 1
@@ -1032,6 +1055,8 @@ if [ -z "$package_manager" ]; then
         package_manager="pacman"
     elif command -v zypper &> /dev/null; then
         package_manager="zypper"
+    elif command -v apk &> /dev/null; then
+        package_manager="apk"
     else
         package_manager="unknown"
     fi

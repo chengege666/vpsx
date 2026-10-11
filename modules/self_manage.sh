@@ -81,6 +81,8 @@ function update_script() {
                 apt update && apt install -y git
             elif command -v yum >/dev/null 2>&1; then
                 yum install -y git
+            elif command -v apk >/dev/null 2>&1; then
+                apk update && apk add --no-cache git
             fi
         fi
         
@@ -115,6 +117,8 @@ function update_script() {
                 apt update && apt install -y wget
             elif command -v yum >/dev/null 2>&1; then
                 yum install -y wget
+            elif command -v apk >/dev/null 2>&1; then
+                apk update && apk add --no-cache wget
             fi
         fi
 

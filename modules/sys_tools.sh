@@ -179,6 +179,8 @@ function open_specified_port() {
 
 # Fail2ban 配置管理
 function fail2ban_management() {
+    # Alpine 无 systemd，fail2ban 服务管理方式不同，暂不支持
+    if alpine_block; then read -p "按任意键返回..."; return; fi
     while true; do
         clear
         echo -e "${CYAN}=========================================${NC}"
@@ -496,6 +498,11 @@ function process_management() {
                 read -p "按任意键继续..."
                 ;;
             3)
+                # Alpine 无 systemd，服务管理暂不支持
+                if alpine_block; then
+                    read -p "按任意键继续..."
+                    continue
+                fi
                 read -p "请输入服务名称 (例如 nginx, fail2ban): " service_name
                 echo -e "请选择操作: ${GREEN}1.启动 2.停止 3.重启 4.状态 5.启用自启 6.禁用自启${NC}"
                 read -p "操作选择: " svc_op
@@ -517,7 +524,7 @@ function process_management() {
                     pstree -p
                 else
                     echo -e "${RED}未安装 pstree，正在安装...${NC}"
-                    apt install -y psmisc || yum install -y psmisc
+                    apt install -y psmisc || yum install -y psmisc || apk add psmisc
                     pstree -p
                 fi
                 read -p "按任意键继续..."
@@ -1448,6 +1455,8 @@ function change_hostname() {
 }
 
 function configure_chinese_locale() {
+    # Alpine 无 locale-gen，中文环境配置方式不同，暂不支持
+    if alpine_block; then read -p "按任意键返回..."; return; fi
     while true; do
         clear
         echo -e "${CYAN}=========================================${NC}"
@@ -1479,6 +1488,8 @@ function configure_chinese_locale() {
 }
 
 function install_chinese_locale() {
+    # Alpine 无 locale-gen，暂不支持
+    if alpine_block; then read -p "按任意键返回..."; return; fi
     clear
     echo -e "${CYAN}=========================================${NC}"
     echo -e "${GREEN}          安装中文语言支持${NC}"
@@ -1540,6 +1551,8 @@ function install_chinese_locale() {
 }
 
 function restore_chinese_locale() {
+    # Alpine 无 locale-gen，暂不支持
+    if alpine_block; then read -p "按任意键返回..."; return; fi
     clear
     echo -e "${CYAN}=========================================${NC}"
     echo -e "${GREEN}          还原语言支持 (恢复英文)${NC}"
@@ -1668,7 +1681,8 @@ function restore_tcp_defaults() {
 
     if [ -f /etc/sysctl.d/99-vpsx-tcp-tuning.conf ]; then
         rm -f /etc/sysctl.d/99-vpsx-tcp-tuning.conf
-        sysctl --system &> /dev/null
+        # BusyBox sysctl 不支持 --system，失败时回退应用主配置
+        sysctl --system &> /dev/null || sysctl -p &> /dev/null
         echo -e "${GREEN}已移除 VPSX 优化配置文件。${NC}"
     else
         echo -e "${YELLOW}未发现优化配置文件，系统可能处于默认状态。${NC}"
@@ -2922,6 +2936,8 @@ function stop_all_cpu_limits() {
 
 # 整机 CPU 限制（systemd CPUQuota，对 systemd 管理的所有服务生效）
 function limit_cpu_whole_system() {
+    # 依赖 systemd CPUQuota，Alpine 暂不支持
+    if alpine_block; then read -p "按任意键返回..."; return; fi
     if ! command -v systemctl &> /dev/null; then
         echo -e "${RED}未检测到 systemctl（系统未使用 systemd），无法设置整机 CPU 限制。${NC}"
         read -p "按任意键继续..."
@@ -2951,6 +2967,8 @@ function limit_cpu_whole_system() {
 
 # 取消整机 CPU 限制
 function remove_cpu_whole_limit() {
+    # 依赖 systemd CPUQuota，Alpine 暂不支持
+    if alpine_block; then read -p "按任意键返回..."; return; fi
     if ! command -v systemctl &> /dev/null; then
         echo -e "${RED}未检测到 systemctl，无法操作。${NC}"
         read -p "按任意键继续..."
