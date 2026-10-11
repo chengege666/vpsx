@@ -21,7 +21,8 @@ install_package() {
             return 1
         fi
         
-        if command -v "$pkg" >/dev/null 2>&1; then
+        # 安装命令执行成功即视为成功（部分包无可执行文件，如 tzdata，command -v 会误判失败）
+        if [ $? -eq 0 ] || command -v "$pkg" >/dev/null 2>&1; then
             echo -e "${GREEN}[成功]${NC} $pkg 安装完成。"
         else
             echo -e "${RED}[失败]${NC} $pkg 安装失败，请检查网络或包源。"

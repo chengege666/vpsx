@@ -664,7 +664,9 @@ function adjust_system_timezone() {
         timedatectl set-timezone $new_timezone
     else
         # Alpine 等无 systemd 环境: 安装 tzdata 后写 /etc/localtime 软链
-        install_package tzdata
+        if [ ! -f "/usr/share/zoneinfo/$new_timezone" ]; then
+            install_package tzdata
+        fi
         if [ ! -f "/usr/share/zoneinfo/$new_timezone" ]; then
             echo -e "${RED}无效的时区名称: $new_timezone。${NC}"
             read -p "按任意键继续..."
