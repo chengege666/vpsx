@@ -622,7 +622,14 @@ function adjust_system_timezone() {
     echo -e "${CYAN}=========================================${NC}"
     echo -e "${GREEN}          系统时区调整${NC}"
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "当前时区: ${YELLOW}$(timedatectl show --property=Timezone --value)${NC}"
+    if command -v timedatectl &> /dev/null; then
+        echo -e "当前时区: ${YELLOW}$(timedatectl show --property=Timezone --value)${NC}"
+    else
+        # Alpine 等无 systemd 环境通过 /etc/localtime 软链判断
+        local cur_tz=$(readlink /etc/localtime 2>/dev/null | sed 's|.*/zoneinfo/||')
+        [ -z "$cur_tz" ] && cur_tz="UTC (未设置)"
+        echo -e "当前时区: ${YELLOW}${cur_tz}${NC}"
+    fi
     echo ""
     echo -e "请选择一个常用时区或手动输入:"
     echo -e " ${GREEN}1.${NC} Asia/Shanghai (亚洲/上海)"
@@ -653,7 +660,18 @@ function adjust_system_timezone() {
     esac
 
     echo -e "${YELLOW}正在设置时区为 $new_timezone...${NC}"
-    timedatectl set-timezone $new_timezone
+    if command -v timedatectl &> /dev/null; then
+        timedatectl set-timezone $new_timezone
+    else
+        # Alpine 等无 systemd 环境: 安装 tzdata 后写 /etc/localtime 软链
+        install_package tzdata
+        if [ ! -f "/usr/share/zoneinfo/$new_timezone" ]; then
+            echo -e "${RED}无效的时区名称: $new_timezone。${NC}"
+            read -p "按任意键继续..."
+            return
+        fi
+        ln -sf "/usr/share/zoneinfo/$new_timezone" /etc/localtime
+    fi
 
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}时区已成功设置为 $new_timezone。${NC}"
