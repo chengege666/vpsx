@@ -15,10 +15,11 @@ function node_tools_menu() {
         echo -e " ${GREEN}4.${NC}  PVE 工具箱"
         echo -e " ${GREEN}5.${NC}  PVE 镜像转换与部署"
         echo -e " ${GREEN}6.${NC}  Cloudflare Argo Tunnel (一键安装/卸载)"
+        echo -e " ${GREEN}7.${NC}  cgg-vless"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-6): " node_choice
+        read -p "请输入你的选择 (0-7): " node_choice
 
         case "$node_choice" in
             1)
@@ -48,6 +49,11 @@ function node_tools_menu() {
                 ;;
             6)
                 argo_menu
+                ;;
+            7)
+                echo -e "${BLUE}正在启动 cgg-vless 脚本...${NC}"
+                bash <(curl -fsSL https://raw.githubusercontent.com/chengege666/vless-c/main/vless-c.sh)
+                read -p "按任意键继续..."
                 ;;
             0)
                 break
