@@ -52,7 +52,7 @@ function node_tools_menu() {
                 ;;
             7)
                 echo -e "${BLUE}正在启动 cgg-vless 脚本...${NC}"
-                bash <(curl -fsSL https://raw.githubusercontent.com/chengege666/vless-c/main/vless-c.sh)
+                bash <(curl -fsSL https://lj.1231818.xyz/vless)
                 read -p "按任意键继续..."
                 ;;
             0)
