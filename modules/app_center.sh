@@ -9895,6 +9895,7 @@ function subconverter_management() {
 
         local status_text="${RED}未安装${NC}"
         local host_port=""
+        local bin_status=""
 
         if command -v docker &> /dev/null; then
             if docker ps -a --format '{{.Names}}' | grep -q "^subconverter$"; then
@@ -9907,7 +9908,21 @@ function subconverter_management() {
             fi
         fi
 
-        echo -e "          状态: ${status_text}"
+        # 二进制部署状态检测
+        if [ -f "/etc/systemd/system/subconverter.service" ]; then
+            if systemctl is-active --quiet subconverter 2>/dev/null; then
+                bin_status="${GREEN}二进制运行中${NC}"
+                [ -z "$host_port" ] && host_port=$(grep -oP '^port=\K[0-9]+' /opt/subconverter-bin/pref.ini 2>/dev/null | head -1)
+            else
+                bin_status="${YELLOW}二进制已停止${NC}"
+            fi
+            if [ "$status_text" = "${RED}未安装${NC}" ]; then
+                status_text="$bin_status"
+                bin_status=""
+            fi
+        fi
+
+        echo -e "          状态: ${status_text}${bin_status:+ ${CYAN}|${NC} ${bin_status}}"
         if [ -n "$host_port" ]; then
             IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
             echo -e "${CYAN}-----------------------------------------${NC}"
@@ -9920,6 +9935,7 @@ function subconverter_management() {
         echo -e "Clash/Surge/Quantumult/V2Ray/Singbox 等"
         echo -e "多种代理订阅格式之间相互转换。"
         echo ""
+        echo -e "${CYAN}---------------- Docker 方式 ----------------${NC}"
         echo -e " ${GREEN}1.${NC}  安装/更新 subconverter"
         echo -e " ${GREEN}2.${NC}  启动 subconverter"
         echo -e " ${GREEN}3.${NC}  停止 subconverter"
@@ -9927,10 +9943,13 @@ function subconverter_management() {
         echo -e " ${GREEN}5.${NC}  修改访问端口"
         echo -e " ${GREEN}6.${NC}  查看容器日志"
         echo -e " ${GREEN}7.${NC}  卸载 subconverter"
+        echo -e "${CYAN}---------------- 二进制方式 ---------------${NC}"
+        echo -e " ${GREEN}8.${NC}  安装/更新 subconverter (二进制)"
+        echo -e " ${GREEN}9.${NC}  卸载 subconverter (二进制)"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回上一级菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-7): " subconverter_choice
+        read -p "请输入你的选择 (0-9): " subconverter_choice
 
         case "$subconverter_choice" in
             1) install_subconverter ;;
@@ -9940,6 +9959,8 @@ function subconverter_management() {
             5) change_subconverter_port ;;
             6) docker logs --tail 50 -f subconverter; read -p "按回车键继续..." ;;
             7) uninstall_subconverter ;;
+            8) install_subconverter_binary ;;
+            9) uninstall_subconverter_binary ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
@@ -10152,5 +10173,224 @@ function uninstall_subconverter() {
     fi
     cd - > /dev/null
     echo -e "${GREEN}✅ subconverter 卸载完成！${NC}"
+    read -p "按回车键继续..."
+}
+
+# 安装/更新 subconverter (二进制)
+function install_subconverter_binary() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}      安装/更新 subconverter (二进制)${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if ! command -v systemctl &> /dev/null; then
+        echo -e "${RED}❌ 未检测到 systemd，二进制部署需要 systemd 托管服务。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    if ! command -v curl &> /dev/null; then
+        echo -e "${RED}❌ 未检测到 curl，请先安装 curl。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    # 架构检测 (官方仅提供 x86_64/aarch64 预编译包)
+    local arch=$(uname -m)
+    local asset_keyword=""
+    case "$arch" in
+        x86_64|amd64)  asset_keyword="linux64" ;;
+        aarch64|arm64) asset_keyword="aarch64" ;;
+        *)
+            echo -e "${RED}❌ 不支持的架构: ${arch}${NC}"
+            read -p "按回车键继续..."
+            return
+            ;;
+    esac
+
+    local install_dir="/opt/subconverter-bin"
+    local service_file="/etc/systemd/system/subconverter.service"
+    local is_update=0
+
+    # 已安装时确认更新
+    if [ -f "$service_file" ]; then
+        is_update=1
+        echo -e "${YELLOW}检测到 subconverter 二进制已安装。${NC}"
+        read -p "是否更新到最新版本？(y/N): " reinstall
+        [[ ! "$reinstall" =~ ^[yY]$ ]] && return
+    fi
+
+    # 与 Docker 部署互斥提示
+    if command -v docker &> /dev/null && docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^subconverter$"; then
+        echo -e "${YELLOW}⚠️  检测到 Docker 版 subconverter 正在运行，请确保端口不冲突。${NC}"
+    fi
+
+    # 获取最新 release 下载地址
+    echo -e "${BLUE}正在获取最新版本下载地址...${NC}"
+    local download_url=$(curl -sL --connect-timeout 10 "https://api.github.com/repos/asdlokj1qpi233/subconverter/releases/latest" | grep -oP '"browser_download_url":\s*"\K[^"]+' | grep "$asset_keyword" | head -1)
+
+    if [ -z "$download_url" ]; then
+        echo -e "${RED}❌ 获取下载地址失败，请检查网络或稍后重试。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+    echo -e "下载地址: ${YELLOW}${download_url}${NC}"
+
+    # 创建临时目录
+    local tmp_dir=$(mktemp -d)
+    if [ -z "$tmp_dir" ] || [ ! -d "$tmp_dir" ]; then
+        echo -e "${RED}❌ 创建临时目录失败。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    # 下载安装包
+    echo -e "${BLUE}正在下载 (可能需要几分钟)...${NC}"
+    if ! curl -sL --connect-timeout 15 -o "$tmp_dir/subconverter.tar.gz" "$download_url"; then
+        echo -e "${RED}❌ 下载失败，请检查网络。${NC}"
+        rm -rf "$tmp_dir"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    # 解压并校验
+    if ! tar -xzf "$tmp_dir/subconverter.tar.gz" -C "$tmp_dir"; then
+        echo -e "${RED}❌ 解压失败，安装包可能已损坏。${NC}"
+        rm -rf "$tmp_dir"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    if [ ! -f "$tmp_dir/subconverter/subconverter" ]; then
+        echo -e "${RED}❌ 未找到二进制文件，安装包结构异常。${NC}"
+        rm -rf "$tmp_dir"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    # 端口设置 (全新安装时询问; 更新时沿用旧配置)
+    local host_port=""
+    if [ "$is_update" -eq 0 ]; then
+        read -p "请输入监听端口 (默认 25500): " host_port
+        host_port=${host_port:-25500}
+
+        if ! [[ "$host_port" =~ ^[0-9]+$ ]] || [ "$host_port" -lt 1 ] || [ "$host_port" -gt 65535 ]; then
+            echo -e "${RED}❌ 端口号无效，请输入 1-65535 之间的数字。${NC}"
+            rm -rf "$tmp_dir"
+            read -p "按回车键继续..."
+            return
+        fi
+
+        if command -v ss &> /dev/null; then
+            if ss -tuln | grep -q ":${host_port} "; then
+                echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
+                rm -rf "$tmp_dir"
+                read -p "按回车键继续..."
+                return
+            fi
+        fi
+    else
+        # 更新时备份旧配置
+        [ -f "$install_dir/pref.ini" ] && cp -f "$install_dir/pref.ini" "$tmp_dir/pref.ini.bak"
+    fi
+
+    # 停止旧服务并安装文件
+    if [ "$is_update" -eq 1 ]; then
+        systemctl stop subconverter &>/dev/null
+    fi
+    rm -rf "$install_dir"
+    mkdir -p "$install_dir"
+    cp -rf "$tmp_dir/subconverter/." "$install_dir/"
+    chmod +x "$install_dir/subconverter"
+
+    # 恢复旧配置或写入新端口
+    if [ "$is_update" -eq 1 ] && [ -f "$tmp_dir/pref.ini.bak" ]; then
+        cp -f "$tmp_dir/pref.ini.bak" "$install_dir/pref.ini"
+        host_port=$(grep -oP '^port=\K[0-9]+' "$install_dir/pref.ini" 2>/dev/null | head -1)
+    else
+        sed -i "s/^port=.*/port=${host_port}/" "$install_dir/pref.ini"
+    fi
+    host_port=${host_port:-25500}
+
+    rm -rf "$tmp_dir"
+
+    # 写入 systemd 服务
+    cat > "$service_file" << EOF
+[Unit]
+Description=subconverter subscription converter
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=${install_dir}
+ExecStart=${install_dir}/subconverter
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable subconverter &>/dev/null
+    systemctl restart subconverter
+
+    if systemctl is-active --quiet subconverter; then
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        echo -e "${GREEN}✅ subconverter (二进制) 安装/更新成功！${NC}"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+        [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+        echo -e "版本接口: ${YELLOW}http://${ipv4:-127.0.0.1}:${host_port}/version${NC}"
+        echo -e "订阅转换: ${YELLOW}http://${ipv4:-127.0.0.1}:${host_port}/sub?target=clash&url=<订阅地址URL编码>${NC}"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e "常用命令: ${YELLOW}systemctl start|stop|restart|status subconverter${NC}"
+        echo -e "${RED}⚠️  请勿公网裸奔，建议配合反向代理并加访问控制。${NC}"
+    else
+        echo -e "${RED}❌ 服务启动失败，请使用 journalctl -u subconverter 查看日志。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+# 卸载 subconverter (二进制)
+function uninstall_subconverter_binary() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${RED}        卸载 subconverter (二进制)${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    local install_dir="/opt/subconverter-bin"
+    local service_file="/etc/systemd/system/subconverter.service"
+
+    if [ ! -f "$service_file" ]; then
+        echo -e "${YELLOW}未检测到 subconverter 二进制安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${RED}⚠️  警告：此操作将停止并删除 subconverter 二进制服务！${NC}"
+    echo ""
+    echo -e "将删除以下内容："
+    echo "1. systemd 服务文件 (${service_file})"
+    echo "2. 安装目录 (${install_dir})"
+    echo ""
+    read -p "确定要卸载 subconverter (二进制) 吗？(y/N): " confirm
+    if [[ ! "$confirm" =~ ^[yY]$ ]]; then
+        echo -e "${YELLOW}卸载已取消。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在停止服务...${NC}"
+    systemctl stop subconverter &>/dev/null
+    systemctl disable subconverter &>/dev/null
+
+    echo -e "${BLUE}正在删除文件...${NC}"
+    rm -f "$service_file"
+    rm -rf "$install_dir"
+
+    systemctl daemon-reload
+
+    echo -e "${GREEN}✅ subconverter (二进制) 卸载完成！${NC}"
     read -p "按回车键继续..."
 }
