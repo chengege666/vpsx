@@ -9237,13 +9237,19 @@ EOF
         echo -e ""
         echo -e "${GREEN}→ 代理到本地 127.0.0.1:${target_port}${NC}"
 
-        # 如果填了域名，询问是否申请 SSL 证书
+        # 如果填了域名，询问是否开启 HTTPS
         if [ -n "$server_name" ]; then
             echo ""
-            read -p "是否为此域名申请 SSL 证书并开启 HTTPS？(y/N): " ssl_confirm
-            if [[ "$ssl_confirm" =~ ^[yY]$ ]]; then
-                apply_ssl_cert "$server_name" "$config_file" "$target_port"
-            fi
+            echo -e "${CYAN}是否为该域名开启 HTTPS？${NC}"
+            echo -e " ${GREEN}1.${NC} 申请新 SSL 证书（acme.sh）"
+            echo -e " ${GREEN}2.${NC} 使用已有 SSL 证书"
+            echo -e " ${GREEN}3.${NC} 不开启 HTTPS"
+            read -p "请选择 (1-3，默认 3): " ssl_choice
+            case "$ssl_choice" in
+                1) apply_ssl_cert "$server_name" "$config_file" "$target_port" ;;
+                2) use_existing_ssl_cert "$server_name" "$config_file" "$target_port" ;;
+                *) ;;
+            esac
         fi
     else
         echo -e "${RED}❌ 配置语法错误，请检查${NC}"
@@ -9383,6 +9389,91 @@ HTTPSEOF
         echo -e "${GREEN}✅ SSL 证书已配置，HTTPS 已生效！${NC}"
         echo -e "${CYAN}访问地址: ${YELLOW}https://${domain}${NC}"
         echo -e "${GREEN}证书将每 60 天自动续期${NC}"
+        rm -f "$backup_file"
+    else
+        echo -e "${RED}❌ 配置语法错误，正在回滚...${NC}"
+        cp "$backup_file" "$config_file"
+        sudo nginx -s reload 2>/dev/null
+        echo -e "${YELLOW}已回滚到原配置${NC}"
+        rm -f "$backup_file"
+    fi
+}
+
+# 使用已有 SSL 证书开启 HTTPS
+# 参数: $1=域名 $2=配置文件路径 $3=目标端口
+function use_existing_ssl_cert() {
+    local domain="$1"
+    local config_file="$2"
+    local target_port="$3"
+
+    if [ -z "$domain" ]; then
+        echo -e "${RED}❌ 域名不能为空${NC}"
+        return
+    fi
+
+    echo -e "${BLUE}使用已有 SSL 证书开启 HTTPS${NC}"
+    read -p "请输入证书完整链文件路径 (如 /etc/nginx/ssl/${domain}/fullchain.pem): " cert_file
+    read -p "请输入证书私钥文件路径 (如 /etc/nginx/ssl/${domain}/privkey.pem): " key_file
+
+    if [ -z "$cert_file" ] || [ -z "$key_file" ]; then
+        echo -e "${RED}❌ 证书路径不能为空${NC}"
+        return
+    fi
+
+    if [ ! -f "$cert_file" ]; then
+        echo -e "${RED}❌ 证书文件不存在: ${cert_file}${NC}"
+        return
+    fi
+
+    if [ ! -f "$key_file" ]; then
+        echo -e "${RED}❌ 私钥文件不存在: ${key_file}${NC}"
+        return
+    fi
+
+    # 备份原配置
+    local backup_file="${config_file}.bak"
+    cp "$config_file" "$backup_file"
+
+    # 读取原 server_name
+    local old_server_name
+    old_server_name=$(grep "server_name" "$config_file" | head -1 | sed 's/server_name//;s/;//;s/^[[:space:]]*//;s/^[[:space:]]*//')
+
+    # 生成带有 HTTPS 的新配置
+    cat > "$config_file" << HTTPSEOF
+# HTTP - 自动跳转 HTTPS
+server {
+    listen 80;
+    server_name ${old_server_name};
+    return 301 https://\$server_name\$request_uri;
+}
+
+# HTTPS
+server {
+    listen 443 ssl http2;
+    server_name ${old_server_name};
+
+    ssl_certificate ${cert_file};
+    ssl_certificate_key ${key_file};
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    location / {
+        proxy_pass http://127.0.0.1:${target_port};
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+HTTPSEOF
+
+    # 检查语法
+    echo -e "${BLUE}检查新配置语法...${NC}"
+    if sudo nginx -t 2>&1; then
+        sudo nginx -s reload 2>/dev/null
+        echo -e "${GREEN}✅ SSL 证书已配置，HTTPS 已生效！${NC}"
+        echo -e "${CYAN}访问地址: ${YELLOW}https://${domain}${NC}"
+        echo -e "${YELLOW}⚠️  使用已有证书无自动续期，到期请手动更新证书文件${NC}"
         rm -f "$backup_file"
     else
         echo -e "${RED}❌ 配置语法错误，正在回滚...${NC}"
