@@ -667,6 +667,7 @@ function komari_management() {
         echo -e "${GREEN}          Komari 监控面板管理${NC}"
 
         local status_text="${RED}未部署${NC}"
+        local bin_status=""
 
         if command -v docker &> /dev/null; then
             if docker ps -a --format '{{.Names}}' | grep -q "^komari$"; then
@@ -687,8 +688,28 @@ function komari_management() {
             fi
         fi
 
-        echo -e "          状态: ${status_text}"
+        # 二进制部署状态检测
+        if [ -f "/etc/systemd/system/komari.service" ]; then
+            if systemctl is-active --quiet komari 2>/dev/null; then
+                bin_status="${GREEN}二进制运行中${NC}"
+                local bin_port=$(grep -oP '\-l 0\.0\.0\.0:\K[0-9]+' /etc/systemd/system/komari.service 2>/dev/null | head -1)
+                bin_port=${bin_port:-25774}
+                IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+                echo -e "${CYAN}-----------------------------------------${NC}"
+                [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${bin_port}${NC}"
+                [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${bin_port}${NC}"
+            else
+                bin_status="${YELLOW}二进制已停止${NC}"
+            fi
+            if [ "$status_text" = "${RED}未部署${NC}" ]; then
+                status_text="$bin_status"
+                bin_status=""
+            fi
+        fi
+
+        echo -e "          状态: ${status_text}${bin_status:+ ${CYAN}|${NC} ${bin_status}}"
         echo -e "${CYAN}=========================================${NC}"
+        echo -e "${CYAN}---------------- Docker 方式 ----------------${NC}"
         echo -e " ${GREEN}1.${NC} 部署 Komari 监控面板"
         echo -e " ${GREEN}2.${NC} 启动 Komari"
         echo -e " ${GREEN}3.${NC} 停止 Komari"
@@ -697,10 +718,13 @@ function komari_management() {
         echo -e " ${GREEN}6.${NC} 修改配置"
         echo -e " ${GREEN}7.${NC} 卸载 Komari"
         echo -e " ${GREEN}8.${NC} 访问 Web 界面"
+        echo -e "${CYAN}---------------- 二进制方式 ---------------${NC}"
+        echo -e " ${GREEN}9.${NC}  安装/更新 Komari (二进制)"
+        echo -e " ${GREEN}10.${NC} 卸载 Komari (二进制)"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC} 返回上一级菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-8): " komari_choice
+        read -p "请输入你的选择 (0-10): " komari_choice
 
         case "$komari_choice" in
             1) deploy_komari_panel ;;
@@ -711,6 +735,8 @@ function komari_management() {
             6) modify_komari_config ;;
             7) uninstall_komari_panel ;;
             8) access_komari_web ;;
+            9) install_komari_binary ;;
+            10) uninstall_komari_binary ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
@@ -1005,6 +1031,205 @@ function access_komari_web() {
     read -p "按回车键返回..."
 }
 
+
+# 安装/更新 Komari (二进制)
+function install_komari_binary() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}       安装/更新 Komari (二进制)${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if ! command -v systemctl &> /dev/null; then
+        echo -e "${RED}❌ 未检测到 systemd，二进制部署需要 systemd 托管服务。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    if ! command -v curl &> /dev/null; then
+        echo -e "${RED}❌ 未检测到 curl，请先安装 curl。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    # 架构检测
+    local arch=$(uname -m)
+    local asset_arch=""
+    case "$arch" in
+        x86_64|amd64)   asset_arch="amd64" ;;
+        aarch64|arm64)  asset_arch="arm64" ;;
+        i386|i686)      asset_arch="386" ;;
+        loongarch64)    asset_arch="loong64" ;;
+        riscv64)        asset_arch="riscv64" ;;
+        *)
+            echo -e "${RED}❌ 不支持的架构: ${arch}${NC}"
+            read -p "按回车键继续..."
+            return
+            ;;
+    esac
+
+    local install_dir="/opt/komari-bin"
+    local service_file="/etc/systemd/system/komari.service"
+    local is_update=0
+
+    # 已安装时确认更新
+    if [ -f "$service_file" ]; then
+        is_update=1
+        echo -e "${YELLOW}检测到 Komari 二进制已安装。${NC}"
+        read -p "是否更新到最新版本？(y/N): " reinstall
+        [[ ! "$reinstall" =~ ^[yY]$ ]] && return
+    fi
+
+    # 与 Docker 部署互斥提示
+    if command -v docker &> /dev/null && docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^komari$"; then
+        echo -e "${YELLOW}⚠️  检测到 Docker 版 Komari 正在运行，请确保端口不冲突。${NC}"
+    fi
+
+    # 获取最新 release 下载地址
+    echo -e "${BLUE}正在获取最新版本下载地址...${NC}"
+    local download_url=$(curl -sL --connect-timeout 10 "https://api.github.com/repos/komari-monitor/komari/releases/latest" | grep -oP '"browser_download_url":\s*"\K[^"]+' | grep "komari-linux-${asset_arch}$" | head -1)
+
+    if [ -z "$download_url" ]; then
+        echo -e "${RED}❌ 获取下载地址失败，请检查网络或稍后重试。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+    echo -e "下载地址: ${YELLOW}${download_url}${NC}"
+
+    # 端口设置 (全新安装时询问; 更新时沿用旧配置)
+    local host_port=""
+    if [ "$is_update" -eq 0 ]; then
+        read -p "请输入监听端口 (默认 25774): " host_port
+        host_port=${host_port:-25774}
+
+        if ! [[ "$host_port" =~ ^[0-9]+$ ]] || [ "$host_port" -lt 1 ] || [ "$host_port" -gt 65535 ]; then
+            echo -e "${RED}❌ 端口号无效，请输入 1-65535 之间的数字。${NC}"
+            read -p "按回车键继续..."
+            return
+        fi
+
+        if command -v ss &> /dev/null; then
+            if ss -tuln | grep -q ":${host_port} "; then
+                echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
+                read -p "按回车键继续..."
+                return
+            fi
+        elif command -v netstat &> /dev/null; then
+            if netstat -tuln | grep -q ":${host_port} "; then
+                echo -e "${RED}❌ 端口 ${host_port} 已被占用，请选择其他端口。${NC}"
+                read -p "按回车键继续..."
+                return
+            fi
+        fi
+    else
+        host_port=$(grep -oP '\-l 0\.0\.0\.0:\K[0-9]+' "$service_file" 2>/dev/null | head -1)
+        host_port=${host_port:-25774}
+    fi
+
+    # 下载二进制
+    echo -e "${BLUE}正在下载 (可能需要几分钟)...${NC}"
+    if ! curl -sL --connect-timeout 15 -o "$install_dir/komari.new" "$download_url"; then
+        echo -e "${RED}❌ 下载失败，请检查网络。${NC}"
+        rm -f "$install_dir/komari.new"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    if [ ! -s "$install_dir/komari.new" ]; then
+        echo -e "${RED}❌ 下载的文件为空。${NC}"
+        rm -f "$install_dir/komari.new"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    # 停止旧服务并替换二进制
+    if [ "$is_update" -eq 1 ]; then
+        systemctl stop komari &>/dev/null
+    fi
+
+    mkdir -p "$install_dir"
+    mv -f "$install_dir/komari.new" "$install_dir/komari"
+    chmod +x "$install_dir/komari"
+
+    # 写入 systemd 服务
+    cat > "$service_file" << EOF
+[Unit]
+Description=Komari Monitoring Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=${install_dir}
+ExecStart=${install_dir}/komari server -l 0.0.0.0:${host_port}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable komari &>/dev/null
+    systemctl restart komari
+
+    if systemctl is-active --quiet komari; then
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        echo -e "${GREEN}✅ Komari (二进制) 安装/更新成功！${NC}"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        [ -n "$ipv4" ] && echo -e "IPv4 访问地址: ${YELLOW}http://${ipv4}:${host_port}${NC}"
+        [ -n "$ipv6" ] && echo -e "IPv6 访问地址: ${YELLOW}http://[${ipv6}]:${host_port}${NC}"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e "数据目录: ${YELLOW}${install_dir}/data${NC}"
+        echo -e "常用命令: ${YELLOW}systemctl start|stop|restart|status komari${NC}"
+        echo -e "查看日志: ${YELLOW}journalctl -u komari -f${NC}"
+        echo -e "${YELLOW}首次访问请通过网页向导创建管理员账号。${NC}"
+    else
+        echo -e "${RED}❌ 服务启动失败，请使用 journalctl -u komari 查看日志。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+# 卸载 Komari (二进制)
+function uninstall_komari_binary() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${RED}        卸载 Komari (二进制)${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    local install_dir="/opt/komari-bin"
+    local service_file="/etc/systemd/system/komari.service"
+
+    if [ ! -f "$service_file" ]; then
+        echo -e "${YELLOW}未检测到 Komari 二进制安装。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${RED}⚠️  警告：此操作将停止并删除 Komari 二进制服务！${NC}"
+    echo ""
+    echo -e "将删除以下内容："
+    echo "1. systemd 服务文件 (${service_file})"
+    echo "2. 安装目录 (${install_dir}，含数据)"
+    echo ""
+    read -p "确定要卸载 Komari (二进制) 吗？(y/N): " confirm
+    if [[ ! "$confirm" =~ ^[yY]$ ]]; then
+        echo -e "${YELLOW}卸载已取消。${NC}"
+        read -p "按回车键继续..."
+        return
+    fi
+
+    echo -e "${BLUE}正在停止服务...${NC}"
+    systemctl stop komari &>/dev/null
+    systemctl disable komari &>/dev/null
+
+    echo -e "${BLUE}正在删除文件...${NC}"
+    rm -f "$service_file"
+    rm -rf "$install_dir"
+
+    systemctl daemon-reload
+
+    echo -e "${GREEN}✅ Komari (二进制) 卸载完成！${NC}"
+    read -p "按回车键继续..."
+}
 
 function pansou_management() {
     while true; do
