@@ -460,6 +460,27 @@ function ssl_certificate_management() {
     done
 }
 
+# 实时进程内存监控 (内存占用按 MB 显示)
+function process_memory_monitor() {
+    while true; do
+        clear
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${GREEN}           实时进程内存监控 (MB)${NC}"
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${BLUE}系统内存:${NC} $(free -m | awk '/^Mem:/ {printf "总量 %d MB | 已用 %d MB (%.1f%%) | 可用 %d MB", $2, $3, ($2>0 ? $3/$2*100 : 0), $7}')"
+        echo -e "${BLUE}交换分区:${NC} $(free -m | awk '/^Swap:/ {printf "总量 %d MB | 已用 %d MB", $2, $3}')"
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        printf "${PURPLE}%-8s %-10s %-20s %10s %6s${NC}\n" "PID" "用户" "进程名" "内存(MB)" "CPU%"
+        ps -eo pid,user,comm,rss,pcpu --sort=-rss --no-headers | head -n 30 | awk '{printf "%-8s %-10s %-20s %10.1f %6.1f\n", $1, $2, substr($3, 1, 20), $4/1024, $5}'
+        echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e "${YELLOW}每 2 秒自动刷新，按 q 退出。${NC}"
+        read -rsn1 -t 2 key
+        if [ "$key" = "q" ]; then
+            break
+        fi
+    done
+}
+
 # 进程管理工具
 function process_management() {
     while true; do
@@ -467,7 +488,7 @@ function process_management() {
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}             进程管理工具）${NC}"
         echo -e "${CYAN}=========================================${NC}"
-        echo -e " ${GREEN}1.${NC}  实时进程监控 (输入q退出)"
+        echo -e " ${GREEN}1.${NC}  实时进程监控 (内存占用MB显示，输入q退出)"
         echo -e " ${GREEN}2.${NC}  查找并结束进程 (按名称/PID)"
         echo -e " ${GREEN}3.${NC}  系统服务管理 (systemd)"
         echo -e " ${GREEN}4.${NC}  查看网络端口占用情况"
@@ -479,11 +500,7 @@ function process_management() {
 
         case "$proc_choice" in
             1)
-                if command -v htop &> /dev/null; then
-                    htop
-                else
-                    top
-                fi
+                process_memory_monitor
                 ;;
             2)
                 read -p "请输入要查找的进程名称或 PID: " search_term
