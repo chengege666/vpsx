@@ -481,9 +481,21 @@ function process_memory_monitor() {
         term_lines=$(tput lines 2>/dev/null || echo 30)
         show_n=$((term_lines - 13))
         [ "$show_n" -lt 5 ] && show_n=5
-        ps -eo pid,user,comm,rss,pcpu --sort=-rss --no-headers | head -n "$show_n" | awk '{printf "%-8s %-10s %-20s %10.1f %6.1f\n", $1, $2, substr($3, 1, 20), $4/1024, $5}'
+        # 内存列使用 Pss(比例常驻集)：共享页按进程均摊，不做重复计算
+        local pss_map
+        pss_map=$(awk '/^Pss:/{split(FILENAME,p,"/"); printf "%s %s\n", $2, p[3]}' /proc/[0-9]*/smaps_rollup 2>/dev/null | sort -rn | head -n "$show_n")
+        if [ -n "$pss_map" ]; then
+            { ps -eo pid=,user=,pcpu=,comm=; echo "--SPLIT--"; echo "$pss_map"; } | awk '
+                /^--SPLIT--$/ {phase=1; next}
+                phase==0 {user[$1]=$2; cpu[$1]=$3; c=""; for(i=4;i<=NF;i++) c=c (i>4?" ":"") $i; comm[$1]=c; next}
+                {printf "%-8s %-10s %-20s %10.1f %6.1f\n", $2, user[$2], substr(comm[$2],1,20), $1/1024, cpu[$2]}
+            '
+        else
+            # 内核低于 4.14 时无 smaps_rollup，退回 RSS 口径
+            ps -eo pid,user,comm,rss,pcpu --sort=-rss --no-headers | head -n "$show_n" | awk '{printf "%-8s %-10s %-20s %10.1f %6.1f\n", $1, $2, substr($3, 1, 20), $4/1024, $5}'
+        fi
         echo -e "${CYAN}-----------------------------------------${NC}"
-        echo -e "${YELLOW}注: 进程内存为 RSS(常驻集)，共享库/同一程序的多个进程会重复计入，合计可高于系统已用。${NC}"
+        echo -e "${YELLOW}注: 内存列按 Pss 比例分摊共享页，无重复计算；各进程之和可大致对应系统已用。${NC}"
         echo -e "${YELLOW}每 2 秒自动刷新，按 q 退出。${NC}"
         read -rsn1 -t 2 key
         if [ "$key" = "q" ]; then
