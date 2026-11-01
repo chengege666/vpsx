@@ -467,11 +467,21 @@ function process_memory_monitor() {
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}           实时进程内存监控 (MB)${NC}"
         echo -e "${CYAN}=========================================${NC}"
-        echo -e "${BLUE}系统内存:${NC} $(free -m | awk '/^Mem:/ {printf "总量 %d MB | 已用 %d MB (%.1f%%) | 可用 %d MB", $2, $3, ($2>0 ? $3/$2*100 : 0), $7}')"
-        echo -e "${BLUE}交换分区:${NC} $(free -m | awk '/^Swap:/ {printf "总量 %d MB | 已用 %d MB", $2, $3}')"
+        # 直接解析 /proc/meminfo，不受 free 命令中文 locale 影响
+        local mem_sum swap_sum
+        mem_sum=$(awk '/^MemTotal:/{t=$2} /^MemAvailable:/{a=$2} END{if(!t)t=0; if(!a)a=0; printf "总量 %.0f MB | 已用 %.0f MB (%.1f%%) | 可用 %.0f MB", t/1024, (t-a)/1024, (t>0?(t-a)/t*100:0), a/1024}' /proc/meminfo 2>/dev/null)
+        swap_sum=$(awk '/^SwapTotal:/{t=$2} /^SwapFree:/{f=$2} END{if(!t)t=0; if(!f)f=0; printf "总量 %.0f MB | 已用 %.0f MB", t/1024, (t-f)/1024}' /proc/meminfo 2>/dev/null)
+        echo -e "${BLUE}系统内存:${NC} ${mem_sum:-读取失败}"
+        echo -e "${BLUE}交换分区:${NC} ${swap_sum:-读取失败}"
         echo -e "${CYAN}-----------------------------------------${NC}"
-        printf "${PURPLE}%-8s %-10s %-20s %10s %6s${NC}\n" "PID" "用户" "进程名" "内存(MB)" "CPU%"
-        ps -eo pid,user,comm,rss,pcpu --sort=-rss --no-headers | head -n 30 | awk '{printf "%-8s %-10s %-20s %10.1f %6.1f\n", $1, $2, substr($3, 1, 20), $4/1024, $5}'
+        # 表头按中文显示宽度补齐(中文占2格但printf按3字节算)，与数据行逐列对齐
+        printf "${PURPLE}%-8s %-12s %-23s %10s %6s${NC}\n" "PID" "用户" "进程名" "  内存(MB)" "  CPU%"
+        # 按终端高度自适应显示行数，避免面板顶部被挤出屏幕
+        local term_lines show_n
+        term_lines=$(tput lines 2>/dev/null || echo 30)
+        show_n=$((term_lines - 13))
+        [ "$show_n" -lt 5 ] && show_n=5
+        ps -eo pid,user,comm,rss,pcpu --sort=-rss --no-headers | head -n "$show_n" | awk '{printf "%-8s %-10s %-20s %10.1f %6.1f\n", $1, $2, substr($3, 1, 20), $4/1024, $5}'
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e "${YELLOW}每 2 秒自动刷新，按 q 退出。${NC}"
         read -rsn1 -t 2 key
