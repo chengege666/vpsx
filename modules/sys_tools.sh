@@ -460,50 +460,6 @@ function ssl_certificate_management() {
     done
 }
 
-# 实时进程内存监控 (内存占用按 MB 显示)
-function process_memory_monitor() {
-    while true; do
-        clear
-        echo -e "${CYAN}=========================================${NC}"
-        echo -e "${GREEN}           实时进程内存监控 (MB)${NC}"
-        echo -e "${CYAN}=========================================${NC}"
-        # 直接解析 /proc/meminfo，不受 free 命令中文 locale 影响
-        local mem_sum swap_sum
-        mem_sum=$(awk '/^MemTotal:/{t=$2} /^MemAvailable:/{a=$2} END{if(!t)t=0; if(!a)a=0; printf "总量 %.0f MB | 已用 %.0f MB (%.1f%%) | 可用 %.0f MB", t/1024, (t-a)/1024, (t>0?(t-a)/t*100:0), a/1024}' /proc/meminfo 2>/dev/null)
-        swap_sum=$(awk '/^SwapTotal:/{t=$2} /^SwapFree:/{f=$2} END{if(!t)t=0; if(!f)f=0; printf "总量 %.0f MB | 已用 %.0f MB", t/1024, (t-f)/1024}' /proc/meminfo 2>/dev/null)
-        echo -e "${BLUE}系统内存:${NC} ${mem_sum:-读取失败}"
-        echo -e "${BLUE}交换分区:${NC} ${swap_sum:-读取失败}"
-        echo -e "${CYAN}-----------------------------------------${NC}"
-        # 表头按中文显示宽度补齐(中文占2格但printf按3字节算)，与数据行逐列对齐
-        printf "${PURPLE}%-8s %-12s %-23s %10s %6s${NC}\n" "PID" "用户" "进程名" "  内存(MB)" "  CPU%"
-        # 按终端高度自适应显示行数，避免面板顶部被挤出屏幕
-        local term_lines show_n
-        term_lines=$(tput lines 2>/dev/null || echo 30)
-        show_n=$((term_lines - 13))
-        [ "$show_n" -lt 5 ] && show_n=5
-        # 内存列使用 Pss(比例常驻集)：共享页按进程均摊，不做重复计算
-        local pss_map
-        pss_map=$(awk '/^Pss:/{split(FILENAME,p,"/"); printf "%s %s\n", $2, p[3]}' /proc/[0-9]*/smaps_rollup 2>/dev/null | sort -rn | head -n "$show_n")
-        if [ -n "$pss_map" ]; then
-            { ps -eo pid=,user=,pcpu=,comm=; echo "--SPLIT--"; echo "$pss_map"; } | awk '
-                /^--SPLIT--$/ {phase=1; next}
-                phase==0 {user[$1]=$2; cpu[$1]=$3; c=""; for(i=4;i<=NF;i++) c=c (i>4?" ":"") $i; comm[$1]=c; next}
-                {printf "%-8s %-10s %-20s %10.1f %6.1f\n", $2, user[$2], substr(comm[$2],1,20), $1/1024, cpu[$2]}
-            '
-        else
-            # 内核低于 4.14 时无 smaps_rollup，退回 RSS 口径
-            ps -eo pid,user,comm,rss,pcpu --sort=-rss --no-headers | head -n "$show_n" | awk '{printf "%-8s %-10s %-20s %10.1f %6.1f\n", $1, $2, substr($3, 1, 20), $4/1024, $5}'
-        fi
-        echo -e "${CYAN}-----------------------------------------${NC}"
-        echo -e "${YELLOW}注: 内存列按 Pss 比例分摊共享页，无重复计算；各进程之和可大致对应系统已用。${NC}"
-        echo -e "${YELLOW}每 2 秒自动刷新，按 q 退出。${NC}"
-        read -rsn1 -t 2 key
-        if [ "$key" = "q" ]; then
-            break
-        fi
-    done
-}
-
 # 进程管理工具
 function process_management() {
     while true; do
@@ -511,7 +467,7 @@ function process_management() {
         echo -e "${CYAN}=========================================${NC}"
         echo -e "${GREEN}             进程管理工具）${NC}"
         echo -e "${CYAN}=========================================${NC}"
-        echo -e " ${GREEN}1.${NC}  实时进程监控 (内存占用MB显示，输入q退出)"
+        echo -e " ${GREEN}1.${NC}  实时进程监控 (输入q退出)"
         echo -e " ${GREEN}2.${NC}  查找并结束进程 (按名称/PID)"
         echo -e " ${GREEN}3.${NC}  系统服务管理 (systemd)"
         echo -e " ${GREEN}4.${NC}  查看网络端口占用情况"
@@ -523,7 +479,11 @@ function process_management() {
 
         case "$proc_choice" in
             1)
-                process_memory_monitor
+                if command -v htop &> /dev/null; then
+                    htop
+                else
+                    top
+                fi
                 ;;
             2)
                 read -p "请输入要查找的进程名称或 PID: " search_term
