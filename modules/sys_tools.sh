@@ -483,6 +483,7 @@ function process_memory_monitor() {
         [ "$show_n" -lt 5 ] && show_n=5
         ps -eo pid,user,comm,rss,pcpu --sort=-rss --no-headers | head -n "$show_n" | awk '{printf "%-8s %-10s %-20s %10.1f %6.1f\n", $1, $2, substr($3, 1, 20), $4/1024, $5}'
         echo -e "${CYAN}-----------------------------------------${NC}"
+        echo -e "${YELLOW}注: 进程内存为 RSS(常驻集)，共享库/同一程序的多个进程会重复计入，合计可高于系统已用。${NC}"
         echo -e "${YELLOW}每 2 秒自动刷新，按 q 退出。${NC}"
         read -rsn1 -t 2 key
         if [ "$key" = "q" ]; then
