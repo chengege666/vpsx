@@ -20,6 +20,7 @@ function sys_tools_menu() {
         echo -e " ${GREEN}9.${NC}  修改DNS服务器（手动/自动）        ${GREEN}19.${NC} VPS安全入侵检测"
         echo -e " ${GREEN}10.${NC} Fail2ban配置（SSH防护）           ${GREEN}20.${NC} SSH公钥登录配置"
         echo -e " ${GREEN}21.${NC} 限制CPU使用率 (cpulimit)"
+        echo -e " ${GREEN}22.${NC} Cloudflare Tunnel (Web HTTPS)"
         echo -e "${CYAN}----------------------------------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}================================================================${NC}"
@@ -88,6 +89,9 @@ function sys_tools_menu() {
                 ;;
             21)
                 cpu_limit_management
+                ;;
+            22)
+                cloudflare_tunnel_web_https
                 ;;
             0)
                 break
@@ -2976,5 +2980,122 @@ function remove_cpu_whole_limit() {
             echo -e "${YELLOW}已取消操作。${NC}"
             ;;
     esac
+    read -p "按任意键继续..."
+}
+
+# Cloudflare Tunnel Web HTTPS（无公网 80/443 时使用）
+function cloudflare_tunnel_web_https() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}     Cloudflare Tunnel Web HTTPS${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ "$(id -u)" -ne 0 ]; then
+        echo -e "${RED}[错误]${NC} 请以 root 权限运行。"
+        read -p "按任意键继续..."
+        return
+    fi
+
+    if ! command -v _argo_install_deps &> /dev/null || ! command -v _argo_download_binary &> /dev/null || ! command -v _argo_setup_service &> /dev/null; then
+        echo -e "${RED}未加载 Cloudflare Tunnel 基础模块（proxy_tools.sh）。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+
+    local has_existing=0
+    if [ -f "$ARGO_SYSTEMD_UNIT" ] || [ -f "$ARGO_OPENRC_UNIT" ]; then
+        has_existing=1
+    fi
+
+    local domain port restart_cf
+    while true; do
+        read -p "请输入访问域名 (如 komari.example.com): " domain
+        [ -n "$domain" ] && break
+        echo -e "${RED}域名不能为空。${NC}"
+    done
+    while true; do
+        read -p "请输入本地服务端口 (默认 25575): " port
+        port=${port:-25575}
+        if [[ "$port" =~ ^[0-9]+$ ]] && [ "$port" -ge 1 ] && [ "$port" -le 65535 ]; then
+            break
+        fi
+        echo -e "${RED}请输入 1-65535 的有效端口。${NC}"
+    done
+
+    if command -v ss &> /dev/null; then
+        if ! ss -tuln | grep -q ":${port} "; then
+            echo -e "${YELLOW}⚠️  本机当前未检测到 ${port} 端口监听，请确认 Komari/服务已启动。${NC}"
+        fi
+    fi
+
+    if [ "$has_existing" -eq 1 ]; then
+        echo -e "${GREEN}检测到已有 cloudflared 隧道服务，按复用方案处理。${NC}"
+        echo -e "${YELLOW}请到 Cloudflare Zero Trust 编辑现有隧道，新增 Public Hostname:${NC}"
+        echo -e "  ${GREEN}${domain}${NC} -> ${YELLOW}http://localhost:${port}${NC}"
+        echo -e "${YELLOW}保存后一般自动生效；如未生效可重启 cloudflared。${NC}"
+        read -p "是否现在重启 cloudflared 尝试应用配置？(y/N): " restart_cf
+        if [[ "$restart_cf" =~ ^[yY]$ ]]; then
+            if command -v systemctl &> /dev/null && [ -f "$ARGO_SYSTEMD_UNIT" ]; then
+                systemctl restart cloudflared
+            elif command -v rc-service &> /dev/null && [ -f "$ARGO_OPENRC_UNIT" ]; then
+                rc-service cloudflared restart
+            fi
+        fi
+        echo
+        echo -e "${GREEN}✅ 复用配置提示已完成。${NC}"
+        echo -e "访问地址: ${YELLOW}https://${domain}${NC}"
+        echo -e "回源地址: ${YELLOW}http://localhost:${port}${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+
+    echo -e "${YELLOW}未检测到现有 cloudflared 服务，将创建新隧道服务。${NC}"
+    if ! _argo_install_deps; then
+        read -p "按任意键继续..."
+        return
+    fi
+    if ! _argo_download_binary; then
+        read -p "按任意键继续..."
+        return
+    fi
+
+    local token confirm_ready
+    while true; do
+        read -p "请输入 Tunnel Token (以 eyJ 开头): " token
+        [ -n "$token" ] && break
+        echo -e "${RED}Token 不能为空。${NC}"
+    done
+
+    echo -e "${YELLOW}请确认 Cloudflare Zero Trust 已配置 Public Hostname:${NC}"
+    echo -e "  ${GREEN}${domain}${NC} -> ${YELLOW}http://localhost:${port}${NC}"
+    read -p "已配置并继续安装/启动 cloudflared？(y/N): " confirm_ready
+    if [[ ! "$confirm_ready" =~ ^[yY]$ ]]; then
+        echo -e "${YELLOW}已取消。${NC}"
+        read -p "按任意键继续..."
+        return
+    fi
+
+    mkdir -p "$ARGO_CRED_DIR"
+    chmod 700 "$ARGO_CRED_DIR"
+    printf "%s" "$token" > "$ARGO_TOKEN_FILE"
+    chmod 600 "$ARGO_TOKEN_FILE"
+
+    if "$ARGO_BIN" tunnel run --help 2>&1 | grep -q -- '--token-file'; then
+        ARGO_RUN_ARGS="tunnel run --token-file ${ARGO_TOKEN_FILE}"
+    else
+        ARGO_RUN_ARGS="tunnel run --token $(tr -d '\r\n' < "$ARGO_TOKEN_FILE")"
+    fi
+    ARGO_MODE="token"
+
+    if ! _argo_setup_service; then
+        read -p "按任意键继续..."
+        return
+    fi
+
+    echo
+    echo -e "${GREEN}✅ Cloudflare Tunnel 已启动。${NC}"
+    echo -e "访问地址: ${YELLOW}https://${domain}${NC}"
+    echo -e "回源地址: ${YELLOW}http://localhost:${port}${NC}"
+    echo -e "${YELLOW}说明: 本机无需开放 80/443，也无需本地 SSL 证书。${NC}"
     read -p "按任意键继续..."
 }
