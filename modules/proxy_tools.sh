@@ -83,6 +83,8 @@ ARGO_TOKEN_FILE="${ARGO_CRED_DIR}/token"
 ARGO_CRED_FILE="${ARGO_CRED_DIR}/credentials.json"
 ARGO_SYSTEMD_UNIT="/etc/systemd/system/cloudflared.service"
 ARGO_OPENRC_UNIT="/etc/init.d/cloudflared"
+ARGO_RUN_ARGS=""
+ARGO_MODE=""
 
 # 检测包管理器
 function _argo_pkg_mgr() {
