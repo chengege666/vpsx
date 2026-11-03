@@ -720,7 +720,7 @@ function komari_management() {
         echo -e " ${GREEN}7.${NC} 卸载 Komari"
         echo -e " ${GREEN}8.${NC} 访问 Web 界面"
         echo -e "${CYAN}---------------- 二进制方式 ---------------${NC}"
-        echo -e " ${GREEN}9.${NC} 安装/更新 Komari（二进制）"
+        echo -e " ${GREEN}9.${NC}  安装/更新 Komari（二进制）"
         echo -e " ${GREEN}10.${NC} 卸载 Komari（二进制）"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC} 返回上一级菜单"
