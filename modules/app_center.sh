@@ -6419,10 +6419,11 @@ function lucky_management() {
         echo -e " ${GREEN}6.${NC} 升级 Lucky 到最新版"
         echo -e " ${GREEN}7.${NC} 卸载 Lucky"
         echo -e " ${GREEN}8.${NC} 访问管理界面"
+        echo -e " ${GREEN}9.${NC} 安装 Lucky (二进制)"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${RED}0.${NC} 返回上一级菜单"
         echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入你的选择 (0-8): " lucky_choice
+        read -p "请输入你的选择 (0-9): " lucky_choice
 
         case "$lucky_choice" in
             1) install_lucky_docker ;;
@@ -6433,10 +6434,24 @@ function lucky_management() {
             6) upgrade_lucky "$mode" ;;
             7) uninstall_lucky "$mode" ;;
             8) access_lucky_web "$mode" ;;
+            9) install_lucky_binary ;;
             0) break ;;
             *) echo -e "${RED}无效的选择，请重新输入！${NC}"; sleep 1 ;;
         esac
     done
+}
+
+function lucky_get_arch() {
+    case "$(uname -m)" in
+        x86_64|amd64) echo "x86_64" ;;
+        aarch64|arm64) echo "arm64" ;;
+        armv7l) echo "armv7" ;;
+        armv6l) echo "armv6" ;;
+        armv5l) echo "armv5" ;;
+        i386|i686) echo "i386" ;;
+        riscv64) echo "riscv64" ;;
+        *) echo "" ;;
+    esac
 }
 
 function install_lucky_docker() {
@@ -6471,14 +6486,14 @@ function install_lucky_docker() {
     mkdir -p /opt/lucky/conf
 
     # 强制拉取最新镜像，确保是最新版
-    docker pull gdy666/lucky:v2
+    docker pull gdy666/lucky:v3
 
     docker run -d \
         --name lucky \
         --restart always \
         --network host \
-        -v /opt/lucky/conf:/config \
-        gdy666/lucky:v2
+        -v /opt/lucky/conf:/app/conf \
+        gdy666/lucky:v3
 
     if [ $? -eq 0 ]; then
         IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
@@ -6491,6 +6506,112 @@ function install_lucky_docker() {
         echo -e "${RED}注意：请务必在首次登录后立即修改账号密码。${NC}"
     else
         echo -e "${RED}❌ 安装失败，请检查 Docker 日志。${NC}"
+    fi
+    read -p "按回车键继续..."
+}
+
+function install_lucky_binary() {
+    clear
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${GREEN}         安装 Lucky (二进制)${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+
+    if [ "$(id -u)" -ne 0 ]; then
+        echo -e "${RED}错误: 需要 root 权限安装 Lucky${NC}"
+        read -p "按回车键继续..."; return
+    fi
+
+    if ! command -v systemctl &> /dev/null; then
+        echo -e "${RED}错误: 未检测到 systemctl，无法注册服务${NC}"
+        read -p "按回车键继续..."; return
+    fi
+
+    if systemctl list-units --full -all | grep -q "lucky.service"; then
+        echo -e "${YELLOW}检测到 Lucky (直接安装) 已存在。${NC}"
+        read -p "是否重新安装？(y/N): " reinstall
+        [[ ! "$reinstall" =~ ^[yY]$ ]] && return
+        systemctl stop lucky &>/dev/null
+        systemctl disable lucky &>/dev/null
+        rm -f /etc/systemd/system/lucky.service
+    fi
+
+    if command -v docker &> /dev/null && docker ps -a --format '{{.Names}}' | grep -q "^lucky$"; then
+        echo -e "${RED}检测到 Lucky (Docker) 存在。请先卸载 Docker 版本以避免冲突。${NC}"
+        read -p "按回车键继续..."; return
+    fi
+
+    local arch
+    arch=$(lucky_get_arch)
+    if [ -z "$arch" ]; then
+        echo -e "${RED}暂不支持的架构: $(uname -m)${NC}"
+        read -p "按回车键继续..."; return
+    fi
+
+    local lucky_version
+    lucky_version=$(curl -fsSL "https://release.66666.host/" 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)
+    lucky_version=${lucky_version:-v3.7.0}
+    local version_no_v="${lucky_version#v}"
+
+    local download_url="https://release.66666.host/${lucky_version}/${version_no_v}_lucky/lucky_${version_no_v}_Linux_${arch}.tar.gz"
+    echo -e "${BLUE}下载 Lucky ${lucky_version} (${arch}) ...${NC}"
+
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+    local tar_file="${tmp_dir}/lucky.tar.gz"
+
+    if command -v curl &> /dev/null; then
+        curl -fL "$download_url" -o "$tar_file" || { echo -e "${RED}下载失败: ${download_url}${NC}"; rm -rf "$tmp_dir"; read -p "按回车键继续..."; return; }
+    elif command -v wget &> /dev/null; then
+        wget -qO "$tar_file" "$download_url" || { echo -e "${RED}下载失败: ${download_url}${NC}"; rm -rf "$tmp_dir"; read -p "按回车键继续..."; return; }
+    else
+        echo -e "${RED}错误: 未找到 curl 或 wget${NC}"; rm -rf "$tmp_dir"; read -p "按回车键继续..."; return
+    fi
+
+    if ! tar -xzf "$tar_file" -C "$tmp_dir" 2>/dev/null; then
+        echo -e "${RED}解压失败，请检查下载文件${NC}"; rm -rf "$tmp_dir"; read -p "按回车键继续..."; return
+    fi
+
+    local lucky_bin
+    lucky_bin=$(find "$tmp_dir" -type f -name lucky | head -1)
+    if [ -z "$lucky_bin" ] || [ ! -f "$lucky_bin" ]; then
+        echo -e "${RED}未找到 lucky 二进制文件${NC}"; rm -rf "$tmp_dir"; read -p "按回车键继续..."; return
+    fi
+
+    mkdir -p /etc/lucky
+    cp -f "$lucky_bin" /usr/local/bin/lucky
+    chmod 755 /usr/local/bin/lucky
+    rm -rf "$tmp_dir"
+
+    cat > /etc/systemd/system/lucky.service << EOF
+[Unit]
+Description=Lucky Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/lucky -c /etc/lucky/lucky.conf -cd /etc/lucky -p 16601
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable lucky >/dev/null 2>&1
+    systemctl start lucky
+
+    if systemctl is-active --quiet lucky; then
+        IFS='|' read -r ipv4 ipv6 <<< "$(get_access_ips)"
+        echo ""
+        echo -e "${GREEN}✅ Lucky (二进制) 安装成功！${NC}"
+        echo -e "管理地址: ${YELLOW}http://${ipv4}:16601${NC}"
+        [ -n "$ipv6" ] && echo -e "IPv6 地址: ${YELLOW}http://[${ipv6}]:16601${NC}"
+        echo -e "默认账号: ${GREEN}666${NC}"
+        echo -e "默认密码: ${GREEN}666${NC}"
+        echo -e "${RED}注意：请务必在首次登录后立即修改账号密码。${NC}"
+    else
+        echo -e "${RED}❌ 启动失败，请执行 journalctl -u lucky -n 50 查看日志${NC}"
     fi
     read -p "按回车键继续..."
 }
@@ -6546,9 +6667,56 @@ function upgrade_lucky() {
     local mode=$1
     if [ "$mode" == "docker" ]; then
         echo -e "${BLUE}正在升级 Lucky 到最新版本...${NC}"
-        docker pull gdy666/lucky:v2
+        docker pull gdy666/lucky:v3
         docker stop lucky && docker rm lucky
-        docker run -d --name lucky --restart always --network host -v /opt/lucky/conf:/config gdy666/lucky:v2
+        docker run -d --name lucky --restart always --network host -v /opt/lucky/conf:/app/conf gdy666/lucky:v3
+        echo -e "${GREEN}升级完成。${NC}"
+    elif [ "$mode" == "systemd" ]; then
+        echo -e "${BLUE}正在升级 Lucky (二进制) 到最新版本...${NC}"
+        if [ ! -f /usr/local/bin/lucky ]; then
+            echo -e "${RED}未检测到 Lucky 二进制${NC}"
+            read -p "按回车键继续..."; return
+        fi
+
+        local arch
+        arch=$(lucky_get_arch)
+        if [ -z "$arch" ]; then
+            echo -e "${RED}暂不支持的架构: $(uname -m)${NC}"
+            read -p "按回车键继续..."; return
+        fi
+
+        local lucky_version
+        lucky_version=$(curl -fsSL "https://release.66666.host/" 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)
+        lucky_version=${lucky_version:-v3.7.0}
+        local version_no_v="${lucky_version#v}"
+        local download_url="https://release.66666.host/${lucky_version}/${version_no_v}_lucky/lucky_${version_no_v}_Linux_${arch}.tar.gz"
+
+        local tmp_dir
+        tmp_dir=$(mktemp -d)
+        local tar_file="${tmp_dir}/lucky.tar.gz"
+        if command -v curl &> /dev/null; then
+            curl -fL "$download_url" -o "$tar_file" || { echo -e "${RED}下载失败: ${download_url}${NC}"; rm -rf "$tmp_dir"; read -p "按回车键继续..."; return; }
+        elif command -v wget &> /dev/null; then
+            wget -qO "$tar_file" "$download_url" || { echo -e "${RED}下载失败: ${download_url}${NC}"; rm -rf "$tmp_dir"; read -p "按回车键继续..."; return; }
+        else
+            echo -e "${RED}错误: 未找到 curl 或 wget${NC}"; rm -rf "$tmp_dir"; read -p "按回车键继续..."; return
+        fi
+
+        if ! tar -xzf "$tar_file" -C "$tmp_dir" 2>/dev/null; then
+            echo -e "${RED}解压失败，请检查下载文件${NC}"; rm -rf "$tmp_dir"; read -p "按回车键继续..."; return
+        fi
+
+        local lucky_bin
+        lucky_bin=$(find "$tmp_dir" -type f -name lucky | head -1)
+        if [ -z "$lucky_bin" ] || [ ! -f "$lucky_bin" ]; then
+            echo -e "${RED}未找到 lucky 二进制文件${NC}"; rm -rf "$tmp_dir"; read -p "按回车键继续..."; return
+        fi
+
+        systemctl stop lucky &>/dev/null
+        cp -f "$lucky_bin" /usr/local/bin/lucky
+        chmod 755 /usr/local/bin/lucky
+        rm -rf "$tmp_dir"
+        systemctl start lucky
         echo -e "${GREEN}升级完成。${NC}"
     else
         echo -e "${RED}未检测到 Lucky 安装${NC}"
