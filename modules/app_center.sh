@@ -10635,7 +10635,7 @@ function install_subconverter_binary() {
 
     # 获取最新 release 下载地址
     echo -e "${BLUE}正在获取最新版本下载地址...${NC}"
-    local download_url=$(curl -sL --connect-timeout 10 "https://api.github.com/repos/asdlokj1qpi233/subconverter/releases/latest" | grep -oP '"browser_download_url":\s*"\K[^"]+' | grep "$asset_keyword" | head -1)
+    local download_url=$(curl -sL --connect-timeout 10 "https://api.github.com/repos/chengege666/subconverter/releases/latest" | grep -oP '"browser_download_url":\s*"\K[^"]+' | grep "$asset_keyword" | head -1)
 
     if [ -z "$download_url" ]; then
         echo -e "${RED}❌ 获取下载地址失败，请检查网络或稍后重试。${NC}"
