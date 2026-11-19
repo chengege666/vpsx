@@ -1601,11 +1601,90 @@ EOF
                 echo -e "${CYAN}-----------------------------------------${NC}"
                 echo -e "${YELLOW}用途: 内核开关无效（/proc/sys 只读）时，用防火墙丢弃 IPv6 出站，${NC}"
                 echo -e "${YELLOW}      让应用自动回落到 IPv4。本地回环(lo)不受影响。${NC}"
-                if ! command -v ip6tables &>/dev/null; then
-                    echo -e "${RED}未检测到 ip6tables，无法执行。${NC}"
+
+                local os_name
+                os_name=$(. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME")
+                [ -n "$os_name" ] && echo -e "当前系统: ${GREEN}$os_name${NC}"
+
+                # 先判断有没有 NET_ADMIN（bit 12），没有的话装什么防火墙都白搭
+                local cap_hex cap_dec
+                cap_hex=$(awk '/^CapEff:/{print $2}' /proc/self/status 2>/dev/null)
+                if [ -n "$cap_hex" ]; then
+                    cap_dec=$((16#$cap_hex))
+                    if [ $(( (cap_dec >> 12) & 1 )) -eq 0 ]; then
+                        echo -e "${RED}❌ 当前容器未授予 NET_ADMIN 能力，任何防火墙规则都会被拒绝。${NC}"
+                        echo -e "${YELLOW}   该环境只能由服务商关闭 IPv6，或更换机型；容器内无解。${NC}"
+                        read -p "按回车键继续..."
+                        continue
+                    fi
+                fi
+
+                local fw_backend=""
+                command -v ip6tables &>/dev/null && fw_backend="ip6tables"
+                [ -z "$fw_backend" ] && command -v nft &>/dev/null && fw_backend="nft"
+
+                if [ -z "$fw_backend" ]; then
+                    echo -e "${RED}未检测到 ip6tables / nft，无法配置防火墙规则。${NC}"
+                    local install_cmd=""
+                    if command -v apk &>/dev/null; then
+                        install_cmd="apk add --no-cache ip6tables"
+                    elif command -v apt-get &>/dev/null; then
+                        install_cmd="apt-get update && apt-get install -y iptables"
+                    elif command -v dnf &>/dev/null; then
+                        install_cmd="dnf install -y iptables"
+                    elif command -v yum &>/dev/null; then
+                        install_cmd="yum install -y iptables"
+                    fi
+                    if [ -n "$install_cmd" ]; then
+                        echo -e "${YELLOW}可安装: $install_cmd${NC}"
+                        read -p "现在安装? [y/N]: " ipv6fw_ans
+                        if [[ "$ipv6fw_ans" == [yY] ]]; then
+                            eval "$install_cmd"
+                            command -v ip6tables &>/dev/null && fw_backend="ip6tables"
+                        fi
+                    else
+                        echo -e "${YELLOW}未识别到包管理器，请手动安装 iptables。${NC}"
+                    fi
+                    if [ -z "$fw_backend" ]; then
+                        echo -e "${YELLOW}提示: 若容器未授予 NET_ADMIN，即使装上 ip6tables 也无法生效。${NC}"
+                        echo -e "${YELLOW}      这类环境只能在服务商面板关闭 IPv6，或更换支持 IPv6 开关的机型。${NC}"
+                        read -p "按回车键继续..."
+                        continue
+                    fi
+                fi
+
+                # --- nftables 后端 ---
+                if [ "$fw_backend" == "nft" ]; then
+                    if nft list table ip6 vpsx &>/dev/null; then
+                        echo -e "当前 IPv6 出站: ${RED}已阻断${NC} (nftables 表 ip6 vpsx)"
+                        read -p "解除阻断? [y/N]: " ipv6fw_ans
+                        if [[ "$ipv6fw_ans" == [yY] ]]; then
+                            if nft delete table ip6 vpsx 2>/dev/null; then
+                                echo -e "${GREEN}✅ 已解除 IPv6 出站阻断。${NC}"
+                            else
+                                echo -e "${RED}❌ 删除失败：容器可能缺少 NET_ADMIN 权限。${NC}"
+                            fi
+                        fi
+                    else
+                        echo -e "当前 IPv6 出站: ${GREEN}未阻断${NC} (nftables)"
+                        read -p "阻断 IPv6 出站? [y/N]: " ipv6fw_ans
+                        if [[ "$ipv6fw_ans" == [yY] ]]; then
+                            nft add table ip6 vpsx 2>/dev/null
+                            nft 'add chain ip6 vpsx out { type filter hook output priority 0; }' 2>/dev/null
+                            nft add rule ip6 vpsx out oifname "lo" accept 2>/dev/null
+                            if nft add rule ip6 vpsx out drop 2>/dev/null; then
+                                echo -e "${GREEN}✅ 已阻断 IPv6 出站（重启后失效）。${NC}"
+                                echo -e "${YELLOW}   解除: 再次执行本项，或 nft delete table ip6 vpsx${NC}"
+                            else
+                                echo -e "${RED}❌ 规则添加失败：容器可能缺少 NET_ADMIN 权限。${NC}"
+                            fi
+                        fi
+                    fi
                     read -p "按回车键继续..."
                     continue
                 fi
+
+                # --- ip6tables 后端 ---
                 if ip6tables -C OUTPUT ! -o lo -j DROP 2>/dev/null; then
                     echo -e "当前 IPv6 出站: ${RED}已阻断${NC}"
                     read -p "解除阻断? [y/N]: " ipv6fw_ans
@@ -1626,7 +1705,7 @@ EOF
                             echo -e "${YELLOW}   建议同时执行 1（IPv4 优先），避免解析层先选 IPv6 造成首次连接变慢。${NC}"
                         else
                             echo -e "${RED}❌ 规则添加失败：容器可能缺少 NET_ADMIN 权限。${NC}"
-                            echo -e "${YELLOW}   可改用 ip -6 route 删除默认 IPv6 路由，或在服务商面板关闭 IPv6。${NC}"
+                            echo -e "${YELLOW}   此时只能联系服务商关闭 IPv6。${NC}"
                         fi
                     fi
                 fi
