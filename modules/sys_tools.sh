@@ -1425,7 +1425,7 @@ EOF
                 sleep 2
                 ;;
             5)
-                echo -e "${BLUE}正在检测出口 IP (强制 IPv4)..."${NC}"
+                echo -e "${BLUE}正在检测出口 IP (强制 IPv4)...${NC}"
                 local ip_detect=$(curl -4 -sS --max-time 5 https://api.ip.sb/ip || echo "连接超时")
                 echo -e "${YELLOW}当前 IPv4 出口 IP: ${GREEN}$ip_detect${NC}"
                 echo -e "${YELLOW}提示: IPv4 优先仅影响解析排序，curl 等程序仍可能走 IPv6；需强制请加 -4 或选择第 3 项禁用 IPv6。${NC}"
