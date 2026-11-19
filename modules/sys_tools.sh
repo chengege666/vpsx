@@ -1345,6 +1345,50 @@ function change_ssh_port() {
     read -p "按任意键继续..."
 }
 
+# 设置系统 IPv6 内核开关
+# 用法: apply_ipv6_profile <0|1>   (1=禁用 IPv6, 0=启用 IPv6)
+# 返回 0 表示已确认生效；返回 1 表示写入无效（容器内核限制等），并打印原因
+function apply_ipv6_profile() {
+    local target="$1"
+    local err_log failing=0
+
+    err_log=$( {
+        sysctl -w net.ipv6.conf.all.disable_ipv6="$target" 2>&1 >/dev/null
+        sysctl -w net.ipv6.conf.default.disable_ipv6="$target" 2>&1 >/dev/null
+        sysctl -w net.ipv6.conf.lo.disable_ipv6="$target" 2>&1 >/dev/null
+    } )
+
+    # 部分内核/容器里 all 不会回溯到已 up 的网卡，逐网卡兜底
+    local f
+    for f in /proc/sys/net/ipv6/conf/*/disable_ipv6; do
+        [ -e "$f" ] || continue
+        echo "$target" > "$f" 2>/dev/null || failing=1
+    done
+
+    local now
+    now=$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)
+    [ -z "$now" ] && now=$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null)
+
+    if [ "$now" != "$target" ]; then
+        echo -e "${RED}❌ 写入未生效（当前 all.disable_ipv6=${now:-读取失败}）。${NC}"
+        [ -n "$err_log" ] && echo -e "${YELLOW}   sysctl 报错: $err_log${NC}"
+        [ "$failing" == "1" ] && echo -e "${YELLOW}   部分网卡开关写入失败（权限不足或只读）。${NC}"
+        echo -e "${YELLOW}   常见原因: OpenVZ/LXC 等容器不允许修改 /proc/sys/net/ipv6，${NC}"
+        echo -e "${YELLOW}   或 /proc/sys 挂载为只读。这类环境需在宿主机/服务商面板处理。${NC}"
+        return 1
+    fi
+
+    if [ "$target" == "1" ]; then
+        local addrs
+        addrs=$(ip -6 addr show scope global 2>/dev/null | grep -c "inet6")
+        if [ -n "$addrs" ] && [ "$addrs" -gt 0 ] 2>/dev/null; then
+            echo -e "${YELLOW}⚠️  内核开关已置为禁用，但仍检测到 $addrs 个全局 IPv6 地址。${NC}"
+            echo -e "${YELLOW}   多为宿主机/容器网络侧保留，如需彻底断开需在服务商侧关闭 IPv6。${NC}"
+        fi
+    fi
+    return 0
+}
+
 function switch_ip_priority() {
     while true; do
         clear
@@ -1359,6 +1403,7 @@ function switch_ip_priority() {
         local status_v4_pri="${BLUE}IPv6 优先 (系统默认)${NC}"
         local status_v6_kernel="${GREEN}启用${NC}"
         local status_v6_persist="${BLUE}未写入 (按系统默认)${NC}"
+        local status_v6_addr="${BLUE}无${NC}"
 
         if [ -f "$gai_file" ] && grep -qE "^precedence[[:space:]]+::ffff:0:0/96[[:space:]]+100" "$gai_file"; then
             status_v4_pri="${GREEN}IPv4 优先${NC}"
@@ -1374,8 +1419,14 @@ function switch_ip_priority() {
             status_v6_persist="${GREEN}已持久启用${NC}"
         fi
 
+        # 当前网卡上的全局 IPv6 地址（判断"是否真的断开"最直观）
+        local v6_addr_list
+        v6_addr_list=$(ip -6 addr show scope global 2>/dev/null | awk '/inet6/{print $2}' | head -2 | tr '\n' ' ')
+        [ -n "$v6_addr_list" ] && status_v6_addr="${GREEN}${v6_addr_list% }${NC}"
+
         echo -e "当前解析策略: $status_v4_pri"
         echo -e "内核 IPv6 状态: $status_v6_kernel"
+        echo -e "全局 IPv6 地址: $status_v6_addr"
         echo -e "重启后配置:   $status_v6_persist"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${GREEN}1.${NC} 设置 IPv4 优先 (推荐: 解决国内连接慢)"
@@ -1412,53 +1463,49 @@ function switch_ip_priority() {
                 ;;
             3)
                 echo -e "${YELLOW}正在启用 IPv6（临时）...${NC}"
-                sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null
-                sysctl -w net.ipv6.conf.default.disable_ipv6=0 >/dev/null
-                sysctl -w net.ipv6.conf.lo.disable_ipv6=0 >/dev/null
-                echo -e "${GREEN}✅ IPv6 已启用（重启后失效）。${NC}"
+                if apply_ipv6_profile 0; then
+                    echo -e "${GREEN}✅ IPv6 已启用（重启后失效）。${NC}"
+                fi
                 sleep 2
                 ;;
             4)
                 echo -e "${YELLOW}正在启用 IPv6 并写入持久化配置...${NC}"
-                sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null
-                sysctl -w net.ipv6.conf.default.disable_ipv6=0 >/dev/null
-                sysctl -w net.ipv6.conf.lo.disable_ipv6=0 >/dev/null
-                mkdir -p /etc/sysctl.d
-                rm -f "$ipv6_disable_file"
-                cat > "$ipv6_enable_file" <<EOF
+                if apply_ipv6_profile 0; then
+                    mkdir -p /etc/sysctl.d
+                    rm -f "$ipv6_disable_file"
+                    cat > "$ipv6_enable_file" <<EOF
 net.ipv6.conf.all.disable_ipv6=0
 net.ipv6.conf.default.disable_ipv6=0
 net.ipv6.conf.lo.disable_ipv6=0
 EOF
-                echo -e "${GREEN}✅ IPv6 已启用并已持久化（重启后仍生效）。${NC}"
+                    echo -e "${GREEN}✅ IPv6 已启用并已持久化（重启后仍生效）。${NC}"
+                fi
                 sleep 2
                 ;;
             5)
                 echo -e "${RED}正在内核层面禁用 IPv6...${NC}"
-                sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null
-                sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null
-                sysctl -w net.ipv6.conf.lo.disable_ipv6=1 >/dev/null
-                echo -e "${GREEN}✅ IPv6 已禁用（临时生效，重启后恢复）。${NC}"
-                if [ -f "$ipv6_enable_file" ]; then
-                    echo -e "${YELLOW}⚠️  检测到持久化启用配置 $ipv6_enable_file，重启后 IPv6 会被重新启用。${NC}"
-                    echo -e "${YELLOW}   如需重启后仍保持禁用，请执行 6（禁用并持久化）或先执行 8 取消持久化配置。${NC}"
+                if apply_ipv6_profile 1; then
+                    echo -e "${GREEN}✅ IPv6 已禁用（临时生效，重启后恢复）。${NC}"
+                    if [ -f "$ipv6_enable_file" ]; then
+                        echo -e "${YELLOW}⚠️  检测到持久化启用配置 $ipv6_enable_file，重启后 IPv6 会被重新启用。${NC}"
+                        echo -e "${YELLOW}   如需重启后仍保持禁用，请执行 6（禁用并持久化）。${NC}"
+                    fi
                 fi
                 sleep 2
                 ;;
             6)
                 echo -e "${RED}正在禁用 IPv6 并写入持久化配置...${NC}"
-                sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null
-                sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null
-                sysctl -w net.ipv6.conf.lo.disable_ipv6=1 >/dev/null
-                mkdir -p /etc/sysctl.d
-                rm -f "$ipv6_enable_file"
-                cat > "$ipv6_disable_file" <<EOF
+                if apply_ipv6_profile 1; then
+                    mkdir -p /etc/sysctl.d
+                    rm -f "$ipv6_enable_file"
+                    cat > "$ipv6_disable_file" <<EOF
 net.ipv6.conf.all.disable_ipv6=1
 net.ipv6.conf.default.disable_ipv6=1
 net.ipv6.conf.lo.disable_ipv6=1
 EOF
-                echo -e "${GREEN}✅ IPv6 已禁用并持久化（重启后仍禁用）。${NC}"
-                echo -e "${YELLOW}   （已自动清除持久化启用配置，避免重启时相互覆盖）${NC}"
+                    echo -e "${GREEN}✅ IPv6 已禁用并持久化（重启后仍禁用）。${NC}"
+                    echo -e "${YELLOW}   （已自动清除持久化启用配置，避免重启时相互覆盖）${NC}"
+                fi
                 sleep 2
                 ;;
             7)
@@ -1502,8 +1549,17 @@ EOF
                 ;;
             9)
                 echo -e "${BLUE}正在检测出口 IP (使用 ip.sb)...${NC}"
-                local ip_detect=$(curl -sS --max-time 5 https://api.ip.sb/ip || echo "连接超时")
-                echo -e "${YELLOW}当前公网出口 IP: ${GREEN}$ip_detect${NC}"
+                local ip_default ip_v4 ip_v6
+                ip_default=$(curl -sS --max-time 6 https://api.ip.sb/ip 2>/dev/null)
+                ip_v4=$(curl -4 -sS --max-time 6 https://api.ip.sb/ip 2>/dev/null)
+                ip_v6=$(curl -6 -sS --max-time 6 https://api.ip.sb/ip 2>/dev/null)
+                echo -e "默认出口:   ${GREEN}${ip_default:-失败}${NC}"
+                echo -e "强制 IPv4:  ${GREEN}${ip_v4:-不可用}${NC}"
+                echo -e "强制 IPv6:  ${GREEN}${ip_v6:-不可用}${NC}"
+                if [ -n "$ip_v6" ] && [[ "$ip_default" == *:* ]]; then
+                    echo -e "${YELLOW}说明: 默认出口走 IPv6。gai.conf 的优先级只见效于本机域名解析，${NC}"
+                    echo -e "${YELLOW}      若 IPv6 地址仍然可用，应用/Curl 仍可能优先选择 IPv6。${NC}"
+                fi
                 read -p "按回车键继续..."
                 ;;
             0) break ;;
