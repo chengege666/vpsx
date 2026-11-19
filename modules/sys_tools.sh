@@ -2028,8 +2028,6 @@ function enable_ipv6_system() {
         echo -e " ${GREEN}2.${NC} 开启 IPv6 持久化（重启后仍生效）"
         echo -e " ${GREEN}3.${NC} 重启网络服务"
         echo -e " ${GREEN}4.${NC} 恢复默认（取消持久化配置）"
-        echo -e " ${GREEN}5.${NC} 关闭 IPv6（临时生效）"
-        echo -e " ${GREEN}6.${NC} 关闭 IPv6 持久化（重启后仍生效）"
         echo -e " ${RED}0.${NC} 返回上一级"
         echo -e "${CYAN}=========================================${NC}"
         read -p "请输入选择: " choice
@@ -2048,7 +2046,6 @@ function enable_ipv6_system() {
                 sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null
                 sysctl -w net.ipv6.conf.default.disable_ipv6=0 >/dev/null
                 sysctl -w net.ipv6.conf.lo.disable_ipv6=0 >/dev/null
-                rm -f /etc/sysctl.d/99-ipv6-disable.conf
                 mkdir -p /etc/sysctl.d
                 cat > /etc/sysctl.d/99-ipv6-enable.conf <<EOF
 net.ipv6.conf.all.disable_ipv6=0
@@ -2079,45 +2076,13 @@ EOF
                 sleep 2
                 ;;
             4)
-                local removed=0
                 if [ -f /etc/sysctl.d/99-ipv6-enable.conf ]; then
                     rm -f /etc/sysctl.d/99-ipv6-enable.conf
                     echo -e "${GREEN}✅ 已删除持久化配置文件 /etc/sysctl.d/99-ipv6-enable.conf${NC}"
-                    removed=1
-                fi
-                if [ -f /etc/sysctl.d/99-ipv6-disable.conf ]; then
-                    rm -f /etc/sysctl.d/99-ipv6-disable.conf
-                    echo -e "${GREEN}✅ 已删除持久化配置文件 /etc/sysctl.d/99-ipv6-disable.conf${NC}"
-                    removed=1
-                fi
-                if [ "$removed" -eq 1 ]; then
                     echo -e "${YELLOW}系统将恢复默认 IPv6 行为（通常为启用状态）。${NC}"
                 else
                     echo -e "${YELLOW}未找到持久化配置文件，无需清理。${NC}"
                 fi
-                sleep 2
-                ;;
-            5)
-                echo -e "${YELLOW}正在关闭 IPv6（临时）...${NC}"
-                sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null
-                sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null
-                sysctl -w net.ipv6.conf.lo.disable_ipv6=1 >/dev/null
-                echo -e "${GREEN}✅ IPv6 已关闭（临时，重启后失效）。${NC}"
-                sleep 2
-                ;;
-            6)
-                echo -e "${YELLOW}正在关闭 IPv6 并写入持久化配置...${NC}"
-                sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null
-                sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null
-                sysctl -w net.ipv6.conf.lo.disable_ipv6=1 >/dev/null
-                rm -f /etc/sysctl.d/99-ipv6-enable.conf
-                mkdir -p /etc/sysctl.d
-                cat > /etc/sysctl.d/99-ipv6-disable.conf <<EOF
-net.ipv6.conf.all.disable_ipv6=1
-net.ipv6.conf.default.disable_ipv6=1
-net.ipv6.conf.lo.disable_ipv6=1
-EOF
-                echo -e "${GREEN}✅ IPv6 已关闭并已持久化（重启后仍生效）。${NC}"
                 sleep 2
                 ;;
             0) break ;;
