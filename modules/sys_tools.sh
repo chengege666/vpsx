@@ -1452,7 +1452,7 @@ function switch_ip_priority() {
         echo -e " ${GREEN}8.${NC}  取消 IPv6 持久化配置 (恢复系统默认)"
         echo -e " ${GREEN}9.${NC}  测试当前实际出口 IP"
         echo -e " ${GREEN}10.${NC} 阻断 IPv6 出站 (防火墙, 容器可用)"
-        echo -e " ${RED}0.${NC} 返回上一级"
+        echo -e " ${RED}0.${NC}   返回上一级"
         echo -e "${CYAN}=========================================${NC}"
         read -p "请输入选择: " choice
 
