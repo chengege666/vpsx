@@ -1398,37 +1398,25 @@ function switch_ip_priority() {
                 sleep 2
                 ;;
             3)
-                echo -e "${RED}正在内核层面禁用 IPv6 并持久化...${NC}"
+                echo -e "${RED}正在内核层面禁用 IPv6...${NC}"
                 sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null
                 sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null
                 sysctl -w net.ipv6.conf.lo.disable_ipv6=1 >/dev/null
-                cat > /etc/sysctl.d/99-disable-ipv6.conf <<EOF
-net.ipv6.conf.all.disable_ipv6 = 1
-net.ipv6.conf.default.disable_ipv6 = 1
-net.ipv6.conf.lo.disable_ipv6 = 1
-EOF
-                sysctl --system >/dev/null 2>&1
-                echo -e "${GREEN}✅ IPv6 已彻底禁用（已持久化，重启后仍生效）。${NC}"
-                echo -e "${YELLOW}如需恢复请选择第 4 项。${NC}"
+                echo -e "${GREEN}✅ IPv6 已彻底禁用。${NC}"
                 sleep 2
                 ;;
             4)
-                echo -e "${YELLOW}正在重新启用 IPv6（并清除持久化配置）...${NC}"
+                echo -e "${YELLOW}正在重新启用 IPv6...${NC}"
                 sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null
                 sysctl -w net.ipv6.conf.default.disable_ipv6=0 >/dev/null
                 sysctl -w net.ipv6.conf.lo.disable_ipv6=0 >/dev/null
-                if [ -f /etc/sysctl.d/99-disable-ipv6.conf ]; then
-                    rm -f /etc/sysctl.d/99-disable-ipv6.conf
-                fi
-                sysctl --system >/dev/null 2>&1
-                echo -e "${GREEN}✅ IPv6 已启用并清除持久化配置（重启后不再禁用）。${NC}"
+                echo -e "${GREEN}✅ IPv6 已启用。${NC}"
                 sleep 2
                 ;;
             5)
-                echo -e "${BLUE}正在检测出口 IP (强制 IPv4)...${NC}"
-                local ip_detect=$(curl -4 -sS --max-time 5 https://api.ip.sb/ip || echo "连接超时")
-                echo -e "${YELLOW}当前 IPv4 出口 IP: ${GREEN}$ip_detect${NC}"
-                echo -e "${YELLOW}提示: IPv4 优先仅影响解析排序，curl 等程序仍可能走 IPv6；需强制请加 -4 或选择第 3 项禁用 IPv6。${NC}"
+                echo -e "${BLUE}正在检测出口 IP (使用 ip.sb)...${NC}"
+                local ip_detect=$(curl -sS --max-time 5 https://api.ip.sb/ip || echo "连接超时")
+                echo -e "${YELLOW}当前公网出口 IP: ${GREEN}$ip_detect${NC}"
                 read -p "按回车键继续..."
                 ;;
             0) break ;;
