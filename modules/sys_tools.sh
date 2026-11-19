@@ -1350,31 +1350,44 @@ function change_ssh_port() {
 # 返回 0 表示已确认生效；返回 1 表示写入无效（容器内核限制等），并打印原因
 function apply_ipv6_profile() {
     local target="$1"
-    local err_log failing=0
+    local target_desc="启用"
+    [ "$target" == "1" ] && target_desc="禁用"
 
+    local proc_file="/proc/sys/net/ipv6/conf/all/disable_ipv6"
+
+    # 模块不存在 / 只读（LXC、OpenVZ 等非特权容器）直接给结论，避免刷一屏报错
+    if [ ! -e "$proc_file" ]; then
+        echo -e "${RED}❌ 无法${target_desc} IPv6：$proc_file 不存在（IPv6 模块未加载）。${NC}"
+        return 1
+    fi
+    if [ ! -w "$proc_file" ]; then
+        echo -e "${RED}❌ 无法${target_desc} IPv6：/proc/sys 为只读。${NC}"
+        echo -e "${YELLOW}   当前是 LXC/OpenVZ 等非特权容器，内核参数不允许在容器内修改。${NC}"
+        echo -e "${YELLOW}   替代方案: 用第 10 项「阻断 IPv6 出站」，让流量回落到 IPv4。${NC}"
+        return 1
+    fi
+
+    local err_log
     err_log=$( {
         sysctl -w net.ipv6.conf.all.disable_ipv6="$target" 2>&1 >/dev/null
         sysctl -w net.ipv6.conf.default.disable_ipv6="$target" 2>&1 >/dev/null
         sysctl -w net.ipv6.conf.lo.disable_ipv6="$target" 2>&1 >/dev/null
     } )
 
-    # 部分内核/容器里 all 不会回溯到已 up 的网卡，逐网卡兜底
+    # 部分内核里 all 不会回溯到已 up 的网卡，逐网卡兜底
     local f
     for f in /proc/sys/net/ipv6/conf/*/disable_ipv6; do
         [ -e "$f" ] || continue
-        echo "$target" > "$f" 2>/dev/null || failing=1
+        echo "$target" 2>/dev/null > "$f"
     done
 
     local now
-    now=$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null)
-    [ -z "$now" ] && now=$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null)
+    now=$(cat "$proc_file" 2>/dev/null)
 
     if [ "$now" != "$target" ]; then
         echo -e "${RED}❌ 写入未生效（当前 all.disable_ipv6=${now:-读取失败}）。${NC}"
         [ -n "$err_log" ] && echo -e "${YELLOW}   sysctl 报错: $err_log${NC}"
-        [ "$failing" == "1" ] && echo -e "${YELLOW}   部分网卡开关写入失败（权限不足或只读）。${NC}"
-        echo -e "${YELLOW}   常见原因: OpenVZ/LXC 等容器不允许修改 /proc/sys/net/ipv6，${NC}"
-        echo -e "${YELLOW}   或 /proc/sys 挂载为只读。这类环境需在宿主机/服务商面板处理。${NC}"
+        echo -e "${YELLOW}   可尝试第 10 项「阻断 IPv6 出站」作为替代。${NC}"
         return 1
     fi
 
@@ -1438,6 +1451,7 @@ function switch_ip_priority() {
         echo -e " ${GREEN}7.${NC} 重启网络服务"
         echo -e " ${GREEN}8.${NC} 取消 IPv6 持久化配置 (恢复系统默认)"
         echo -e " ${GREEN}9.${NC} 测试当前实际出口 IP"
+        echo -e " ${GREEN}10.${NC} 阻断 IPv6 出站 (防火墙, 容器可用)"
         echo -e " ${RED}0.${NC} 返回上一级"
         echo -e "${CYAN}=========================================${NC}"
         read -p "请输入选择: " choice
@@ -1449,6 +1463,13 @@ function switch_ip_priority() {
                 sed -i '/::ffff:0:0\/96/d' "$gai_file"
                 echo "precedence ::ffff:0:0/96  100" >> "$gai_file"
                 echo -e "${GREEN}✅ 已设置为 IPv4 优先。${NC}"
+                # 立即验证系统是否真的采纳（部分系统如 Alpine/musl 不读 gai.conf）
+                local chk_first
+                chk_first=$(timeout 3 getent ahosts api.ip.sb 2>/dev/null | awk '!seen[$1]++{print $1}' | head -1)
+                if [[ "$chk_first" == *:* ]]; then
+                    echo -e "${YELLOW}⚠️  但本机解析仍优先返回 IPv6（$chk_first）：该系统未采纳 gai.conf。${NC}"
+                    echo -e "${YELLOW}   如需强制 IPv4 出口，请用第 10 项阻断 IPv6 出站。${NC}"
+                fi
                 sleep 2
                 ;;
             2)
@@ -1556,9 +1577,58 @@ EOF
                 echo -e "默认出口:   ${GREEN}${ip_default:-失败}${NC}"
                 echo -e "强制 IPv4:  ${GREEN}${ip_v4:-不可用}${NC}"
                 echo -e "强制 IPv6:  ${GREEN}${ip_v6:-不可用}${NC}"
+
+                # 本机解析顺序：用来判断 gai.conf 是否真的被系统采纳
+                local order_first=""
+                order_first=$(getent ahosts api.ip.sb 2>/dev/null | awk '!seen[$1]++{print $1}' | head -3 | tr '\n' ' ')
+                echo -e "解析顺序:   ${GREEN}${order_first:-读取失败}${NC}"
+
                 if [ -n "$ip_v6" ] && [[ "$ip_default" == *:* ]]; then
-                    echo -e "${YELLOW}说明: 默认出口走 IPv6。gai.conf 的优先级只见效于本机域名解析，${NC}"
-                    echo -e "${YELLOW}      若 IPv6 地址仍然可用，应用/Curl 仍可能优先选择 IPv6。${NC}"
+                    if [ -z "$ip_v4" ]; then
+                        echo -e "${RED}诊断: 强制 IPv4 不通，IPv4 出站本身有问题，先排查 IPv4 网络/NAT。${NC}"
+                    elif [[ "$order_first" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9] ]]; then
+                        echo -e "${YELLOW}诊断: 解析已按 IPv4 优先返回，但 curl 仍走 IPv6。${NC}"
+                        echo -e "${YELLOW}      说明该 curl 不遵循 gai.conf（静态编译 / c-ares 版本常见），${NC}"
+                        echo -e "${YELLOW}      需用第 10 项从防火墙层阻断 IPv6 出站。${NC}"
+                    else
+                        echo -e "${YELLOW}诊断: 解析顺序仍是 IPv6 在前，gai.conf 未被系统采纳。${NC}"
+                        echo -e "${YELLOW}      Alpine(musl) 等系统根本不读 gai.conf，需用第 10 项阻断 IPv6 出站。${NC}"
+                    fi
+                fi
+                read -p "按回车键继续..."
+                ;;
+            10)
+                echo -e "${CYAN}-----------------------------------------${NC}"
+                echo -e "${YELLOW}用途: 内核开关无效（/proc/sys 只读）时，用防火墙丢弃 IPv6 出站，${NC}"
+                echo -e "${YELLOW}      让应用自动回落到 IPv4。本地回环(lo)不受影响。${NC}"
+                if ! command -v ip6tables &>/dev/null; then
+                    echo -e "${RED}未检测到 ip6tables，无法执行。${NC}"
+                    read -p "按回车键继续..."
+                    continue
+                fi
+                if ip6tables -C OUTPUT ! -o lo -j DROP 2>/dev/null; then
+                    echo -e "当前 IPv6 出站: ${RED}已阻断${NC}"
+                    read -p "解除阻断? [y/N]: " ipv6fw_ans
+                    if [[ "$ipv6fw_ans" == [yY] ]]; then
+                        local n=0
+                        while ip6tables -C OUTPUT ! -o lo -j DROP 2>/dev/null; do
+                            ip6tables -D OUTPUT ! -o lo -j DROP 2>/dev/null || break
+                            n=$((n + 1))
+                        done
+                        echo -e "${GREEN}✅ 已解除 IPv6 出站阻断（清理 $n 条规则）。${NC}"
+                    fi
+                else
+                    echo -e "当前 IPv6 出站: ${GREEN}未阻断${NC}"
+                    read -p "阻断 IPv6 出站? [y/N]: " ipv6fw_ans
+                    if [[ "$ipv6fw_ans" == [yY] ]]; then
+                        if ip6tables -I OUTPUT 1 ! -o lo -j DROP 2>/dev/null; then
+                            echo -e "${GREEN}✅ 已阻断 IPv6 出站（重启后失效，需重新执行）。${NC}"
+                            echo -e "${YELLOW}   建议同时执行 1（IPv4 优先），避免解析层先选 IPv6 造成首次连接变慢。${NC}"
+                        else
+                            echo -e "${RED}❌ 规则添加失败：容器可能缺少 NET_ADMIN 权限。${NC}"
+                            echo -e "${YELLOW}   可改用 ip -6 route 删除默认 IPv6 路由，或在服务商面板关闭 IPv6。${NC}"
+                        fi
+                    fi
                 fi
                 read -p "按回车键继续..."
                 ;;
