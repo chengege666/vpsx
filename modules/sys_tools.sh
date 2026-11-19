@@ -10,16 +10,16 @@ function sys_tools_menu() {
         echo -e "${GREEN}                        系统工具菜单${NC}"
         echo -e "${CYAN}================================================================${NC}"
         echo -e " ${GREEN}1.${NC}  高级防火墙管理                    ${GREEN}2.${NC}  修改登录密码"
-        echo -e " ${GREEN}3.${NC}  修改SSH连接端口                   ${GREEN}4.${NC}  切换优先IPV4/IPV6"
+        echo -e " ${GREEN}3.${NC}  修改SSH连接端口                   ${GREEN}4.${NC}  IP优先与IPv6管理"
         echo -e " ${GREEN}5.${NC}  修改主机名                        ${GREEN}6.${NC}  系统时区调整"
         echo -e " ${GREEN}7.${NC}  修改虚拟内存大小(Swap)            ${GREEN}8.${NC}  内存加速清理（释放缓存）"
         echo -e " ${GREEN}9.${NC}  修改DNS服务器（手动/自动）        ${GREEN}10.${NC} Fail2ban配置（SSH防护）"
         echo -e " ${GREEN}11.${NC} SSL 证书管理 (acme.sh)            ${GREEN}12.${NC} 磁盘空间分析"
         echo -e " ${GREEN}13.${NC} BTOP系统监控工具                  ${GREEN}14.${NC} TCP窗口调优"
         echo -e " ${GREEN}15.${NC} 进程管理工具（查看/终止）         ${GREEN}16.${NC} 系统环境修复 (权限/磁盘/APT)"
-        echo -e " ${GREEN}17.${NC} 配置中文语言支持 (Debian/Ubuntu)  ${GREEN}18.${NC} 开启系统 IPv6"
-        echo -e " ${GREEN}19.${NC} VPS安全入侵检测                   ${GREEN}20.${NC} SSH公钥登录配置"
-        echo -e " ${GREEN}21.${NC} 限制CPU使用率 (cpulimit)          ${GREEN}22.${NC} Cloudflare Tunnel (Web HTTPS)"
+        echo -e " ${GREEN}17.${NC} 配置中文语言支持 (Debian/Ubuntu)  ${GREEN}18.${NC} VPS安全入侵检测"
+        echo -e " ${GREEN}19.${NC} SSH公钥登录配置                   ${GREEN}20.${NC} 限制CPU使用率 (cpulimit)"
+        echo -e " ${GREEN}21.${NC} Cloudflare Tunnel (Web HTTPS)"
         echo -e "${CYAN}----------------------------------------------------------------${NC}"
         echo -e " ${RED}0.${NC}  返回主菜单"
         echo -e "${CYAN}================================================================${NC}"
@@ -78,18 +78,15 @@ function sys_tools_menu() {
                 configure_chinese_locale
                 ;;
             18)
-                enable_ipv6_system
-                ;;
-            19)
                 security_check
                 ;;
-            20)
+            19)
                 ssh_pubkey_login
                 ;;
-            21)
+            20)
                 cpu_limit_management
                 ;;
-            22)
+            21)
                 cloudflare_tunnel_web_https
                 ;;
             0)
@@ -1352,32 +1349,44 @@ function switch_ip_priority() {
     while true; do
         clear
         echo -e "${CYAN}=========================================${NC}"
-        echo -e "${GREEN}          切换 IP 网络优先级${NC}"
+        echo -e "${GREEN}      IP 网络优先级 / IPv6 管理${NC}"
         echo -e "${CYAN}=========================================${NC}"
-        
+
         # --- 1. 获取当前状态 ---
         local gai_file="/etc/gai.conf"
-        local status_v4_pri="${BLUE}未知${NC}"
+        local ipv6_enable_file="/etc/sysctl.d/99-ipv6-enable.conf"
+        local ipv6_disable_file="/etc/sysctl.d/99-ipv6-disable.conf"
+        local status_v4_pri="${BLUE}IPv6 优先 (系统默认)${NC}"
         local status_v6_kernel="${GREEN}启用${NC}"
+        local status_v6_persist="${BLUE}未写入 (按系统默认)${NC}"
 
-        if [ -f "$gai_file" ] && grep -qE "^precedence\s+::ffff:0:0/96\s+100" "$gai_file"; then
+        if [ -f "$gai_file" ] && grep -qE "^precedence[[:space:]]+::ffff:0:0/96[[:space:]]+100" "$gai_file"; then
             status_v4_pri="${GREEN}IPv4 优先${NC}"
-        else
-            status_v4_pri="${BLUE}IPv6 优先 (系统默认)${NC}"
         fi
 
-        if [ "$(sysctl -n net.ipv6.conf.all.disable_ipv6)" == "1" ]; then
-            status_v6_kernel="${RED}已完全禁用${NC}"
+        if [ "$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null)" == "1" ]; then
+            status_v6_kernel="${RED}已禁用${NC}"
+        fi
+
+        if [ -f "$ipv6_disable_file" ]; then
+            status_v6_persist="${RED}已持久禁用${NC}"
+        elif [ -f "$ipv6_enable_file" ]; then
+            status_v6_persist="${GREEN}已持久启用${NC}"
         fi
 
         echo -e "当前解析策略: $status_v4_pri"
         echo -e "内核 IPv6 状态: $status_v6_kernel"
+        echo -e "重启后配置:   $status_v6_persist"
         echo -e "${CYAN}-----------------------------------------${NC}"
         echo -e " ${GREEN}1.${NC} 设置 IPv4 优先 (推荐: 解决国内连接慢)"
         echo -e " ${GREEN}2.${NC} 恢复 IPv6 优先 (默认)"
-        echo -e " ${GREEN}3.${NC} 完全禁用系统 IPv6 (慎用)"
-        echo -e " ${GREEN}4.${NC} 重新启用系统 IPv6"
-        echo -e " ${GREEN}5.${NC} 测试当前实际出口 IP"
+        echo -e " ${GREEN}3.${NC} 开启系统 IPv6 (临时生效)"
+        echo -e " ${GREEN}4.${NC} 开启系统 IPv6 (持久化, 重启后仍生效)"
+        echo -e " ${GREEN}5.${NC} 禁用系统 IPv6 (临时生效, 慎用)"
+        echo -e " ${GREEN}6.${NC} 禁用系统 IPv6 (持久化, 重启后仍禁用)"
+        echo -e " ${GREEN}7.${NC} 重启网络服务"
+        echo -e " ${GREEN}8.${NC} 取消 IPv6 持久化配置 (恢复系统默认)"
+        echo -e " ${GREEN}9.${NC} 测试当前实际出口 IP"
         echo -e " ${RED}0.${NC} 返回上一级"
         echo -e "${CYAN}=========================================${NC}"
         read -p "请输入选择: " choice
@@ -1393,27 +1402,105 @@ function switch_ip_priority() {
                 ;;
             2)
                 echo -e "${YELLOW}正在恢复系统默认策略...${NC}"
-                sed -i '/^precedence\s*::ffff:0:0\/96\s*100/d' "$gai_file"
+                if [ -f "$gai_file" ]; then
+                    sed -i '/^[[:space:]]*precedence[[:space:]]\{1,\}::ffff:0:0\/96/d' "$gai_file"
+                    # 若文件是当初为写入优先级而创建的空文件，则一并清理
+                    [ ! -s "$gai_file" ] && rm -f "$gai_file"
+                fi
                 echo -e "${GREEN}✅ 已恢复 IPv6 优先。${NC}"
                 sleep 2
                 ;;
             3)
+                echo -e "${YELLOW}正在启用 IPv6（临时）...${NC}"
+                sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null
+                sysctl -w net.ipv6.conf.default.disable_ipv6=0 >/dev/null
+                sysctl -w net.ipv6.conf.lo.disable_ipv6=0 >/dev/null
+                echo -e "${GREEN}✅ IPv6 已启用（重启后失效）。${NC}"
+                sleep 2
+                ;;
+            4)
+                echo -e "${YELLOW}正在启用 IPv6 并写入持久化配置...${NC}"
+                sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null
+                sysctl -w net.ipv6.conf.default.disable_ipv6=0 >/dev/null
+                sysctl -w net.ipv6.conf.lo.disable_ipv6=0 >/dev/null
+                mkdir -p /etc/sysctl.d
+                rm -f "$ipv6_disable_file"
+                cat > "$ipv6_enable_file" <<EOF
+net.ipv6.conf.all.disable_ipv6=0
+net.ipv6.conf.default.disable_ipv6=0
+net.ipv6.conf.lo.disable_ipv6=0
+EOF
+                echo -e "${GREEN}✅ IPv6 已启用并已持久化（重启后仍生效）。${NC}"
+                sleep 2
+                ;;
+            5)
                 echo -e "${RED}正在内核层面禁用 IPv6...${NC}"
                 sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null
                 sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null
                 sysctl -w net.ipv6.conf.lo.disable_ipv6=1 >/dev/null
-                echo -e "${GREEN}✅ IPv6 已彻底禁用。${NC}"
+                echo -e "${GREEN}✅ IPv6 已禁用（临时生效，重启后恢复）。${NC}"
+                if [ -f "$ipv6_enable_file" ]; then
+                    echo -e "${YELLOW}⚠️  检测到持久化启用配置 $ipv6_enable_file，重启后 IPv6 会被重新启用。${NC}"
+                    echo -e "${YELLOW}   如需重启后仍保持禁用，请执行 6（禁用并持久化）或先执行 8 取消持久化配置。${NC}"
+                fi
                 sleep 2
                 ;;
-            4)
-                echo -e "${YELLOW}正在重新启用 IPv6...${NC}"
-                sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null
-                sysctl -w net.ipv6.conf.default.disable_ipv6=0 >/dev/null
-                sysctl -w net.ipv6.conf.lo.disable_ipv6=0 >/dev/null
-                echo -e "${GREEN}✅ IPv6 已启用。${NC}"
+            6)
+                echo -e "${RED}正在禁用 IPv6 并写入持久化配置...${NC}"
+                sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null
+                sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null
+                sysctl -w net.ipv6.conf.lo.disable_ipv6=1 >/dev/null
+                mkdir -p /etc/sysctl.d
+                rm -f "$ipv6_enable_file"
+                cat > "$ipv6_disable_file" <<EOF
+net.ipv6.conf.all.disable_ipv6=1
+net.ipv6.conf.default.disable_ipv6=1
+net.ipv6.conf.lo.disable_ipv6=1
+EOF
+                echo -e "${GREEN}✅ IPv6 已禁用并持久化（重启后仍禁用）。${NC}"
+                echo -e "${YELLOW}   （已自动清除持久化启用配置，避免重启时相互覆盖）${NC}"
                 sleep 2
                 ;;
-            5)
+            7)
+                echo -e "${YELLOW}正在重启网络服务...${NC}"
+                if command -v systemctl &> /dev/null; then
+                    if systemctl list-units --type=service --state=running 2>/dev/null | grep -q "networking"; then
+                        systemctl restart networking
+                        echo -e "${GREEN}✅ 网络服务已重启（networking）。${NC}"
+                    elif systemctl list-units --type=service --state=running 2>/dev/null | grep -q "network"; then
+                        systemctl restart network
+                        echo -e "${GREEN}✅ 网络服务已重启（network）。${NC}"
+                    elif systemctl list-units --type=service --state=running 2>/dev/null | grep -q "NetworkManager"; then
+                        systemctl restart NetworkManager
+                        echo -e "${GREEN}✅ 网络服务已重启（NetworkManager）。${NC}"
+                    else
+                        echo -e "${RED}未检测到已知的网络服务。${NC}"
+                    fi
+                else
+                    echo -e "${RED}systemctl 不可用。${NC}"
+                fi
+                sleep 2
+                ;;
+            8)
+                local cleaned=0
+                if [ -f "$ipv6_enable_file" ]; then
+                    rm -f "$ipv6_enable_file"
+                    echo -e "${GREEN}✅ 已删除 $ipv6_enable_file${NC}"
+                    cleaned=1
+                fi
+                if [ -f "$ipv6_disable_file" ]; then
+                    rm -f "$ipv6_disable_file"
+                    echo -e "${GREEN}✅ 已删除 $ipv6_disable_file${NC}"
+                    cleaned=1
+                fi
+                if [ "$cleaned" == "1" ]; then
+                    echo -e "${YELLOW}系统将恢复默认 IPv6 行为（通常为启用状态）。${NC}"
+                else
+                    echo -e "${YELLOW}未找到持久化配置文件，无需清理。${NC}"
+                fi
+                sleep 2
+                ;;
+            9)
                 echo -e "${BLUE}正在检测出口 IP (使用 ip.sb)...${NC}"
                 local ip_detect=$(curl -sS --max-time 5 https://api.ip.sb/ip || echo "连接超时")
                 echo -e "${YELLOW}当前公网出口 IP: ${GREEN}$ip_detect${NC}"
@@ -2005,90 +2092,6 @@ function btop_help_info() {
     echo -e "4. 支持鼠标操作和自定义配色。"
     echo -e "${CYAN}=========================================${NC}"
     read -p "按回车键继续..."
-}
-
-function enable_ipv6_system() {
-    while true; do
-        clear
-        echo -e "${CYAN}=========================================${NC}"
-        echo -e "${GREEN}           IPv6 启用管理${NC}"
-        echo -e "${CYAN}=========================================${NC}"
-
-        local current_status
-        current_status=$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null)
-        local status_text
-        if [ "$current_status" == "0" ]; then
-            status_text="${GREEN}已启用${NC}"
-        else
-            status_text="${RED}已禁用${NC}"
-        fi
-        echo -e "当前 IPv6 内核状态: $status_text"
-        echo -e "${CYAN}-----------------------------------------${NC}"
-        echo -e " ${GREEN}1.${NC} 开启 IPv6（临时生效）"
-        echo -e " ${GREEN}2.${NC} 开启 IPv6 持久化（重启后仍生效）"
-        echo -e " ${GREEN}3.${NC} 重启网络服务"
-        echo -e " ${GREEN}4.${NC} 恢复默认（取消持久化配置）"
-        echo -e " ${RED}0.${NC} 返回上一级"
-        echo -e "${CYAN}=========================================${NC}"
-        read -p "请输入选择: " choice
-
-        case $choice in
-            1)
-                echo -e "${YELLOW}正在启用 IPv6（临时）...${NC}"
-                sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null
-                sysctl -w net.ipv6.conf.default.disable_ipv6=0 >/dev/null
-                sysctl -w net.ipv6.conf.lo.disable_ipv6=0 >/dev/null
-                echo -e "${GREEN}✅ IPv6 已启用（临时，重启后失效）。${NC}"
-                sleep 2
-                ;;
-            2)
-                echo -e "${YELLOW}正在启用 IPv6 并写入持久化配置...${NC}"
-                sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null
-                sysctl -w net.ipv6.conf.default.disable_ipv6=0 >/dev/null
-                sysctl -w net.ipv6.conf.lo.disable_ipv6=0 >/dev/null
-                mkdir -p /etc/sysctl.d
-                cat > /etc/sysctl.d/99-ipv6-enable.conf <<EOF
-net.ipv6.conf.all.disable_ipv6=0
-net.ipv6.conf.default.disable_ipv6=0
-net.ipv6.conf.lo.disable_ipv6=0
-EOF
-                echo -e "${GREEN}✅ IPv6 已启用并已持久化（重启后仍生效）。${NC}"
-                sleep 2
-                ;;
-            3)
-                echo -e "${YELLOW}正在重启网络服务...${NC}"
-                if command -v systemctl &> /dev/null; then
-                    if systemctl list-units --type=service --state=running 2>/dev/null | grep -q "networking"; then
-                        systemctl restart networking
-                        echo -e "${GREEN}✅ 网络服务已重启（networking）。${NC}"
-                    elif systemctl list-units --type=service --state=running 2>/dev/null | grep -q "network"; then
-                        systemctl restart network
-                        echo -e "${GREEN}✅ 网络服务已重启（network）。${NC}"
-                    elif systemctl list-units --type=service --state=running 2>/dev/null | grep -q "NetworkManager"; then
-                        systemctl restart NetworkManager
-                        echo -e "${GREEN}✅ 网络服务已重启（NetworkManager）。${NC}"
-                    else
-                        echo -e "${RED}未检测到已知的网络服务。${NC}"
-                    fi
-                else
-                    echo -e "${RED}systemctl 不可用。${NC}"
-                fi
-                sleep 2
-                ;;
-            4)
-                if [ -f /etc/sysctl.d/99-ipv6-enable.conf ]; then
-                    rm -f /etc/sysctl.d/99-ipv6-enable.conf
-                    echo -e "${GREEN}✅ 已删除持久化配置文件 /etc/sysctl.d/99-ipv6-enable.conf${NC}"
-                    echo -e "${YELLOW}系统将恢复默认 IPv6 行为（通常为启用状态）。${NC}"
-                else
-                    echo -e "${YELLOW}未找到持久化配置文件，无需清理。${NC}"
-                fi
-                sleep 2
-                ;;
-            0) break ;;
-            *) echo -e "${RED}无效选择！${NC}"; sleep 1 ;;
-        esac
-    done
 }
 
 # 配置 DNS 验证所需的 API Key（自动保存到 acme.sh account.conf）
